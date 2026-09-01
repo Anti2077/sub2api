@@ -100,6 +100,7 @@ func RegisterUserRoutes(
 		usage.Use(panelRateLimiter.Heavy())
 		{
 			usage.GET("", h.Usage.List)
+			usage.GET("/leaderboard", h.Usage.PublicTokenLeaderboard)
 			usage.GET("/errors", h.Usage.ListErrors)
 			usage.GET("/errors/:id", h.Usage.GetErrorDetail)
 			usage.GET("/:id", h.Usage.GetByID)
@@ -124,6 +125,15 @@ func RegisterUserRoutes(
 		{
 			redeem.POST("", h.Redeem.Redeem)
 			redeem.GET("/history", h.Redeem.GetHistory)
+		}
+
+		// 每日签到抽奖
+		dailyLottery := authenticated.Group("/daily-lottery")
+		{
+			dailyLottery.GET("/status", h.DailyLottery.Status)
+			dailyLottery.POST("/check-in", h.DailyLottery.CheckIn)
+			dailyLottery.POST("/draw", h.DailyLottery.Draw)
+			dailyLottery.GET("/history", h.DailyLottery.History)
 		}
 
 		// 用户订阅
