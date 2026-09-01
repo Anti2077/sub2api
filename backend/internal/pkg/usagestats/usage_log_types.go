@@ -164,6 +164,19 @@ type UserSpendingRankingResponse struct {
 	TotalTokens     int64                     `json:"total_tokens"`
 }
 
+// PublicUserTokenRankingItem is safe to return to authenticated end users.
+// It intentionally omits the internal user ID and the unmasked email address.
+type PublicUserTokenRankingItem struct {
+	Rank          int    `json:"rank"`
+	MaskedEmail   string `json:"masked_email"`
+	Requests      int64  `json:"requests"`
+	InputTokens   int64  `json:"input_tokens"`
+	OutputTokens  int64  `json:"output_tokens"`
+	CacheTokens   int64  `json:"cache_tokens"`
+	TotalTokens   int64  `json:"total_tokens"`
+	IsCurrentUser bool   `json:"is_current_user"`
+}
+
 // UserBreakdownItem represents per-user usage breakdown within a dimension (group, model, endpoint).
 type UserBreakdownItem struct {
 	UserID       int64   `json:"user_id"`

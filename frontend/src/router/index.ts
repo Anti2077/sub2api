@@ -241,6 +241,30 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/leaderboard',
+    name: 'TokenLeaderboard',
+    component: () => import('@/views/user/TokenLeaderboardView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Token Leaderboard',
+      titleKey: 'leaderboard.title',
+      descriptionKey: 'leaderboard.description'
+    }
+  },
+  {
+    path: '/daily-lottery',
+    name: 'DailyLottery',
+    component: () => import('@/views/user/DailyLotteryView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Daily Lottery',
+      titleKey: 'dailyLottery.title',
+      descriptionKey: 'dailyLottery.description'
+    }
+  },
+  {
     path: '/redeem',
     name: 'Redeem',
     component: () => import('@/views/user/RedeemView.vue'),
@@ -582,6 +606,18 @@ const routes: RouteRecordRaw[] = [
       title: 'Promo Code Management',
       titleKey: 'admin.promo.title',
       descriptionKey: 'admin.promo.description'
+    }
+  },
+  {
+    path: '/admin/daily-lottery',
+    name: 'AdminDailyLottery',
+    component: () => import('@/views/admin/DailyLotteryView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Daily Lottery Settings',
+      titleKey: 'dailyLottery.admin.title',
+      descriptionKey: 'dailyLottery.admin.description'
     }
   },
   {

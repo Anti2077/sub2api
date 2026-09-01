@@ -73,6 +73,9 @@ func RegisterAdminRoutes(
 		// 优惠码管理
 		registerPromoCodeRoutes(admin, h)
 
+		// 每日签到抽奖
+		registerDailyLotteryRoutes(admin, h)
+
 		// 系统设置
 		registerSettingsRoutes(admin, h)
 
@@ -549,6 +552,15 @@ func registerPromoCodeRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		promoCodes.PUT("/:id", h.Admin.Promo.Update)
 		promoCodes.DELETE("/:id", h.Admin.Promo.Delete)
 		promoCodes.GET("/:id/usages", h.Admin.Promo.GetUsages)
+	}
+}
+
+func registerDailyLotteryRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	dailyLottery := admin.Group("/daily-lottery")
+	{
+		dailyLottery.GET("/config", h.Admin.DailyLottery.GetConfig)
+		dailyLottery.PUT("/config", h.Admin.DailyLottery.UpdateConfig)
+		dailyLottery.GET("/history", h.Admin.DailyLottery.History)
 	}
 }
 

@@ -23,6 +23,7 @@ type AdminHandlers struct {
 	Proxy                  *admin.ProxyHandler
 	Redeem                 *admin.RedeemHandler
 	Promo                  *admin.PromoHandler
+	DailyLottery           *admin.DailyLotteryHandler
 	Setting                *admin.SettingHandler
 	Ops                    *admin.OpsHandler
 	System                 *admin.SystemHandler
@@ -52,6 +53,7 @@ type Handlers struct {
 	APIKey           *APIKeyHandler
 	Usage            *UsageHandler
 	Redeem           *RedeemHandler
+	DailyLottery     *DailyLotteryHandler
 	Subscription     *SubscriptionHandler
 	Announcement     *AnnouncementHandler
 	ChannelMonitor   *ChannelMonitorUserHandler

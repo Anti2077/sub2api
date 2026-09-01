@@ -574,6 +574,63 @@ func (h *UsageHandler) DashboardSnapshotV2(c *gin.Context) {
 	response.Success(c, resp)
 }
 
+// PublicTokenLeaderboard returns a privacy-preserving top-20 token ranking.
+// GET /api/v1/usage/leaderboard?period=day|week|month|year&timezone=Asia/Shanghai
+func (h *UsageHandler) PublicTokenLeaderboard(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+
+	period, startTime, endTime, ok := publicLeaderboardRange(c.DefaultQuery("period", "day"), c.Query("timezone"))
+	if !ok {
+		response.BadRequest(c, "Invalid period, use day/week/month/year")
+		return
+	}
+
+	ranking, err := h.usageService.GetPublicUserTokenRanking(
+		c.Request.Context(), startTime, endTime, subject.UserID, 20,
+	)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{
+		"ranking":    ranking,
+		"period":     period,
+		"start_date": startTime.Format("2006-01-02"),
+		"end_date":   endTime.AddDate(0, 0, -1).Format("2006-01-02"),
+	})
+}
+
+func publicLeaderboardRange(rawPeriod, userTZ string) (string, time.Time, time.Time, bool) {
+	period := strings.ToLower(strings.TrimSpace(rawPeriod))
+	now := timezone.NowInUserLocation(userTZ)
+	today := timezone.StartOfDayInUserLocation(now, userTZ)
+	endTime := today.AddDate(0, 0, 1)
+
+	switch period {
+	case "day":
+		return period, today, endTime, true
+	case "week":
+		weekday := int(today.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		return period, today.AddDate(0, 0, 1-weekday), endTime, true
+	case "month":
+		startTime := time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, today.Location())
+		return period, startTime, endTime, true
+	case "year":
+		startTime := time.Date(today.Year(), time.January, 1, 0, 0, 0, 0, today.Location())
+		return period, startTime, endTime, true
+	default:
+		return "", time.Time{}, time.Time{}, false
+	}
+}
+
 func userModelStatsFromUsageStats(stats []usagestats.ModelStat) []userModelStat {
 	out := make([]userModelStat, 0, len(stats))
 	for _, stat := range stats {

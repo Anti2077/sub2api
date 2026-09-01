@@ -118,6 +118,26 @@ export interface UsageDashboardSnapshotV2Response {
   groups?: GroupStat[]
 }
 
+export type LeaderboardPeriod = 'day' | 'week' | 'month' | 'year'
+
+export interface PublicTokenRankingItem {
+  rank: number
+  masked_email: string
+  requests: number
+  input_tokens: number
+  output_tokens: number
+  cache_tokens: number
+  total_tokens: number
+  is_current_user: boolean
+}
+
+export interface PublicTokenLeaderboardResponse {
+  ranking: PublicTokenRankingItem[]
+  period: LeaderboardPeriod
+  start_date: string
+  end_date: string
+}
+
 /**
  * List usage logs with optional filters
  * @param page - Page number (default: 1)
@@ -322,6 +342,16 @@ export async function getDashboardSnapshotV2(
   return data
 }
 
+export async function getPublicTokenLeaderboard(
+  period: LeaderboardPeriod,
+  timezone?: string
+): Promise<PublicTokenLeaderboardResponse> {
+  const { data } = await apiClient.get<PublicTokenLeaderboardResponse>('/usage/leaderboard', {
+    params: { period, timezone }
+  })
+  return data
+}
+
 export interface BatchApiKeyUsageStats {
   api_key_id: number
   today_actual_cost: number
@@ -383,6 +413,7 @@ export const usageAPI = {
   getDashboardModels,
   getMyApiKeyDailyUsage,
   getDashboardSnapshotV2,
+  getPublicTokenLeaderboard,
   getDashboardApiKeysUsage,
   // Error requests
   listMyErrorRequests,
