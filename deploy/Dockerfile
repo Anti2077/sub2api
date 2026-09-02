@@ -41,7 +41,7 @@ RUN pnpm run build
 # -----------------------------------------------------------------------------
 # Stage 2: Backend Builder
 # -----------------------------------------------------------------------------
-FROM ${GOLANG_IMAGE} AS backend-builder
+FROM --platform=$BUILDPLATFORM ${GOLANG_IMAGE} AS backend-builder
 
 # Build arguments for version info (set by CI)
 ARG VERSION=
@@ -49,6 +49,8 @@ ARG COMMIT=docker
 ARG DATE
 ARG GOPROXY
 ARG GOSUMDB
+ARG TARGETOS
+ARG TARGETARCH
 
 ENV GOPROXY=${GOPROXY}
 ENV GOSUMDB=${GOSUMDB}
@@ -73,7 +75,9 @@ COPY --from=frontend-builder /app/backend/internal/web/dist ./internal/web/dist
 RUN VERSION_VALUE="${VERSION}" && \
     if [ -z "${VERSION_VALUE}" ]; then VERSION_VALUE="$(./scripts/resolve-version.sh)"; fi && \
     DATE_VALUE="${DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" && \
-    CGO_ENABLED=0 GOOS=linux go build \
+    TARGET_OS="${TARGETOS:-linux}" && \
+    TARGET_ARCH="${TARGETARCH:-$(go env GOARCH)}" && \
+    CGO_ENABLED=0 GOOS="${TARGET_OS}" GOARCH="${TARGET_ARCH}" go build \
     -tags embed \
     -ldflags="-s -w -X main.Version=${VERSION_VALUE} -X main.Commit=${COMMIT} -X main.Date=${DATE_VALUE} -X main.BuildType=release" \
     -o /app/sub2api \
