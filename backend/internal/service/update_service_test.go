@@ -31,6 +31,8 @@ type updateServiceGitHubClientStub struct {
 	release        *GitHubRelease
 	recentReleases []*GitHubRelease
 	recentErr      error
+	workflowRun    *GitHubWorkflowRun
+	workflowErr    error
 }
 
 func (s *updateServiceGitHubClientStub) FetchLatestRelease(context.Context, string) (*GitHubRelease, error) {
@@ -39,6 +41,10 @@ func (s *updateServiceGitHubClientStub) FetchLatestRelease(context.Context, stri
 
 func (s *updateServiceGitHubClientStub) FetchRecentReleases(context.Context, string, int) ([]*GitHubRelease, error) {
 	return s.recentReleases, s.recentErr
+}
+
+func (s *updateServiceGitHubClientStub) FetchLatestSuccessfulWorkflowRun(context.Context, string, string, string) (*GitHubWorkflowRun, error) {
+	return s.workflowRun, s.workflowErr
 }
 
 func (s *updateServiceGitHubClientStub) DownloadFile(context.Context, string, string, int64) error {
@@ -67,6 +73,75 @@ func TestUpdateServicePerformUpdateNoUpdateReturnsSentinel(t *testing.T) {
 	require.Error(t, err)
 	require.True(t, errors.Is(err, ErrNoUpdateAvailable))
 	require.ErrorIs(t, err, ErrNoUpdateAvailable)
+}
+
+func TestUpdateServiceContainerBuildChecksLatestSuccessfulImageWorkflow(t *testing.T) {
+	const latestCommit = "1234567890abcdef1234567890abcdef12345678"
+	svc := NewUpdateServiceWithBuildInfo(
+		&updateServiceCacheStub{},
+		&updateServiceGitHubClientStub{workflowRun: &GitHubWorkflowRun{
+			SHA:     latestCommit,
+			HTMLURL: "https://github.com/Anti2077/sub2api/commit/1234567890abcdef",
+		}},
+		BuildInfo{
+			Version:      "custom-abcdef0",
+			Commit:       "abcdef0123456789abcdef0123456789abcdef01",
+			BuildType:    "container",
+			UpdateRepo:   "Anti2077/sub2api",
+			UpdateBranch: "Anti2077/custom",
+			UpdateImage:  "ghcr.io/anti2077/sub2api:custom",
+		},
+	)
+
+	info, err := svc.CheckUpdate(context.Background(), true)
+
+	require.NoError(t, err)
+	require.True(t, info.HasUpdate)
+	require.Equal(t, "container", info.UpdateMode)
+	require.Equal(t, "custom-1234567", info.LatestVersion)
+	require.Equal(t, latestCommit, info.LatestCommit)
+	require.Equal(t, "Anti2077/sub2api", info.UpdateRepo)
+	require.Equal(t, "Anti2077/custom", info.UpdateBranch)
+	require.Equal(t, "ghcr.io/anti2077/sub2api:custom", info.DockerImage)
+}
+
+func TestUpdateServiceContainerBuildRecognizesCurrentCommitAndCachedResult(t *testing.T) {
+	const commit = "1234567890abcdef1234567890abcdef12345678"
+	cache := &updateServiceCacheStub{}
+	client := &updateServiceGitHubClientStub{workflowRun: &GitHubWorkflowRun{SHA: commit}}
+	buildInfo := BuildInfo{
+		Version:      "custom-1234567",
+		Commit:       commit,
+		BuildType:    "container",
+		UpdateRepo:   "Anti2077/sub2api",
+		UpdateBranch: "Anti2077/custom",
+		UpdateImage:  "ghcr.io/anti2077/sub2api:custom",
+	}
+	svc := NewUpdateServiceWithBuildInfo(cache, client, buildInfo)
+
+	fresh, err := svc.CheckUpdate(context.Background(), true)
+	require.NoError(t, err)
+	require.False(t, fresh.HasUpdate)
+
+	cached, err := svc.CheckUpdate(context.Background(), false)
+	require.NoError(t, err)
+	require.True(t, cached.Cached)
+	require.False(t, cached.HasUpdate)
+	require.Equal(t, commit, cached.LatestCommit)
+}
+
+func TestUpdateServiceContainerBuildRejectsInPlaceUpdateAndRollback(t *testing.T) {
+	svc := NewUpdateServiceWithBuildInfo(
+		&updateServiceCacheStub{},
+		&updateServiceGitHubClientStub{},
+		BuildInfo{BuildType: "container"},
+	)
+
+	require.ErrorIs(t, svc.PerformUpdate(context.Background()), ErrContainerUpdateRequiresOperator)
+	require.ErrorIs(t, svc.Rollback(), ErrContainerUpdateRequiresOperator)
+	_, err := svc.ListRollbackVersions(context.Background())
+	require.ErrorIs(t, err, ErrContainerUpdateRequiresOperator)
+	require.ErrorIs(t, svc.RollbackToVersion(context.Background(), "0.1.0"), ErrContainerUpdateRequiresOperator)
 }
 
 func newRollbackTestService(current string, releases []*GitHubRelease) *UpdateService {

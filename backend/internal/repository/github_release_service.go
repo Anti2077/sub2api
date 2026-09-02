@@ -112,6 +112,10 @@ func (c *githubReleaseClientError) FetchRecentReleases(ctx context.Context, repo
 	return nil, c.err
 }
 
+func (c *githubReleaseClientError) FetchLatestSuccessfulWorkflowRun(ctx context.Context, repo, workflow, branch string) (*service.GitHubWorkflowRun, error) {
+	return nil, c.err
+}
+
 func (c *githubReleaseClientError) DownloadFile(ctx context.Context, url, dest string, maxSize int64) error {
 	return c.err
 }
@@ -176,6 +180,48 @@ func (c *githubReleaseClient) FetchRecentReleases(ctx context.Context, repo stri
 	}
 
 	return releases, nil
+}
+
+func (c *githubReleaseClient) FetchLatestSuccessfulWorkflowRun(ctx context.Context, repo, workflow, branch string) (*service.GitHubWorkflowRun, error) {
+	requestURL := fmt.Sprintf(
+		"https://api.github.com/repos/%s/actions/workflows/%s/runs?branch=%s&status=success&per_page=1",
+		repo,
+		url.PathEscape(workflow),
+		url.QueryEscape(branch),
+	)
+
+	req, err := c.newAPIRequest(ctx, requestURL)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned %d", resp.StatusCode)
+	}
+
+	var payload struct {
+		WorkflowRuns []struct {
+			HeadSHA string `json:"head_sha"`
+			HTMLURL string `json:"html_url"`
+		} `json:"workflow_runs"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	if len(payload.WorkflowRuns) == 0 {
+		return nil, fmt.Errorf("GitHub API returned no successful workflow runs")
+	}
+
+	return &service.GitHubWorkflowRun{
+		SHA:     payload.WorkflowRuns[0].HeadSHA,
+		HTMLURL: payload.WorkflowRuns[0].HTMLURL,
+	}, nil
 }
 
 func (c *githubReleaseClient) DownloadFile(ctx context.Context, url, dest string, maxSize int64) error {

@@ -393,6 +393,43 @@ func (s *GitHubReleaseServiceSuite) TestFetchRecentReleases_Success() {
 	require.Equal(s.T(), "v1.0.0", releases[2].TagName)
 }
 
+func (s *GitHubReleaseServiceSuite) TestFetchLatestSuccessfulWorkflowRun_Success() {
+	workflowJSON := `{
+		"workflow_runs": [{
+			"head_sha": "1234567890abcdef1234567890abcdef12345678",
+			"html_url": "https://github.com/test/repo/actions/runs/123"
+		}]
+	}`
+
+	s.srv = newLocalTestServer(s.T(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(s.T(), "/repos/test/repo/actions/workflows/custom-image.yml/runs", r.URL.Path)
+		require.Equal(s.T(), "Anti2077/custom", r.URL.Query().Get("branch"))
+		require.Equal(s.T(), "success", r.URL.Query().Get("status"))
+		require.Equal(s.T(), "1", r.URL.Query().Get("per_page"))
+		require.Equal(s.T(), "application/vnd.github.v3+json", r.Header.Get("Accept"))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(workflowJSON))
+	}))
+
+	s.client = &githubReleaseClient{
+		httpClient: &http.Client{
+			Transport: &testTransport{testServerURL: s.srv.URL},
+		},
+		downloadHTTPClient: &http.Client{},
+	}
+
+	head, err := s.client.FetchLatestSuccessfulWorkflowRun(
+		context.Background(),
+		"test/repo",
+		"custom-image.yml",
+		"Anti2077/custom",
+	)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), "1234567890abcdef1234567890abcdef12345678", head.SHA)
+	require.Equal(s.T(), "https://github.com/test/repo/actions/runs/123", head.HTMLURL)
+}
+
 func (s *GitHubReleaseServiceSuite) TestFetchRecentReleases_Non200() {
 	s.srv = newLocalTestServer(s.T(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)

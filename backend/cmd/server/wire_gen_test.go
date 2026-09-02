@@ -12,12 +12,20 @@ import (
 
 func TestProvideServiceBuildInfo(t *testing.T) {
 	in := handler.BuildInfo{
-		Version:   "v-test",
-		BuildType: "release",
+		Version:      "v-test",
+		Commit:       "abcdef1234567890",
+		BuildType:    "release",
+		UpdateRepo:   "owner/repo",
+		UpdateBranch: "custom",
+		UpdateImage:  "ghcr.io/owner/repo:custom",
 	}
 	out := provideServiceBuildInfo(in)
 	require.Equal(t, in.Version, out.Version)
+	require.Equal(t, in.Commit, out.Commit)
 	require.Equal(t, in.BuildType, out.BuildType)
+	require.Equal(t, in.UpdateRepo, out.UpdateRepo)
+	require.Equal(t, in.UpdateBranch, out.UpdateBranch)
+	require.Equal(t, in.UpdateImage, out.UpdateImage)
 }
 
 func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {

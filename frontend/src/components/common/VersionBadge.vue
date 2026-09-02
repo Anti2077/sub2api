@@ -12,7 +12,7 @@
         ]"
         :title="hasUpdate ? t('version.updateAvailable') : t('version.upToDate')"
       >
-        <span v-if="currentVersion" class="font-medium">v{{ currentVersion }}</span>
+        <span v-if="currentVersion" class="font-medium">{{ formatVersion(currentVersion) }}</span>
         <span
           v-else
           class="h-3 w-12 animate-pulse rounded bg-gray-200 font-medium dark:bg-dark-600"
@@ -32,7 +32,7 @@
           v-if="dropdownOpen"
           ref="dropdownRef"
           class="absolute left-0 z-50 mt-2 overflow-hidden whitespace-normal rounded-xl border border-gray-200 bg-white shadow-lg transition-all duration-200 dark:border-dark-700 dark:bg-dark-800"
-          :class="rollbackPanelOpen && isReleaseBuild ? 'w-80' : 'w-64'"
+          :class="(rollbackPanelOpen && isReleaseBuild) || isContainerBuild ? 'w-80' : 'w-64'"
         >
           <!-- Header with refresh button -->
           <div
@@ -84,7 +84,7 @@
                   <span
                     v-if="currentVersion"
                     class="text-2xl font-bold text-gray-900 dark:text-white"
-                    >v{{ currentVersion }}</span
+                    >{{ formatVersion(currentVersion) }}</span
                   >
                   <span v-else class="text-2xl font-bold text-gray-400 dark:text-dark-500">--</span>
                   <!-- Show check mark when up to date -->
@@ -108,7 +108,7 @@
                 <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
                   {{
                     hasUpdate
-                      ? t('version.latestVersion') + ': v' + latestVersion
+                      ? t('version.latestVersion') + ': ' + formatVersion(latestVersion)
                       : t('version.upToDate')
                   }}
                 </p>
@@ -231,7 +231,99 @@
                 </button>
               </div>
 
-              <!-- Priority 3: Update available for source build - show git pull hint -->
+              <!-- Priority 3: custom container builds are updated by the deployment operator -->
+              <div v-else-if="isContainerBuild" class="space-y-3">
+                <div
+                  class="flex items-start gap-3 rounded-lg border p-3"
+                  :class="
+                    hasUpdate
+                      ? 'border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-900/20'
+                      : 'border-green-200 bg-green-50 dark:border-green-800/50 dark:bg-green-900/20'
+                  "
+                >
+                  <div
+                    class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full"
+                    :class="
+                      hasUpdate
+                        ? 'bg-amber-100 dark:bg-amber-900/50'
+                        : 'bg-green-100 dark:bg-green-900/50'
+                    "
+                  >
+                    <Icon
+                      :name="hasUpdate ? 'download' : 'check'"
+                      size="sm"
+                      :stroke-width="2"
+                      :class="
+                        hasUpdate
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-green-600 dark:text-green-400'
+                      "
+                    />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p
+                      class="text-sm font-medium"
+                      :class="
+                        hasUpdate
+                          ? 'text-amber-700 dark:text-amber-300'
+                          : 'text-green-700 dark:text-green-300'
+                      "
+                    >
+                      {{ hasUpdate ? t('version.containerUpdateAvailable') : t('version.containerUpToDate') }}
+                    </p>
+                    <p class="mt-0.5 text-xs leading-4 text-gray-500 dark:text-dark-100">
+                      {{ t('version.containerOperatorHint') }}
+                    </p>
+                  </div>
+                </div>
+
+                <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-dark-600">
+                  <div
+                    class="flex items-center justify-between border-b border-gray-200 bg-gray-100 px-2 py-1.5 dark:border-dark-600 dark:bg-dark-700"
+                  >
+                    <span
+                      class="min-w-0 flex-1 truncate px-1 font-mono text-[10px] text-gray-500 dark:text-dark-100"
+                    >
+                      {{ dockerImage }}
+                    </span>
+                    <button
+                      type="button"
+                      @click="copyToClipboard(containerUpdateCommand)"
+                      class="ml-2 flex min-h-6 flex-shrink-0 items-center gap-1 rounded px-2 py-1 text-[11px] text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-dark-100 dark:hover:bg-dark-600 dark:hover:text-white"
+                    >
+                      <Icon
+                        :name="copied ? 'check' : 'copy'"
+                        size="xs"
+                        :stroke-width="2"
+                        :class="copied ? 'text-green-500' : ''"
+                      />
+                      {{ copied ? t('version.copied') : t('version.copyForOps') }}
+                    </button>
+                  </div>
+                  <code
+                    class="block select-all whitespace-pre-wrap break-all bg-gray-50 p-2.5 font-mono text-[10px] leading-relaxed text-gray-600 dark:bg-dark-900 dark:text-dark-200"
+                    >{{ containerUpdateCommand }}</code
+                  >
+                </div>
+
+                <p class="flex items-start gap-1.5 text-[11px] leading-4 text-gray-500 dark:text-dark-100">
+                  <Icon name="infoCircle" size="xs" :stroke-width="2" class="mt-px flex-shrink-0" />
+                  {{ t('version.containerDataSafeHint') }}
+                </p>
+
+                <a
+                  v-if="releaseInfo?.html_url && releaseInfo.html_url !== '#'"
+                  :href="releaseInfo.html_url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center justify-center gap-1 text-xs text-gray-500 transition-colors hover:text-gray-700 dark:text-dark-400 dark:hover:text-dark-200"
+                >
+                  {{ t('version.viewSourceCommit') }}
+                  <Icon name="externalLink" size="xs" :stroke-width="2" />
+                </a>
+              </div>
+
+              <!-- Priority 4: Update available for source build - show git pull hint -->
               <div v-else-if="hasUpdate && !isReleaseBuild" class="space-y-2">
                 <a
                   v-if="releaseInfo?.html_url && releaseInfo.html_url !== '#'"
@@ -255,7 +347,7 @@
                       {{ t('version.updateAvailable') }}
                     </p>
                     <p class="text-xs text-amber-600/70 dark:text-amber-400/70">
-                      v{{ latestVersion }}
+                      {{ formatVersion(latestVersion) }}
                     </p>
                   </div>
                   <svg
@@ -291,7 +383,7 @@
                 </div>
               </div>
 
-              <!-- Priority 4: Update available for release build - show update button -->
+              <!-- Priority 5: Update available for release build - show update button -->
               <div v-else-if="hasUpdate && isReleaseBuild" class="space-y-2">
                 <!-- Update info card -->
                 <div
@@ -312,7 +404,7 @@
                       {{ t('version.updateAvailable') }}
                     </p>
                     <p class="text-xs text-amber-600/70 dark:text-amber-400/70">
-                      v{{ latestVersion }}
+                      {{ formatVersion(latestVersion) }}
                     </p>
                   </div>
                 </div>
@@ -355,7 +447,7 @@
                 </a>
               </div>
 
-              <!-- Priority 5: Up to date - GitHub link + version rollback -->
+              <!-- Priority 6: Up to date - GitHub link + version rollback -->
               <div v-else class="space-y-2">
                 <a
                   v-if="releaseInfo?.html_url && releaseInfo.html_url !== '#'"
@@ -676,6 +768,8 @@ const latestVersion = computed(() => appStore.latestVersion)
 const hasUpdate = computed(() => appStore.hasUpdate)
 const releaseInfo = computed(() => appStore.releaseInfo)
 const buildType = computed(() => appStore.buildType)
+const updateMode = computed(() => appStore.updateMode)
+const dockerImage = computed(() => appStore.dockerImage)
 
 // Update process states (local to this component)
 const updating = ref(false)
@@ -728,8 +822,22 @@ const activeManualCommand = computed(() =>
   manualTab.value === 'docker' ? dockerRollbackCommand.value : scriptRollbackCommand.value
 )
 
-// Only show update check for release builds (binary/docker deployment)
+const containerUpdateCommand = computed(() =>
+  [
+    `# ${dockerImage.value}`,
+    'docker compose pull sub2api',
+    'docker compose up -d --no-deps sub2api'
+  ].join('\n')
+)
+
+// Binary releases can self-replace; custom containers are operator-managed.
 const isReleaseBuild = computed(() => buildType.value === 'release')
+const isContainerBuild = computed(() => updateMode.value === 'container')
+
+function formatVersion(version: string): string {
+  if (!version) return ''
+  return version.startsWith('custom-') || version.startsWith('v') ? version : `v${version}`
+}
 
 function toggleDropdown() {
   dropdownOpen.value = !dropdownOpen.value

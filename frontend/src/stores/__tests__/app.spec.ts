@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAppStore } from '@/stores/app'
 import { getPublicSettings } from '@/api/auth'
+import { checkUpdates } from '@/api/admin/system'
 import type { PublicSettings } from '@/types'
 
 function createDeferred<T>() {
@@ -79,6 +80,7 @@ describe('useAppStore', () => {
     vi.useFakeTimers()
     localStorage.clear()
     vi.mocked(getPublicSettings).mockReset()
+    vi.mocked(checkUpdates).mockReset()
     // 清除 window.__APP_CONFIG__
     delete (window as any).__APP_CONFIG__
   })
@@ -319,6 +321,45 @@ describe('useAppStore', () => {
       expect(store.sidebarCollapsed).toBe(false)
       expect(store.loading).toBe(false)
       expect(store.toasts).toHaveLength(0)
+    })
+  })
+
+  // --- 版本更新 ---
+
+  describe('版本更新', () => {
+    it('保留自定义容器更新坐标并从本地缓存返回', async () => {
+      vi.mocked(checkUpdates).mockResolvedValue({
+        current_version: 'custom-abcdef0',
+        latest_version: 'custom-1234567',
+        has_update: true,
+        cached: false,
+        build_type: 'container',
+        update_mode: 'container',
+        update_repo: 'Anti2077/sub2api',
+        update_branch: 'Anti2077/custom',
+        docker_image: 'ghcr.io/anti2077/sub2api:custom',
+        current_commit: 'abcdef0123456789',
+        latest_commit: '1234567890abcdef',
+      })
+      const store = useAppStore()
+
+      const fresh = await store.fetchVersion(true)
+
+      expect(fresh?.update_mode).toBe('container')
+      expect(store.updateMode).toBe('container')
+      expect(store.updateRepo).toBe('Anti2077/sub2api')
+      expect(store.updateBranch).toBe('Anti2077/custom')
+      expect(store.dockerImage).toBe('ghcr.io/anti2077/sub2api:custom')
+      expect(store.currentCommit).toBe('abcdef0123456789')
+      expect(store.latestCommit).toBe('1234567890abcdef')
+
+      const cached = await store.fetchVersion()
+      expect(cached).toMatchObject({
+        update_mode: 'container',
+        docker_image: 'ghcr.io/anti2077/sub2api:custom',
+        cached: true,
+      })
+      expect(checkUpdates).toHaveBeenCalledTimes(1)
     })
   })
 

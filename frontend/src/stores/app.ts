@@ -43,6 +43,12 @@ export const useAppStore = defineStore('app', () => {
   const hasUpdate = ref<boolean>(false)
   const buildType = ref<string>('source')
   const releaseInfo = ref<ReleaseInfo | null>(null)
+  const updateMode = ref<VersionInfo['update_mode']>('source')
+  const updateRepo = ref<string>('')
+  const updateBranch = ref<string>('')
+  const dockerImage = ref<string>('')
+  const currentCommit = ref<string>('')
+  const latestCommit = ref<string>('')
 
   // Auto-incrementing ID for toasts
   let toastIdCounter = 0
@@ -248,6 +254,12 @@ export const useAppStore = defineStore('app', () => {
         latest_version: latestVersion.value,
         has_update: hasUpdate.value,
         build_type: buildType.value,
+        update_mode: updateMode.value,
+        update_repo: updateRepo.value || undefined,
+        update_branch: updateBranch.value || undefined,
+        docker_image: dockerImage.value || undefined,
+        current_commit: currentCommit.value || undefined,
+        latest_commit: latestCommit.value || undefined,
         release_info: releaseInfo.value || undefined,
         cached: true
       }
@@ -266,6 +278,12 @@ export const useAppStore = defineStore('app', () => {
       hasUpdate.value = data.has_update
       buildType.value = data.build_type || 'source'
       releaseInfo.value = data.release_info || null
+      updateMode.value = data.update_mode || (data.build_type === 'release' ? 'binary' : 'source')
+      updateRepo.value = data.update_repo || ''
+      updateBranch.value = data.update_branch || ''
+      dockerImage.value = data.docker_image || ''
+      currentCommit.value = data.current_commit || ''
+      latestCommit.value = data.latest_commit || ''
       versionLoaded.value = true
       return data
     } catch (error) {
@@ -460,6 +478,12 @@ export const useAppStore = defineStore('app', () => {
     hasUpdate,
     buildType,
     releaseInfo,
+    updateMode,
+    updateRepo,
+    updateBranch,
+    dockerImage,
+    currentCommit,
+    latestCommit,
 
     // Computed
     hasActiveToasts,

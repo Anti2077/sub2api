@@ -67,6 +67,10 @@ jobs:
           build-args: |
             VERSION=${{ steps.image.outputs.version }}
             COMMIT=${{ github.sha }}
+            BUILD_TYPE=container
+            UPDATE_REPO=${{ github.repository }}
+            UPDATE_BRANCH=Anti2077/custom
+            UPDATE_IMAGE=${{ steps.image.outputs.name }}:custom
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: mode=max

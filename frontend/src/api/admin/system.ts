@@ -18,7 +18,13 @@ export interface VersionInfo {
   release_info?: ReleaseInfo
   cached: boolean
   warning?: string
-  build_type: string // "source" for manual builds, "release" for CI builds
+  build_type: string // "source", "release", or "container"
+  update_mode: 'source' | 'binary' | 'container'
+  update_repo?: string
+  update_branch?: string
+  docker_image?: string
+  current_commit?: string
+  latest_commit?: string
 }
 
 /**
