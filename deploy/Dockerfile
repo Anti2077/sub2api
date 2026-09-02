@@ -47,6 +47,10 @@ FROM --platform=$BUILDPLATFORM ${GOLANG_IMAGE} AS backend-builder
 ARG VERSION=
 ARG COMMIT=docker
 ARG DATE
+ARG BUILD_TYPE=release
+ARG UPDATE_REPO=Wei-Shaw/sub2api
+ARG UPDATE_BRANCH=
+ARG UPDATE_IMAGE=
 ARG GOPROXY
 ARG GOSUMDB
 ARG TARGETOS
@@ -79,7 +83,7 @@ RUN VERSION_VALUE="${VERSION}" && \
     TARGET_ARCH="${TARGETARCH:-$(go env GOARCH)}" && \
     CGO_ENABLED=0 GOOS="${TARGET_OS}" GOARCH="${TARGET_ARCH}" go build \
     -tags embed \
-    -ldflags="-s -w -X main.Version=${VERSION_VALUE} -X main.Commit=${COMMIT} -X main.Date=${DATE_VALUE} -X main.BuildType=release" \
+    -ldflags="-s -w -X main.Version=${VERSION_VALUE} -X main.Commit=${COMMIT} -X main.Date=${DATE_VALUE} -X main.BuildType=${BUILD_TYPE} -X main.UpdateRepo=${UPDATE_REPO} -X main.UpdateBranch=${UPDATE_BRANCH} -X main.UpdateImage=${UPDATE_IMAGE}" \
     -o /app/sub2api \
     ./cmd/server
 

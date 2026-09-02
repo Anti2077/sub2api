@@ -23,14 +23,22 @@ import (
 )
 
 var (
-	ErrNoUpdateAvailable         = infraerrors.Conflict("ALREADY_UP_TO_DATE", "no update available; current version is latest")
-	ErrRollbackVersionNotAllowed = infraerrors.BadRequest("ROLLBACK_VERSION_NOT_ALLOWED", "version is not in the allowed rollback list")
+	ErrNoUpdateAvailable               = infraerrors.Conflict("ALREADY_UP_TO_DATE", "no update available; current version is latest")
+	ErrRollbackVersionNotAllowed       = infraerrors.BadRequest("ROLLBACK_VERSION_NOT_ALLOWED", "version is not in the allowed rollback list")
+	ErrContainerUpdateRequiresOperator = infraerrors.Conflict(
+		"CONTAINER_UPDATE_REQUIRES_OPERATOR",
+		"container updates must be applied by the deployment operator",
+	)
 )
 
 const (
-	updateCacheKey = "update_check_cache"
-	updateCacheTTL = 1200 // 20 minutes
-	githubRepo     = "Wei-Shaw/sub2api"
+	updateCacheKey          = "update_check_cache"
+	updateCacheTTL          = 1200 // 20 minutes
+	githubRepo              = "Wei-Shaw/sub2api"
+	updateModeBinary        = "binary"
+	updateModeSource        = "source"
+	updateModeContainer     = "container"
+	containerUpdateWorkflow = "custom-image.yml"
 
 	// Security: allowed download domains for updates
 	allowedDownloadHost = "github.com"
@@ -55,6 +63,7 @@ type UpdateCache interface {
 type GitHubReleaseClient interface {
 	FetchLatestRelease(ctx context.Context, repo string) (*GitHubRelease, error)
 	FetchRecentReleases(ctx context.Context, repo string, perPage int) ([]*GitHubRelease, error)
+	FetchLatestSuccessfulWorkflowRun(ctx context.Context, repo, workflow, branch string) (*GitHubWorkflowRun, error)
 	DownloadFile(ctx context.Context, url, dest string, maxSize int64) error
 	FetchChecksumFile(ctx context.Context, url string) ([]byte, error)
 }
@@ -64,16 +73,37 @@ type UpdateService struct {
 	cache          UpdateCache
 	githubClient   GitHubReleaseClient
 	currentVersion string
-	buildType      string // "source" for manual builds, "release" for CI builds
+	currentCommit  string
+	buildType      string // "source", "release", or "container"
+	updateRepo     string
+	updateBranch   string
+	updateImage    string
 }
 
 // NewUpdateService creates a new UpdateService
 func NewUpdateService(cache UpdateCache, githubClient GitHubReleaseClient, version, buildType string) *UpdateService {
+	return NewUpdateServiceWithBuildInfo(cache, githubClient, BuildInfo{
+		Version:   version,
+		BuildType: buildType,
+	})
+}
+
+// NewUpdateServiceWithBuildInfo includes the source coordinates embedded by
+// custom container builds while preserving the legacy constructor for callers.
+func NewUpdateServiceWithBuildInfo(cache UpdateCache, githubClient GitHubReleaseClient, buildInfo BuildInfo) *UpdateService {
+	updateRepo := strings.TrimSpace(buildInfo.UpdateRepo)
+	if updateRepo == "" {
+		updateRepo = githubRepo
+	}
 	return &UpdateService{
 		cache:          cache,
 		githubClient:   githubClient,
-		currentVersion: version,
-		buildType:      buildType,
+		currentVersion: buildInfo.Version,
+		currentCommit:  strings.TrimSpace(buildInfo.Commit),
+		buildType:      buildInfo.BuildType,
+		updateRepo:     updateRepo,
+		updateBranch:   strings.TrimSpace(buildInfo.UpdateBranch),
+		updateImage:    strings.TrimSpace(buildInfo.UpdateImage),
 	}
 }
 
@@ -85,7 +115,13 @@ type UpdateInfo struct {
 	ReleaseInfo    *ReleaseInfo `json:"release_info,omitempty"`
 	Cached         bool         `json:"cached"`
 	Warning        string       `json:"warning,omitempty"`
-	BuildType      string       `json:"build_type"` // "source" or "release"
+	BuildType      string       `json:"build_type"` // "source", "release", or "container"
+	UpdateMode     string       `json:"update_mode"`
+	UpdateRepo     string       `json:"update_repo,omitempty"`
+	UpdateBranch   string       `json:"update_branch,omitempty"`
+	DockerImage    string       `json:"docker_image,omitempty"`
+	CurrentCommit  string       `json:"current_commit,omitempty"`
+	LatestCommit   string       `json:"latest_commit,omitempty"`
 }
 
 // ReleaseInfo contains GitHub release details
@@ -116,6 +152,12 @@ type GitHubRelease struct {
 	Assets      []GitHubAsset `json:"assets"`
 }
 
+// GitHubWorkflowRun identifies a successfully published custom image build.
+type GitHubWorkflowRun struct {
+	SHA     string `json:"sha"`
+	HTMLURL string `json:"html_url"`
+}
+
 // RollbackVersion describes a release version the system can roll back to
 type RollbackVersion struct {
 	Version     string `json:"version"` // without "v" prefix, e.g. "0.1.146"
@@ -139,20 +181,14 @@ func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInf
 	}
 
 	// Fetch from GitHub
-	info, err := s.fetchLatestRelease(ctx)
+	info, err := s.fetchLatestUpdate(ctx)
 	if err != nil {
 		// Return cached on error
 		if cached, cacheErr := s.getFromCache(ctx); cacheErr == nil && cached != nil {
 			cached.Warning = "Using cached data: " + err.Error()
 			return cached, nil
 		}
-		return &UpdateInfo{
-			CurrentVersion: s.currentVersion,
-			LatestVersion:  s.currentVersion,
-			HasUpdate:      false,
-			Warning:        err.Error(),
-			BuildType:      s.buildType,
-		}, nil
+		return s.baseUpdateInfo(err.Error()), nil
 	}
 
 	// Cache result
@@ -163,6 +199,10 @@ func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInf
 // PerformUpdate downloads and applies the update
 // Uses atomic file replacement pattern for safe in-place updates
 func (s *UpdateService) PerformUpdate(ctx context.Context) error {
+	if s.updateMode() == updateModeContainer {
+		return ErrContainerUpdateRequiresOperator
+	}
+
 	info, err := s.CheckUpdate(ctx, true)
 	if err != nil {
 		return err
@@ -281,6 +321,10 @@ func (s *UpdateService) applyReleaseAssets(ctx context.Context, releaseAssets []
 
 // Rollback restores the previous version
 func (s *UpdateService) Rollback() error {
+	if s.updateMode() == updateModeContainer {
+		return ErrContainerUpdateRequiresOperator
+	}
+
 	exePath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
@@ -307,6 +351,10 @@ func (s *UpdateService) Rollback() error {
 // strictly older than the current version (the current version itself is excluded),
 // newest first. Draft and prerelease entries are skipped.
 func (s *UpdateService) ListRollbackVersions(ctx context.Context) ([]RollbackVersion, error) {
+	if s.updateMode() == updateModeContainer {
+		return nil, ErrContainerUpdateRequiresOperator
+	}
+
 	releases, err := s.fetchRollbackCandidates(ctx)
 	if err != nil {
 		return nil, err
@@ -327,6 +375,10 @@ func (s *UpdateService) ListRollbackVersions(ctx context.Context) ([]RollbackVer
 // The target must be one of the versions returned by ListRollbackVersions;
 // anything else (including the current version) is rejected.
 func (s *UpdateService) RollbackToVersion(ctx context.Context, version string) error {
+	if s.updateMode() == updateModeContainer {
+		return ErrContainerUpdateRequiresOperator
+	}
+
 	target := strings.TrimPrefix(strings.TrimSpace(version), "v")
 	if target == "" {
 		return ErrRollbackVersionNotAllowed
@@ -363,7 +415,7 @@ func (s *UpdateService) RollbackToVersion(ctx context.Context, version string) e
 // fetchRollbackCandidates fetches recent releases and keeps the newest
 // maxRollbackVersions entries strictly older than the current version.
 func (s *UpdateService) fetchRollbackCandidates(ctx context.Context) ([]*GitHubRelease, error) {
-	releases, err := s.githubClient.FetchRecentReleases(ctx, githubRepo, rollbackFetchPageSize)
+	releases, err := s.githubClient.FetchRecentReleases(ctx, s.updateRepo, rollbackFetchPageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -399,8 +451,15 @@ func (s *UpdateService) fetchRollbackCandidates(ctx context.Context) ([]*GitHubR
 	return candidates, nil
 }
 
+func (s *UpdateService) fetchLatestUpdate(ctx context.Context) (*UpdateInfo, error) {
+	if s.updateMode() == updateModeContainer {
+		return s.fetchLatestContainerBuild(ctx)
+	}
+	return s.fetchLatestRelease(ctx)
+}
+
 func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, error) {
-	release, err := s.githubClient.FetchLatestRelease(ctx, githubRepo)
+	release, err := s.githubClient.FetchLatestRelease(ctx, s.updateRepo)
 	if err != nil {
 		return nil, err
 	}
@@ -427,9 +486,100 @@ func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, er
 			HTMLURL:     release.HTMLURL,
 			Assets:      assets,
 		},
-		Cached:    false,
-		BuildType: s.buildType,
+		Cached:        false,
+		BuildType:     s.buildType,
+		UpdateMode:    s.updateMode(),
+		UpdateRepo:    s.updateRepo,
+		CurrentCommit: s.currentCommit,
 	}, nil
+}
+
+func (s *UpdateService) fetchLatestContainerBuild(ctx context.Context) (*UpdateInfo, error) {
+	if s.updateRepo == "" || s.updateBranch == "" || s.updateImage == "" {
+		return nil, fmt.Errorf("container update source is incomplete")
+	}
+
+	run, err := s.githubClient.FetchLatestSuccessfulWorkflowRun(
+		ctx,
+		s.updateRepo,
+		containerUpdateWorkflow,
+		s.updateBranch,
+	)
+	if err != nil {
+		return nil, err
+	}
+	latestCommit := strings.TrimSpace(run.SHA)
+	if latestCommit == "" {
+		return nil, fmt.Errorf("GitHub workflow response did not include a successful image commit")
+	}
+
+	latestVersion := "custom-" + shortCommit(latestCommit)
+	htmlURL := strings.TrimSpace(run.HTMLURL)
+	if htmlURL == "" {
+		htmlURL = fmt.Sprintf("https://github.com/%s/actions/workflows/%s", s.updateRepo, containerUpdateWorkflow)
+	}
+
+	return &UpdateInfo{
+		CurrentVersion: s.currentVersion,
+		LatestVersion:  latestVersion,
+		HasUpdate:      !commitsMatch(s.currentCommit, latestCommit),
+		ReleaseInfo: &ReleaseInfo{
+			Name:    latestVersion,
+			Body:    "A newer custom container image was published by a successful workflow run.",
+			HTMLURL: htmlURL,
+		},
+		Cached:        false,
+		BuildType:     s.buildType,
+		UpdateMode:    updateModeContainer,
+		UpdateRepo:    s.updateRepo,
+		UpdateBranch:  s.updateBranch,
+		DockerImage:   s.updateImage,
+		CurrentCommit: s.currentCommit,
+		LatestCommit:  latestCommit,
+	}, nil
+}
+
+func (s *UpdateService) updateMode() string {
+	switch strings.TrimSpace(s.buildType) {
+	case updateModeContainer:
+		return updateModeContainer
+	case "release":
+		return updateModeBinary
+	default:
+		return updateModeSource
+	}
+}
+
+func (s *UpdateService) baseUpdateInfo(warning string) *UpdateInfo {
+	return &UpdateInfo{
+		CurrentVersion: s.currentVersion,
+		LatestVersion:  s.currentVersion,
+		HasUpdate:      false,
+		Warning:        warning,
+		BuildType:      s.buildType,
+		UpdateMode:     s.updateMode(),
+		UpdateRepo:     s.updateRepo,
+		UpdateBranch:   s.updateBranch,
+		DockerImage:    s.updateImage,
+		CurrentCommit:  s.currentCommit,
+	}
+}
+
+func shortCommit(commit string) string {
+	commit = strings.TrimSpace(commit)
+	if len(commit) <= 7 {
+		return commit
+	}
+	return commit[:7]
+}
+
+func commitsMatch(current, latest string) bool {
+	current = strings.ToLower(strings.TrimSpace(current))
+	latest = strings.ToLower(strings.TrimSpace(latest))
+	if len(current) < 7 || len(latest) < 7 {
+		return false
+	}
+	return strings.HasPrefix(current, latest) || strings.HasPrefix(latest, current)
 }
 
 func (s *UpdateService) downloadFile(ctx context.Context, downloadURL, dest string) error {
@@ -600,9 +750,14 @@ func (s *UpdateService) getFromCache(ctx context.Context) (*UpdateInfo, error) {
 	}
 
 	var cached struct {
-		Latest      string       `json:"latest"`
-		ReleaseInfo *ReleaseInfo `json:"release_info"`
-		Timestamp   int64        `json:"timestamp"`
+		Latest       string       `json:"latest"`
+		LatestCommit string       `json:"latest_commit"`
+		ReleaseInfo  *ReleaseInfo `json:"release_info"`
+		UpdateMode   string       `json:"update_mode"`
+		UpdateRepo   string       `json:"update_repo"`
+		UpdateBranch string       `json:"update_branch"`
+		DockerImage  string       `json:"docker_image"`
+		Timestamp    int64        `json:"timestamp"`
 	}
 	if err := json.Unmarshal([]byte(data), &cached); err != nil {
 		return nil, err
@@ -611,26 +766,53 @@ func (s *UpdateService) getFromCache(ctx context.Context) (*UpdateInfo, error) {
 	if time.Now().Unix()-cached.Timestamp > updateCacheTTL {
 		return nil, fmt.Errorf("cache expired")
 	}
+	if cached.UpdateMode == "" || cached.UpdateMode != s.updateMode() || cached.UpdateRepo != s.updateRepo {
+		return nil, fmt.Errorf("cache belongs to a different update source")
+	}
+	if cached.UpdateMode == updateModeContainer && cached.UpdateBranch != s.updateBranch {
+		return nil, fmt.Errorf("cache belongs to a different update branch")
+	}
+
+	hasUpdate := compareVersions(s.currentVersion, cached.Latest) < 0
+	if cached.UpdateMode == updateModeContainer {
+		hasUpdate = !commitsMatch(s.currentCommit, cached.LatestCommit)
+	}
 
 	return &UpdateInfo{
 		CurrentVersion: s.currentVersion,
 		LatestVersion:  cached.Latest,
-		HasUpdate:      compareVersions(s.currentVersion, cached.Latest) < 0,
+		HasUpdate:      hasUpdate,
 		ReleaseInfo:    cached.ReleaseInfo,
 		Cached:         true,
 		BuildType:      s.buildType,
+		UpdateMode:     cached.UpdateMode,
+		UpdateRepo:     cached.UpdateRepo,
+		UpdateBranch:   cached.UpdateBranch,
+		DockerImage:    cached.DockerImage,
+		CurrentCommit:  s.currentCommit,
+		LatestCommit:   cached.LatestCommit,
 	}, nil
 }
 
 func (s *UpdateService) saveToCache(ctx context.Context, info *UpdateInfo) {
 	cacheData := struct {
-		Latest      string       `json:"latest"`
-		ReleaseInfo *ReleaseInfo `json:"release_info"`
-		Timestamp   int64        `json:"timestamp"`
+		Latest       string       `json:"latest"`
+		LatestCommit string       `json:"latest_commit,omitempty"`
+		ReleaseInfo  *ReleaseInfo `json:"release_info"`
+		UpdateMode   string       `json:"update_mode"`
+		UpdateRepo   string       `json:"update_repo"`
+		UpdateBranch string       `json:"update_branch,omitempty"`
+		DockerImage  string       `json:"docker_image,omitempty"`
+		Timestamp    int64        `json:"timestamp"`
 	}{
-		Latest:      info.LatestVersion,
-		ReleaseInfo: info.ReleaseInfo,
-		Timestamp:   time.Now().Unix(),
+		Latest:       info.LatestVersion,
+		LatestCommit: info.LatestCommit,
+		ReleaseInfo:  info.ReleaseInfo,
+		UpdateMode:   info.UpdateMode,
+		UpdateRepo:   info.UpdateRepo,
+		UpdateBranch: info.UpdateBranch,
+		DockerImage:  info.DockerImage,
+		Timestamp:    time.Now().Unix(),
 	}
 
 	data, _ := json.Marshal(cacheData)

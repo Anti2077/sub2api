@@ -55,7 +55,13 @@ export default {
     deployScript: '脚本部署',
     deployDocker: 'Docker',
     dockerEditCompose: '修改 docker-compose.yml 中的镜像版本',
-    dockerRecreate: '重新创建容器'
+    dockerRecreate: '重新创建容器',
+    containerUpdateAvailable: '有新的个人镜像可用',
+    containerUpToDate: '个人镜像已是最新版本',
+    containerOperatorHint: '容器更新由部署端执行，不会在容器内部替换程序。',
+    containerDataSafeHint: '命令只重建应用容器；数据库、Redis 和配置卷会保留。',
+    copyForOps: '复制给运维',
+    viewSourceCommit: '查看镜像构建'
   },
 
   // Recharge / Subscription Page

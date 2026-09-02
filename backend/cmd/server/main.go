@@ -31,10 +31,13 @@ var embeddedVersion string
 
 // Build-time variables (can be set by ldflags)
 var (
-	Version   = ""
-	Commit    = "unknown"
-	Date      = "unknown"
-	BuildType = "source" // "source" for manual builds, "release" for CI builds (set by ldflags)
+	Version      = ""
+	Commit       = "unknown"
+	Date         = "unknown"
+	BuildType    = "source" // "source", "release", or "container" (set by ldflags)
+	UpdateRepo   = "Wei-Shaw/sub2api"
+	UpdateBranch = ""
+	UpdateImage  = ""
 )
 
 func init() {
@@ -144,8 +147,12 @@ func runMainServer() {
 	}
 
 	buildInfo := handler.BuildInfo{
-		Version:   Version,
-		BuildType: BuildType,
+		Version:      Version,
+		Commit:       Commit,
+		BuildType:    BuildType,
+		UpdateRepo:   UpdateRepo,
+		UpdateBranch: UpdateBranch,
+		UpdateImage:  UpdateImage,
 	}
 
 	app, err := initializeApplication(buildInfo)

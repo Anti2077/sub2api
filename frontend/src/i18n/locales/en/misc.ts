@@ -56,7 +56,13 @@ export default {
     deployScript: 'Script',
     deployDocker: 'Docker',
     dockerEditCompose: 'Edit the image tag in docker-compose.yml',
-    dockerRecreate: 'Recreate the container'
+    dockerRecreate: 'Recreate the container',
+    containerUpdateAvailable: 'A new personal image is available',
+    containerUpToDate: 'The personal image is up to date',
+    containerOperatorHint: 'Container updates are applied by the deployment operator, not inside the container.',
+    containerDataSafeHint: 'These commands recreate only the app container; database, Redis, and configuration volumes are preserved.',
+    copyForOps: 'Copy for ops',
+    viewSourceCommit: 'View image build'
   },
 
   // Recharge / Subscription Page
