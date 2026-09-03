@@ -16,7 +16,10 @@ This directory contains files for deploying Sub2API on Linux servers and Apple-s
 |------|-------------|
 | `docker-compose.yml` | Docker Compose configuration (named volumes) |
 | `docker-compose.local.yml` | Docker Compose configuration (local directories, easy migration) |
+| `docker-compose.auto-update.yml` | Custom-image override used by the host auto-updater |
 | `docker-deploy.sh` | **One-click Docker deployment script (recommended)** |
+| `install-container-autoupdate.sh` | Install the custom container systemd updater |
+| `CONTAINER_AUTO_UPDATE.md` | Automatic custom-image update, rollback, and security guide |
 | `apple-container.sh` | Native Apple `container` lifecycle script |
 | `APPLE_CONTAINER.md` | Apple `container` deployment and operations guide |
 | `.env.example` | Container environment variables template |
@@ -127,6 +130,24 @@ docker compose -f docker-compose.local.yml logs -f sub2api
 | **docker-compose.yml** | Named volumes (/var/lib/docker/volumes/) | ⚠️ Requires docker commands | Simple setup, don't need migration |
 
 **Recommendation:** Use `docker-compose.local.yml` (deployed by `docker-deploy.sh`) for easier data management and migration.
+
+### Custom Image Auto-Update
+
+The `Anti2077/custom` branch provides an opt-in host-side systemd updater for
+`ghcr.io/anti2077/sub2api:custom`. It checks every five minutes, recreates only
+the `sub2api` service, verifies container health, and restores the previous
+image if the replacement is unhealthy. It does not expose the Docker socket to
+the web application or a third-party updater container.
+
+Install it only on the Linux Docker host that owns the active Compose project:
+
+```bash
+sudo ./install-container-autoupdate.sh \
+  --compose-dir /absolute/path/to/current/deployment
+```
+
+See [CONTAINER_AUTO_UPDATE.md](./CONTAINER_AUTO_UPDATE.md) for prerequisites,
+operations, pause/resume, rollback, and the database-migration boundary.
 
 ### How Auto-Setup Works
 

@@ -1,0 +1,26 @@
+[Unit]
+Description=Update the Sub2API custom container image
+Documentation=https://github.com/Anti2077/sub2api/blob/Anti2077/custom/deploy/CONTAINER_AUTO_UPDATE.md
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/sub2api-container-update.env
+ExecStart=/usr/local/libexec/sub2api-container-update
+User=root
+Group=root
+UMask=0077
+TimeoutStartSec=10min
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectHome=read-only
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+ReadWritePaths=/run/lock /var/lib/sub2api-container-update
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+

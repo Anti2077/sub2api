@@ -1,0 +1,13 @@
+[Unit]
+Description=Check for a new Sub2API custom container image every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+RandomizedDelaySec=30s
+Persistent=true
+Unit=sub2api-container-update.service
+
+[Install]
+WantedBy=timers.target
