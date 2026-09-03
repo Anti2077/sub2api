@@ -56,7 +56,10 @@ function mountHome(settings: Record<string, unknown> = {}) {
 }
 
 function compactDestination(wrapper: ReturnType<typeof mountHome>) {
-  return wrapper.get('[data-testid="compact-home"]').findComponent(RouterLinkStub).props('to')
+  return wrapper
+    .findAllComponents(RouterLinkStub)
+    .find((link) => link.attributes('data-testid') === 'compact-account-link')
+    ?.props('to')
 }
 
 function modelPlazaDestination(wrapper: ReturnType<typeof mountHome>) {
@@ -113,6 +116,15 @@ describe('HomeView compact mode', () => {
 
   it('links unauthenticated visitors to login', () => {
     expect(compactDestination(mountHome({ compact_home_enabled: true }))).toBe('/login')
+  })
+
+  it('links compact home visitors to the Wiki', () => {
+    const wrapper = mountHome({ compact_home_enabled: true })
+    const wikiLink = wrapper
+      .findAllComponents(RouterLinkStub)
+      .find((link) => link.props('to') === '/wiki')
+
+    expect(wikiLink?.exists()).toBe(true)
   })
 
   it('links authenticated users to their dashboard', () => {
