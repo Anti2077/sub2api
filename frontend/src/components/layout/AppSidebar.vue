@@ -149,6 +149,17 @@
 
     <!-- Bottom Section -->
     <div class="mt-auto border-t border-gray-100 p-3 dark:border-dark-800">
+      <router-link
+        to="/wiki"
+        class="sidebar-link mb-2"
+        :class="{ 'sidebar-link-active': isActive('/wiki'), 'sidebar-link-collapsed': sidebarCollapsed }"
+        :title="sidebarCollapsed ? t('nav.wiki') : undefined"
+        @click="handleMenuItemClick('/wiki')"
+      >
+        <BookIcon class="h-5 w-5 flex-shrink-0" />
+        <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ t('nav.wiki') }}</span>
+      </router-link>
+
       <!-- Theme Toggle -->
       <button
         @click="toggleTheme"
@@ -479,6 +490,10 @@ const ServerIcon = {
 
 const PluginIcon = {
   render: () => h(Icon, { name: 'cube' })
+}
+
+const BookIcon = {
+  render: () => h(Icon, { name: 'book' })
 }
 
 const BellIcon = {
