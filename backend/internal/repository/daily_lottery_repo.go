@@ -28,7 +28,7 @@ func (r *dailyLotteryRepository) GetByDate(ctx context.Context, userID int64, ch
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
 			return nil, err
@@ -75,7 +75,7 @@ func (r *dailyLotteryRepository) MarkDrawn(ctx context.Context, userID int64, ch
 	if err != nil {
 		return nil, false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
 			return nil, false, err
@@ -101,7 +101,7 @@ func (r *dailyLotteryRepository) ListUserHistory(ctx context.Context, userID int
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	entries := make([]service.DailyLotteryEntry, 0)
 	for rows.Next() {
@@ -127,7 +127,7 @@ func (r *dailyLotteryRepository) ListAdminHistory(ctx context.Context, limit, of
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	entries := make([]service.DailyLotteryAdminEntry, 0)
 	var total int64
