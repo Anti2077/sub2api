@@ -138,6 +138,35 @@ export interface PublicTokenLeaderboardResponse {
   end_date: string
 }
 
+export type UsageEquivalencePeriod = 'last_24h' | 'last_7d' | 'this_month' | 'last_30d'
+
+export interface UsageEquivalencePlan {
+  id: 'chatgpt_plus' | 'chatgpt_pro_5x' | 'chatgpt_pro_20x'
+  name: string
+  monthly_price: number
+  usage_multiple: 1 | 5 | 20
+  equivalent_months: number
+}
+
+export interface UsageEquivalenceResponse {
+  period: UsageEquivalencePeriod
+  start_time: string
+  end_time: string
+  timezone: string
+  scope: 'all_models'
+  currency: 'USD'
+  standard_cost: number
+  actual_cost: number
+  effective_rate_multiplier: number
+  total_requests: number
+  total_tokens: number
+  plans: UsageEquivalencePlan[]
+  pricing_basis: 'recorded_standard_cost'
+  pricing_as_of: string
+  pricing_source: string
+  disclaimer: 'api_price_equivalent_not_quota_measurement'
+}
+
 /**
  * List usage logs with optional filters
  * @param page - Page number (default: 1)
@@ -352,6 +381,18 @@ export async function getPublicTokenLeaderboard(
   return data
 }
 
+export async function getUsageEquivalence(
+  period: UsageEquivalencePeriod,
+  timezone?: string,
+  config: { signal?: AbortSignal } = {}
+): Promise<UsageEquivalenceResponse> {
+  const { data } = await apiClient.get<UsageEquivalenceResponse>('/usage/equivalence', {
+    ...config,
+    params: { period, timezone }
+  })
+  return data
+}
+
 export interface BatchApiKeyUsageStats {
   api_key_id: number
   today_actual_cost: number
@@ -414,6 +455,7 @@ export const usageAPI = {
   getMyApiKeyDailyUsage,
   getDashboardSnapshotV2,
   getPublicTokenLeaderboard,
+  getUsageEquivalence,
   getDashboardApiKeysUsage,
   // Error requests
   listMyErrorRequests,

@@ -56,7 +56,31 @@ export default {
     viewUsage: 'View Usage',
     checkDetailedLogs: 'Check detailed usage logs',
     redeemCode: 'Redeem Code',
-    addBalanceWithCode: 'Add balance with a code'
+    addBalanceWithCode: 'Add balance with a code',
+    usageEquivalence: {
+      title: 'OpenAI plan equivalents',
+      subtitle: 'See the API list-price value of your usage as Plus, Pro 5x, and Pro 20x subscriptions.',
+      periodLabel: 'Usage equivalence period',
+      periods: {
+        last24Hours: 'Last 24 hours',
+        last7Days: 'Last 7 days',
+        thisMonth: 'This month',
+        last30Days: 'Last 30 days'
+      },
+      monthlyPrice: '{price} / month',
+      planMonths: 'plan-months',
+      planFormula: 'Standard API value divided by {price}',
+      standardValue: 'Standard API value',
+      actualCharged: 'Actual balance charge',
+      effectiveMultiplier: 'Weighted multiplier',
+      activity: 'Activity',
+      activityValue: '{requests} requests · {tokens} tokens',
+      noUsage: 'No billable usage was recorded in this period.',
+      loadFailed: 'Could not load the plan comparison.',
+      retry: 'Try again',
+      officialSource: 'OpenAI pricing source',
+      disclaimer: 'Calculated from each request’s recorded standard API cost. The weighted multiplier is actual balance charges divided by standard cost, so historical rate changes are preserved. This is a price equivalence, not a promise of fixed messages or subscription quota.'
+    }
   },
 
   // Groups (shared)

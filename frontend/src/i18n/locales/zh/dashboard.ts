@@ -56,7 +56,31 @@ export default {
     viewUsage: '查看使用记录',
     checkDetailedLogs: '查看详细的使用日志',
     redeemCode: '兑换码',
-    addBalanceWithCode: '使用兑换码充值'
+    addBalanceWithCode: '使用兑换码充值',
+    usageEquivalence: {
+      title: 'OpenAI 订阅当量',
+      subtitle: '把你的 API 标准价值换算成 Plus、Pro 5x 和 Pro 20x 月度订阅。',
+      periodLabel: '用量换算时间范围',
+      periods: {
+        last24Hours: '近 24 小时',
+        last7Days: '近 7 天',
+        thisMonth: '本月',
+        last30Days: '近 30 天'
+      },
+      monthlyPrice: '{price} / 月',
+      planMonths: '个订阅月',
+      planFormula: '标准 API 价值 ÷ {price}',
+      standardValue: '标准 API 价值',
+      actualCharged: '站内实际扣费',
+      effectiveMultiplier: '加权倍率',
+      activity: '用量',
+      activityValue: '{requests} 次请求 · {tokens} Tokens',
+      noUsage: '这个时间范围内还没有可计费用量。',
+      loadFailed: '暂时无法加载订阅换算。',
+      retry: '重试',
+      officialSource: 'OpenAI 官方定价',
+      disclaimer: '按每次请求已记录的标准 API 成本汇总；加权倍率 = 实际余额扣费 ÷ 标准成本，因此会保留历史倍率波动。这是价格当量，不代表固定消息数或官方订阅配额承诺。'
+    }
   },
 
   // Groups (shared)
