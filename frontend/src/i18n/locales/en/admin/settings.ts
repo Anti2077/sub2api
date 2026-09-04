@@ -42,6 +42,16 @@ export default {
           enabled: 'Enable Available Channels',
           enabledHint: 'When off, the sidebar entry is hidden and the endpoint returns an empty list.',
         },
+        usageEquivalence: {
+          title: 'OpenAI plan usage equivalents',
+          description: 'Control whether the user dashboard shows OpenAI subscription-limit comparisons. Disabled by default.',
+          enabled: 'Enable plan usage equivalents',
+          enabledHint: 'When off, the user dashboard does not render the module or request its statistics. Both quota references are required before enabling.',
+          plus7DLimit: 'Plus 7-day quota reference (USD list value)',
+          plus7DLimitHint: 'Estimated standard API value represented by one Plus 7-day quota window.',
+          plus30DLimit: 'Plus 30-day quota reference (USD list value)',
+          plus30DLimitHint: 'Estimated standard API value represented by one Plus 30-day quota window.',
+        },
         modelPlaza: {
           title: 'Model Plaza',
           description: 'A public page showcasing available models and pricing by group. Disabled by default.',

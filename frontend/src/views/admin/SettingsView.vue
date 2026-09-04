@@ -7134,6 +7134,64 @@
         <div class="card">
           <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.settings.features.usageEquivalence.title') }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.features.usageEquivalence.description') }}
+            </p>
+          </div>
+          <div class="space-y-5 p-6">
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.features.usageEquivalence.enabled') }}
+                </label>
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.features.usageEquivalence.enabledHint') }}
+                </p>
+              </div>
+              <Toggle v-model="form.usage_equivalence_enabled" />
+            </div>
+            <div class="grid grid-cols-1 gap-5 border-t border-gray-100 pt-5 md:grid-cols-2 dark:border-dark-700">
+              <div>
+                <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.features.usageEquivalence.plus7DLimit') }}
+                </label>
+                <input
+                  v-model.number="form.usage_equivalence_plus_7d_limit_usd"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  class="input"
+                  placeholder="0.00"
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.features.usageEquivalence.plus7DLimitHint') }}
+                </p>
+              </div>
+              <div>
+                <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.features.usageEquivalence.plus30DLimit') }}
+                </label>
+                <input
+                  v-model.number="form.usage_equivalence_plus_30d_limit_usd"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  class="input"
+                  placeholder="0.00"
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.settings.features.usageEquivalence.plus30DLimitHint') }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
               {{ t('admin.settings.features.availableChannels.title') }}
             </h2>
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -9799,6 +9857,9 @@ const form = reactive<SettingsForm>({
   channel_monitor_show_quota: false,
   // Available Channels feature switch
   available_channels_enabled: false,
+  usage_equivalence_enabled: false,
+  usage_equivalence_plus_7d_limit_usd: 0,
+  usage_equivalence_plus_30d_limit_usd: 0,
   // Model Plaza feature switches + description
   model_plaza_enabled: false,
   model_plaza_require_auth: false,
@@ -11459,6 +11520,11 @@ async function saveSettings() {
       channel_monitor_show_quota: Boolean(form.channel_monitor_show_quota),
       // Available Channels feature switch
       available_channels_enabled: form.available_channels_enabled,
+      usage_equivalence_enabled: form.usage_equivalence_enabled,
+      usage_equivalence_plus_7d_limit_usd:
+        Number(form.usage_equivalence_plus_7d_limit_usd) || 0,
+      usage_equivalence_plus_30d_limit_usd:
+        Number(form.usage_equivalence_plus_30d_limit_usd) || 0,
       // Model Plaza feature switches + description
       model_plaza_enabled: form.model_plaza_enabled,
       model_plaza_require_auth: form.model_plaza_require_auth,

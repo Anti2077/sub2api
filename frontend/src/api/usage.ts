@@ -138,14 +138,22 @@ export interface PublicTokenLeaderboardResponse {
   end_date: string
 }
 
-export type UsageEquivalencePeriod = 'last_24h' | 'last_7d' | 'this_month' | 'last_30d'
+export type UsageEquivalencePeriod =
+  | 'last_24h'
+  | 'last_7d'
+  | 'this_month'
+  | 'last_30d'
+  | 'last_6m'
+  | 'all_time'
 
 export interface UsageEquivalencePlan {
   id: 'chatgpt_plus' | 'chatgpt_pro_5x' | 'chatgpt_pro_20x'
   name: string
-  monthly_price: number
   usage_multiple: 1 | 5 | 20
-  equivalent_months: number
+  quota_7d_standard_cost: number
+  quota_30d_standard_cost: number
+  equivalent_7d_windows: number
+  equivalent_30d_windows: number
 }
 
 export interface UsageEquivalenceResponse {
@@ -161,10 +169,9 @@ export interface UsageEquivalenceResponse {
   total_requests: number
   total_tokens: number
   plans: UsageEquivalencePlan[]
-  pricing_basis: 'recorded_standard_cost'
-  pricing_as_of: string
-  pricing_source: string
-  disclaimer: 'api_price_equivalent_not_quota_measurement'
+  reference_basis: 'configured_plus_quota_standard_cost'
+  reference_source: string
+  disclaimer: 'configured_quota_reference_not_official_fixed_limit'
 }
 
 /**

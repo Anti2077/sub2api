@@ -513,3 +513,15 @@ func (s *UsageService) GetStatsWithFilters(ctx context.Context, filters usagesta
 	}
 	return stats, nil
 }
+
+// GetUserCreatedAt returns the registration timestamp used by all-time usage ranges.
+func (s *UsageService) GetUserCreatedAt(ctx context.Context, userID int64) (time.Time, error) {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("get user registration time: %w", err)
+	}
+	if user == nil || user.CreatedAt.IsZero() {
+		return time.Time{}, fmt.Errorf("get user registration time: missing registration timestamp")
+	}
+	return user.CreatedAt, nil
+}

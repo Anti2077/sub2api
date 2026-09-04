@@ -430,6 +430,9 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	// Available channels feature switch
 	updates[SettingKeyAvailableChannelsEnabled] = strconv.FormatBool(settings.AvailableChannelsEnabled)
+	updates[SettingKeyUsageEquivalenceEnabled] = strconv.FormatBool(settings.UsageEquivalenceEnabled)
+	updates[SettingKeyUsageEquivalencePlus7DLimitUSD] = strconv.FormatFloat(settings.UsageEquivalencePlus7DLimitUSD, 'f', -1, 64)
+	updates[SettingKeyUsageEquivalencePlus30DLimitUSD] = strconv.FormatFloat(settings.UsageEquivalencePlus30DLimitUSD, 'f', -1, 64)
 
 	// Model plaza feature switches + description
 	updates[SettingKeyModelPlazaEnabled] = strconv.FormatBool(settings.ModelPlazaEnabled)

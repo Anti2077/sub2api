@@ -104,6 +104,11 @@ export const FeatureFlags = {
     mode: 'opt-in',
     label: 'Available Channels',
   }),
+  usageEquivalence: defineFlag({
+    key: 'usage_equivalence_enabled',
+    mode: 'opt-in',
+    label: 'Usage Equivalence',
+  }),
   modelPlaza: defineFlag({
     key: 'model_plaza_enabled',
     mode: 'opt-in',

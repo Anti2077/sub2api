@@ -198,7 +198,10 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyGrokDefaultBaseURLMode:         GrokDefaultBaseURLModeCLI,
 
 		// Available channels feature (default disabled; opt-in)
-		SettingKeyAvailableChannelsEnabled: "false",
+		SettingKeyAvailableChannelsEnabled:        "false",
+		SettingKeyUsageEquivalenceEnabled:         "false",
+		SettingKeyUsageEquivalencePlus7DLimitUSD:  "0",
+		SettingKeyUsageEquivalencePlus30DLimitUSD: "0",
 
 		// Model plaza feature (default disabled; opt-in, public unless require_auth)
 		SettingKeyModelPlazaEnabled:       "false",
@@ -816,6 +819,9 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// Available channels feature (default: disabled; strict true)
 	result.AvailableChannelsEnabled = settings[SettingKeyAvailableChannelsEnabled] == "true"
+	result.UsageEquivalenceEnabled = settings[SettingKeyUsageEquivalenceEnabled] == "true"
+	result.UsageEquivalencePlus7DLimitUSD = parseUsageEquivalenceLimitUSD(settings[SettingKeyUsageEquivalencePlus7DLimitUSD])
+	result.UsageEquivalencePlus30DLimitUSD = parseUsageEquivalenceLimitUSD(settings[SettingKeyUsageEquivalencePlus30DLimitUSD])
 
 	// Model plaza feature (default: disabled; strict true)
 	result.ModelPlazaEnabled = settings[SettingKeyModelPlazaEnabled] == "true"
@@ -996,6 +1002,14 @@ func clampAffiliateRebateRate(value float64) float64 {
 	}
 	if value > AffiliateRebateRateMax {
 		return AffiliateRebateRateMax
+	}
+	return value
+}
+
+func parseUsageEquivalenceLimitUSD(raw string) float64 {
+	value, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 {
+		return 0
 	}
 	return value
 }

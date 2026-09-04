@@ -78,6 +78,33 @@ func TestUpdateSettingsGrokDefaultBaseURLModeIsWritable(t *testing.T) {
 	require.Equal(t, service.GrokDefaultBaseURLModeEUWest1, repo.values[service.SettingKeyGrokDefaultBaseURLMode])
 }
 
+func TestUpdateSettingsRequiresBothUsageEquivalenceQuotaReferencesWhenEnabled(t *testing.T) {
+	h, _ := newStepUpSwitchTestHandler(t, map[string]string{})
+
+	rec := doUpdateSettings(t, h, map[string]any{
+		"usage_equivalence_enabled":           true,
+		"usage_equivalence_plus_7d_limit_usd": 100,
+	}, nil)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "7d and 30d limits")
+}
+
+func TestUpdateSettingsPersistsUsageEquivalenceQuotaReferences(t *testing.T) {
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{})
+
+	rec := doUpdateSettings(t, h, map[string]any{
+		"usage_equivalence_enabled":            true,
+		"usage_equivalence_plus_7d_limit_usd":  97.94,
+		"usage_equivalence_plus_30d_limit_usd": 419.74,
+	}, nil)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "true", repo.values[service.SettingKeyUsageEquivalenceEnabled])
+	require.Equal(t, "97.94", repo.values[service.SettingKeyUsageEquivalencePlus7DLimitUSD])
+	require.Equal(t, "419.74", repo.values[service.SettingKeyUsageEquivalencePlus30DLimitUSD])
+}
+
 func TestUpdateSettingsRejectsTwoCaptchaProviders(t *testing.T) {
 	h, _ := newStepUpSwitchTestHandler(t, map[string]string{
 		service.SettingKeyTurnstileEnabled:   "true",

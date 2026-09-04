@@ -16,34 +16,36 @@ const (
 	usageEquivalencePeriodLast7Days   = "last_7d"
 	usageEquivalencePeriodThisMonth   = "this_month"
 	usageEquivalencePeriodLast30Days  = "last_30d"
+	usageEquivalencePeriodLast6Months = "last_6m"
+	usageEquivalencePeriodAllTime     = "all_time"
 
-	openAIPlanPricingAsOf      = "2026-09-04"
-	openAIPlanPricingSource    = "https://learn.chatgpt.com/docs/pricing"
-	usageEquivalenceBasis      = "recorded_standard_cost"
+	openAIPlanReferenceSource  = "https://learn.chatgpt.com/docs/pricing"
+	usageEquivalenceBasis      = "configured_plus_quota_standard_cost"
 	usageEquivalenceScope      = "all_models"
 	usageEquivalenceCurrency   = "USD"
-	usageEquivalenceDisclaimer = "api_price_equivalent_not_quota_measurement"
+	usageEquivalenceDisclaimer = "configured_quota_reference_not_official_fixed_limit"
 )
 
 type usageEquivalencePlanDefinition struct {
 	ID            string
 	Name          string
-	MonthlyPrice  float64
 	UsageMultiple int
 }
 
 var usageEquivalencePlanDefinitions = [...]usageEquivalencePlanDefinition{
-	{ID: "chatgpt_plus", Name: "ChatGPT Plus", MonthlyPrice: 20, UsageMultiple: 1},
-	{ID: "chatgpt_pro_5x", Name: "ChatGPT Pro 5x", MonthlyPrice: 100, UsageMultiple: 5},
-	{ID: "chatgpt_pro_20x", Name: "ChatGPT Pro 20x", MonthlyPrice: 200, UsageMultiple: 20},
+	{ID: "chatgpt_plus", Name: "ChatGPT Plus", UsageMultiple: 1},
+	{ID: "chatgpt_pro_5x", Name: "ChatGPT Pro 5x", UsageMultiple: 5},
+	{ID: "chatgpt_pro_20x", Name: "ChatGPT Pro 20x", UsageMultiple: 20},
 }
 
 type usageEquivalencePlan struct {
-	ID               string  `json:"id"`
-	Name             string  `json:"name"`
-	MonthlyPrice     float64 `json:"monthly_price"`
-	UsageMultiple    int     `json:"usage_multiple"`
-	EquivalentMonths float64 `json:"equivalent_months"`
+	ID                   string  `json:"id"`
+	Name                 string  `json:"name"`
+	UsageMultiple        int     `json:"usage_multiple"`
+	Quota7DStandardCost  float64 `json:"quota_7d_standard_cost"`
+	Quota30DStandardCost float64 `json:"quota_30d_standard_cost"`
+	Equivalent7DWindows  float64 `json:"equivalent_7d_windows"`
+	Equivalent30DWindows float64 `json:"equivalent_30d_windows"`
 }
 
 type usageEquivalenceResponse struct {
@@ -59,9 +61,8 @@ type usageEquivalenceResponse struct {
 	TotalRequests           int64                  `json:"total_requests"`
 	TotalTokens             int64                  `json:"total_tokens"`
 	Plans                   []usageEquivalencePlan `json:"plans"`
-	PricingBasis            string                 `json:"pricing_basis"`
-	PricingAsOf             string                 `json:"pricing_as_of"`
-	PricingSource           string                 `json:"pricing_source"`
+	ReferenceBasis          string                 `json:"reference_basis"`
+	ReferenceSource         string                 `json:"reference_source"`
 	Disclaimer              string                 `json:"disclaimer"`
 }
 
@@ -77,7 +78,7 @@ func resolveUsageEquivalenceLocation(raw string) (*time.Location, string, bool) 
 	return location, name, true
 }
 
-func usageEquivalenceRange(rawPeriod, rawTimezone string, now time.Time) (string, string, time.Time, time.Time, bool) {
+func usageEquivalenceRange(rawPeriod, rawTimezone string, now time.Time, registeredAt *time.Time) (string, string, time.Time, time.Time, bool) {
 	location, timezoneName, ok := resolveUsageEquivalenceLocation(rawTimezone)
 	if !ok {
 		return "", "", time.Time{}, time.Time{}, false
@@ -99,6 +100,17 @@ func usageEquivalenceRange(rawPeriod, rawTimezone string, now time.Time) (string
 		return period, timezoneName, startTime, endTime, true
 	case usageEquivalencePeriodLast30Days:
 		return period, timezoneName, endTime.Add(-30 * 24 * time.Hour), endTime, true
+	case usageEquivalencePeriodLast6Months:
+		return period, timezoneName, endTime.AddDate(0, -6, 0), endTime, true
+	case usageEquivalencePeriodAllTime:
+		if registeredAt == nil || registeredAt.IsZero() {
+			return "", "", time.Time{}, time.Time{}, false
+		}
+		startTime := registeredAt.In(location)
+		if startTime.After(endTime) {
+			startTime = endTime
+		}
+		return period, timezoneName, startTime, endTime, true
 	default:
 		return "", "", time.Time{}, time.Time{}, false
 	}
@@ -111,12 +123,21 @@ func nonNegativeCost(value float64) float64 {
 	return value
 }
 
+func usageQuotaEquivalent(standardCost, quotaStandardCost float64) float64 {
+	if standardCost <= 0 || quotaStandardCost <= 0 {
+		return 0
+	}
+	return standardCost / quotaStandardCost
+}
+
 func buildUsageEquivalenceResponse(
 	period string,
 	timezoneName string,
 	startTime time.Time,
 	endTime time.Time,
 	stats *usagestats.UsageStats,
+	plus7DLimitUSD float64,
+	plus30DLimitUSD float64,
 ) usageEquivalenceResponse {
 	standardCost := 0.0
 	actualCost := 0.0
@@ -136,12 +157,16 @@ func buildUsageEquivalenceResponse(
 
 	plans := make([]usageEquivalencePlan, 0, len(usageEquivalencePlanDefinitions))
 	for _, definition := range usageEquivalencePlanDefinitions {
+		quota7DStandardCost := plus7DLimitUSD * float64(definition.UsageMultiple)
+		quota30DStandardCost := plus30DLimitUSD * float64(definition.UsageMultiple)
 		plans = append(plans, usageEquivalencePlan{
-			ID:               definition.ID,
-			Name:             definition.Name,
-			MonthlyPrice:     definition.MonthlyPrice,
-			UsageMultiple:    definition.UsageMultiple,
-			EquivalentMonths: standardCost / definition.MonthlyPrice,
+			ID:                   definition.ID,
+			Name:                 definition.Name,
+			UsageMultiple:        definition.UsageMultiple,
+			Quota7DStandardCost:  quota7DStandardCost,
+			Quota30DStandardCost: quota30DStandardCost,
+			Equivalent7DWindows:  usageQuotaEquivalent(standardCost, quota7DStandardCost),
+			Equivalent30DWindows: usageQuotaEquivalent(standardCost, quota30DStandardCost),
 		})
 	}
 
@@ -158,28 +183,61 @@ func buildUsageEquivalenceResponse(
 		TotalRequests:           totalRequests,
 		TotalTokens:             totalTokens,
 		Plans:                   plans,
-		PricingBasis:            usageEquivalenceBasis,
-		PricingAsOf:             openAIPlanPricingAsOf,
-		PricingSource:           openAIPlanPricingSource,
+		ReferenceBasis:          usageEquivalenceBasis,
+		ReferenceSource:         openAIPlanReferenceSource,
 		Disclaimer:              usageEquivalenceDisclaimer,
 	}
 }
 
-// UsageEquivalence returns the current user's recorded standard cost expressed
-// as OpenAI ChatGPT/Codex plan monthly-price equivalents. OpenAI describes the
-// Pro tiers as 5x and 20x Plus usage, but this endpoint compares API list-price
-// value rather than claiming a fixed number of subscription messages.
+// UsageEquivalence compares recorded standard API cost with operator-configured
+// Plus 7d/30d quota references. The Pro references apply OpenAI's published 5x
+// and 20x plan multipliers; the configured Plus values are estimates, not fixed
+// official quota promises.
 func (h *UsageHandler) UsageEquivalence(c *gin.Context) {
 	subject, ok := middleware2.GetAuthSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
 		return
 	}
+	if h.settingService == nil {
+		response.InternalError(c, "Usage equivalence settings are unavailable")
+		return
+	}
+	settings, err := h.settingService.GetUsageEquivalenceSettings(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !settings.Enabled {
+		response.NotFound(c, "Usage equivalence is not enabled")
+		return
+	}
+	if settings.Plus7DLimitUSD <= 0 || settings.Plus30DLimitUSD <= 0 {
+		response.InternalError(c, "Usage equivalence quota references are not configured")
+		return
+	}
+
+	rawPeriod := c.DefaultQuery("period", usageEquivalencePeriodThisMonth)
+	rawTimezone := c.Query("timezone")
+	var registeredAt *time.Time
+	if strings.EqualFold(strings.TrimSpace(rawPeriod), usageEquivalencePeriodAllTime) {
+		if _, _, timezoneOK := resolveUsageEquivalenceLocation(rawTimezone); !timezoneOK {
+			response.BadRequest(c, "Invalid period or timezone")
+			return
+		}
+		createdAt, err := h.usageService.GetUserCreatedAt(c.Request.Context(), subject.UserID)
+		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		registeredAt = &createdAt
+	}
 
 	period, timezoneName, startTime, endTime, ok := usageEquivalenceRange(
-		c.DefaultQuery("period", usageEquivalencePeriodThisMonth),
-		c.Query("timezone"),
+		rawPeriod,
+		rawTimezone,
 		time.Now(),
+		registeredAt,
 	)
 	if !ok {
 		response.BadRequest(c, "Invalid period or timezone")
@@ -197,5 +255,13 @@ func (h *UsageHandler) UsageEquivalence(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, buildUsageEquivalenceResponse(period, timezoneName, startTime, endTime, stats))
+	response.Success(c, buildUsageEquivalenceResponse(
+		period,
+		timezoneName,
+		startTime,
+		endTime,
+		stats,
+		settings.Plus7DLimitUSD,
+		settings.Plus30DLimitUSD,
+	))
 }

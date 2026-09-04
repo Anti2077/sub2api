@@ -715,14 +715,14 @@ const flagAdminPayment = () => adminSettingsStore.paymentEnabled
 const flagBatchImageAccess = () => canUseBatchImage.value
 
 // buildSelfNavItems 构造用户自己的导航项（用户端主菜单和管理员的"我的账户"子菜单共享这组声明）。
-// withDashboard=true 时包含仪表盘（用户端），false 时不含（管理员的个人区已经有独立仪表盘入口）。
+// withDashboard=true 时包含普通用户仪表盘。管理员个人区使用独立文案，避免与管理仪表盘混淆。
 //
 // 条目顺序：密钥 → 用量 → 可用渠道 → 渠道状态 → 订阅/支付 → 兑换/资料。
 // 可用渠道紧挨渠道状态之上，让用户"先看自己能用什么、再看对应状态"。
-function buildSelfNavItems(withDashboard: boolean): NavItem[] {
+function buildSelfNavItems(withDashboard: boolean, dashboardLabel = t('nav.dashboard')): NavItem[] {
   const items: NavItem[] = []
   if (withDashboard) {
-    items.push({ path: '/dashboard', label: t('nav.dashboard'), icon: DashboardIcon })
+    items.push({ path: '/dashboard', label: dashboardLabel, icon: DashboardIcon })
   }
   items.push(
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
@@ -757,10 +757,10 @@ function finalizeNav(items: NavItem[]): NavItem[] {
 // User navigation items (for regular users)
 const userNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(true)))
 
-// Personal navigation items (for admin's "My Account" section, without Dashboard).
+// Personal navigation items (for admin's "My Account" section, including the user dashboard).
 // Admins access 可用渠道 from this section just like regular users — there is no
 // separate admin entry, since the page is purely a user-facing view.
-const personalNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(false)))
+const personalNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems(true, t('nav.personalDashboard'))))
 
 // Custom menu items filtered by visibility
 const customMenuItemsForUser = computed(() => {

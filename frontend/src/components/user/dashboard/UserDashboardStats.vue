@@ -132,6 +132,8 @@
     </div>
   </div>
 
+  <slot name="before-platform-breakdown" />
+
   <!-- Row 3: Per-platform breakdown -->
   <div v-if="!isSimple && platformCards.length > 0" class="card p-4">
     <div class="mb-3 flex items-center justify-between">

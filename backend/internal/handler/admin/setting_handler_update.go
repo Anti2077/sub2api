@@ -341,7 +341,10 @@ type UpdateSettingsRequest struct {
 	GrokDefaultBaseURLMode         *string `json:"grok_default_base_url_mode"`
 
 	// Available Channels feature switch (user-facing)
-	AvailableChannelsEnabled *bool `json:"available_channels_enabled"`
+	AvailableChannelsEnabled        *bool    `json:"available_channels_enabled"`
+	UsageEquivalenceEnabled         *bool    `json:"usage_equivalence_enabled"`
+	UsageEquivalencePlus7DLimitUSD  *float64 `json:"usage_equivalence_plus_7d_limit_usd"`
+	UsageEquivalencePlus30DLimitUSD *float64 `json:"usage_equivalence_plus_30d_limit_usd"`
 
 	// Model Plaza feature switches + description
 	ModelPlazaEnabled     *bool   `json:"model_plaza_enabled"`
@@ -521,6 +524,22 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	registrationEmailDomainQuotaEnabled := previousSettings.RegistrationEmailDomainQuotaEnabled
 	if req.RegistrationEmailDomainQuotaEnabled != nil {
 		registrationEmailDomainQuotaEnabled = *req.RegistrationEmailDomainQuotaEnabled
+	}
+	usageEquivalenceEnabled := previousSettings.UsageEquivalenceEnabled
+	if req.UsageEquivalenceEnabled != nil {
+		usageEquivalenceEnabled = *req.UsageEquivalenceEnabled
+	}
+	usageEquivalencePlus7DLimitUSD := previousSettings.UsageEquivalencePlus7DLimitUSD
+	if req.UsageEquivalencePlus7DLimitUSD != nil {
+		usageEquivalencePlus7DLimitUSD = *req.UsageEquivalencePlus7DLimitUSD
+	}
+	usageEquivalencePlus30DLimitUSD := previousSettings.UsageEquivalencePlus30DLimitUSD
+	if req.UsageEquivalencePlus30DLimitUSD != nil {
+		usageEquivalencePlus30DLimitUSD = *req.UsageEquivalencePlus30DLimitUSD
+	}
+	if usageEquivalenceEnabled && (usageEquivalencePlus7DLimitUSD <= 0 || usageEquivalencePlus30DLimitUSD <= 0) {
+		response.BadRequest(c, "usage equivalence Plus 7d and 30d limits must both be greater than 0 when enabled")
+		return
 	}
 	if passkeyEnabled {
 		configured, _, _ := h.settingService.PasskeyConfiguration()
@@ -1930,6 +1949,14 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.AvailableChannelsEnabled
 		}(),
+		UsageEquivalenceEnabled: func() bool {
+			if req.UsageEquivalenceEnabled != nil {
+				return *req.UsageEquivalenceEnabled
+			}
+			return previousSettings.UsageEquivalenceEnabled
+		}(),
+		UsageEquivalencePlus7DLimitUSD:  usageEquivalencePlus7DLimitUSD,
+		UsageEquivalencePlus30DLimitUSD: usageEquivalencePlus30DLimitUSD,
 		ModelPlazaEnabled: func() bool {
 			if req.ModelPlazaEnabled != nil {
 				return *req.ModelPlazaEnabled
@@ -2371,7 +2398,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		GrokCrossClientModelMapEnabled: updatedSettings.GrokCrossClientModelMapEnabled,
 		GrokDefaultBaseURLMode:         updatedSettings.GrokDefaultBaseURLMode,
 
-		AvailableChannelsEnabled: updatedSettings.AvailableChannelsEnabled,
+		AvailableChannelsEnabled:        updatedSettings.AvailableChannelsEnabled,
+		UsageEquivalenceEnabled:         updatedSettings.UsageEquivalenceEnabled,
+		UsageEquivalencePlus7DLimitUSD:  updatedSettings.UsageEquivalencePlus7DLimitUSD,
+		UsageEquivalencePlus30DLimitUSD: updatedSettings.UsageEquivalencePlus30DLimitUSD,
 
 		ModelPlazaEnabled:       updatedSettings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:   updatedSettings.ModelPlazaRequireAuth,

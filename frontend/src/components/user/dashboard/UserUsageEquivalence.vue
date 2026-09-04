@@ -1,7 +1,7 @@
 <template>
   <section class="card overflow-hidden" aria-labelledby="usage-equivalence-title">
     <div class="border-b border-gray-100 px-4 py-4 dark:border-dark-700 sm:px-6">
-      <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <div class="flex flex-col gap-4 2xl:flex-row 2xl:items-center 2xl:justify-between">
         <div class="min-w-0">
           <div class="flex items-center gap-2">
             <div class="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
@@ -19,7 +19,7 @@
         </div>
 
         <div
-          class="grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1 sm:flex dark:bg-dark-800"
+          class="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1 sm:grid-cols-3 xl:grid-cols-6 dark:bg-dark-800"
           role="group"
           :aria-label="t('dashboard.usageEquivalence.periodLabel')"
         >
@@ -69,34 +69,52 @@
       </div>
 
       <template v-else-if="data">
-        <div class="grid gap-3 md:grid-cols-3">
+        <div class="overflow-hidden rounded-lg border border-gray-200 md:grid md:grid-cols-3 md:divide-x md:divide-y-0 dark:border-dark-700 dark:divide-dark-700">
           <article
             v-for="plan in data.plans"
             :key="plan.id"
             :data-testid="`usage-equivalence-plan-${plan.id}`"
-            class="relative overflow-hidden rounded-2xl border p-5"
-            :class="planStyle(plan.id)"
+            class="min-w-0 border-b border-gray-200 p-5 last:border-b-0 md:border-b-0 dark:border-dark-700"
           >
             <div class="flex items-start justify-between gap-3">
-              <div>
-                <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ plan.name }}</p>
-                <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
-                  {{ t('dashboard.usageEquivalence.monthlyPrice', { price: formatCurrency(plan.monthly_price) }) }}
-                </p>
-              </div>
-              <span class="whitespace-nowrap rounded-full bg-white/80 px-2.5 py-1 text-xs font-semibold text-gray-700 ring-1 ring-black/5 dark:bg-dark-800/80 dark:text-dark-200 dark:ring-white/10">
+              <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ plan.name }}</p>
+              <span
+                class="whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold"
+                :class="planBadgeStyle(plan.id)"
+              >
                 {{ plan.usage_multiple }}× Plus
               </span>
             </div>
-            <p class="mt-7 text-3xl font-semibold tracking-tight text-gray-950 dark:text-white">
-              {{ formatEquivalent(plan.equivalent_months) }}
-              <span class="text-base font-medium text-gray-500 dark:text-dark-400">
-                {{ t('dashboard.usageEquivalence.planMonths') }}
-              </span>
-            </p>
-            <p class="mt-2 text-xs leading-5 text-gray-500 dark:text-dark-400">
-              {{ t('dashboard.usageEquivalence.planFormula', { price: formatCurrency(plan.monthly_price) }) }}
-            </p>
+            <dl class="mt-5 grid grid-cols-2 gap-x-4 gap-y-5 md:grid-cols-1 xl:grid-cols-2">
+              <div>
+                <dt class="text-xs font-medium text-gray-500 dark:text-dark-400">
+                  {{ t('dashboard.usageEquivalence.sevenDayWindow') }}
+                </dt>
+                <dd class="mt-1 text-2xl font-semibold text-gray-950 dark:text-white">
+                  {{ formatEquivalent(plan.equivalent_7d_windows) }}
+                  <span class="block text-xs font-medium text-gray-500 dark:text-dark-400">
+                    {{ t('dashboard.usageEquivalence.quotaWindows') }}
+                  </span>
+                </dd>
+                <p class="mt-2 text-xs leading-5 text-gray-500 dark:text-dark-400">
+                  {{ t('dashboard.usageEquivalence.configuredReference', { value: formatCurrency(plan.quota_7d_standard_cost) }) }}
+                </p>
+              </div>
+              <div>
+                <dt class="text-xs font-medium text-gray-500 dark:text-dark-400">
+                  {{ t('dashboard.usageEquivalence.thirtyDayWindow') }}
+                </dt>
+                <dd class="mt-1 text-2xl font-semibold text-gray-950 dark:text-white">
+                  {{ formatEquivalent(plan.equivalent_30d_windows) }}
+                  <span class="block text-xs font-medium text-gray-500 dark:text-dark-400">
+                    {{ t('dashboard.usageEquivalence.quotaWindows') }}
+                  </span>
+                </dd>
+                <p class="mt-2 text-xs leading-5 text-gray-500 dark:text-dark-400">
+                  {{ t('dashboard.usageEquivalence.configuredReference', { value: formatCurrency(plan.quota_30d_standard_cost) }) }}
+                </p>
+              </div>
+            </dl>
           </article>
         </div>
 
@@ -146,7 +164,7 @@
             <span>{{ t('dashboard.usageEquivalence.disclaimer') }}</span>
           </p>
           <a
-            :href="data.pricing_source"
+            :href="data.reference_source"
             target="_blank"
             rel="noopener noreferrer"
             class="inline-flex min-h-11 flex-none items-center gap-1.5 rounded-lg px-2 font-medium text-primary-600 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
@@ -183,7 +201,9 @@ const periodOptions = computed(() => [
   { value: 'last_24h' as const, label: t('dashboard.usageEquivalence.periods.last24Hours') },
   { value: 'last_7d' as const, label: t('dashboard.usageEquivalence.periods.last7Days') },
   { value: 'this_month' as const, label: t('dashboard.usageEquivalence.periods.thisMonth') },
-  { value: 'last_30d' as const, label: t('dashboard.usageEquivalence.periods.last30Days') }
+  { value: 'last_30d' as const, label: t('dashboard.usageEquivalence.periods.last30Days') },
+  { value: 'last_6m' as const, label: t('dashboard.usageEquivalence.periods.last6Months') },
+  { value: 'all_time' as const, label: t('dashboard.usageEquivalence.periods.allTime') }
 ])
 
 const effectiveMultiplier = computed(() => {
@@ -210,14 +230,15 @@ const formatCompact = (value: number) => new Intl.NumberFormat(formatterLocale.v
 }).format(value)
 
 const formatEquivalent = (value: number) => {
-  const maximumFractionDigits = value >= 100 ? 0 : value >= 10 ? 1 : 2
-  return new Intl.NumberFormat(formatterLocale.value, { maximumFractionDigits }).format(value)
+  return new Intl.NumberFormat(formatterLocale.value, {
+    maximumSignificantDigits: 3
+  }).format(value)
 }
 
-const planStyle = (id: UsageEquivalenceResponse['plans'][number]['id']) => ({
-  chatgpt_plus: 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900/70 dark:from-emerald-950/30 dark:to-dark-900',
-  chatgpt_pro_5x: 'border-sky-200 bg-gradient-to-br from-sky-50 to-white dark:border-sky-900/70 dark:from-sky-950/30 dark:to-dark-900',
-  chatgpt_pro_20x: 'border-violet-200 bg-gradient-to-br from-violet-50 to-white dark:border-violet-900/70 dark:from-violet-950/30 dark:to-dark-900'
+const planBadgeStyle = (id: UsageEquivalenceResponse['plans'][number]['id']) => ({
+  chatgpt_plus: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
+  chatgpt_pro_5x: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200',
+  chatgpt_pro_20x: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200'
 }[id])
 
 const load = async () => {

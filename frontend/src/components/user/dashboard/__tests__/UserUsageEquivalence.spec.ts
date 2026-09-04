@@ -37,14 +37,37 @@ const response = (
   total_requests: 11,
   total_tokens: 9000,
   plans: [
-    { id: 'chatgpt_plus', name: 'ChatGPT Plus', monthly_price: 20, usage_multiple: 1, equivalent_months: 13 },
-    { id: 'chatgpt_pro_5x', name: 'ChatGPT Pro 5x', monthly_price: 100, usage_multiple: 5, equivalent_months: 2.6 },
-    { id: 'chatgpt_pro_20x', name: 'ChatGPT Pro 20x', monthly_price: 200, usage_multiple: 20, equivalent_months: 1.3 }
+    {
+      id: 'chatgpt_plus',
+      name: 'ChatGPT Plus',
+      usage_multiple: 1,
+      quota_7d_standard_cost: 100,
+      quota_30d_standard_cost: 400,
+      equivalent_7d_windows: 2.6,
+      equivalent_30d_windows: 0.65
+    },
+    {
+      id: 'chatgpt_pro_5x',
+      name: 'ChatGPT Pro 5x',
+      usage_multiple: 5,
+      quota_7d_standard_cost: 500,
+      quota_30d_standard_cost: 2000,
+      equivalent_7d_windows: 0.52,
+      equivalent_30d_windows: 0.13
+    },
+    {
+      id: 'chatgpt_pro_20x',
+      name: 'ChatGPT Pro 20x',
+      usage_multiple: 20,
+      quota_7d_standard_cost: 2000,
+      quota_30d_standard_cost: 8000,
+      equivalent_7d_windows: 0.13,
+      equivalent_30d_windows: 0.0325
+    }
   ],
-  pricing_basis: 'recorded_standard_cost',
-  pricing_as_of: '2026-09-04',
-  pricing_source: 'https://learn.chatgpt.com/docs/pricing',
-  disclaimer: 'api_price_equivalent_not_quota_measurement',
+  reference_basis: 'configured_plus_quota_standard_cost',
+  reference_source: 'https://learn.chatgpt.com/docs/pricing',
+  disclaimer: 'configured_quota_reference_not_official_fixed_limit',
   ...overrides
 })
 
@@ -84,9 +107,11 @@ describe('UserUsageEquivalence', () => {
       expect.any(String),
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
-    expect(wrapper.get('[data-testid="usage-equivalence-plan-chatgpt_plus"]').text()).toContain('13')
-    expect(wrapper.get('[data-testid="usage-equivalence-plan-chatgpt_pro_5x"]').text()).toContain('2.6')
-    expect(wrapper.get('[data-testid="usage-equivalence-plan-chatgpt_pro_20x"]').text()).toContain('1.3')
+    expect(wrapper.get('[data-testid="usage-equivalence-plan-chatgpt_plus"]').text()).toContain('2.6')
+    expect(wrapper.get('[data-testid="usage-equivalence-plan-chatgpt_plus"]').text()).toContain('0.65')
+    expect(wrapper.get('[data-testid="usage-equivalence-plan-chatgpt_pro_5x"]').text()).toContain('0.52')
+    expect(wrapper.get('[data-testid="usage-equivalence-plan-chatgpt_pro_5x"]').text()).toContain('0.13')
+    expect(wrapper.get('[data-testid="usage-equivalence-plan-chatgpt_pro_20x"]').text()).toContain('0.0325')
   })
 
   it('reloads an exact preset when the period changes', async () => {
@@ -104,6 +129,30 @@ describe('UserUsageEquivalence', () => {
     )
   })
 
+  it('offers six periods including the six-month and all-time ranges', async () => {
+    getUsageEquivalence.mockResolvedValue(response())
+    const wrapper = mountComponent()
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-testid^="usage-equivalence-period-"]')).toHaveLength(6)
+
+    await wrapper.get('[data-testid="usage-equivalence-period-last_6m"]').trigger('click')
+    await flushPromises()
+    expect(getUsageEquivalence).toHaveBeenLastCalledWith(
+      'last_6m',
+      expect.any(String),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+
+    await wrapper.get('[data-testid="usage-equivalence-period-all_time"]').trigger('click')
+    await flushPromises()
+    expect(getUsageEquivalence).toHaveBeenLastCalledWith(
+      'all_time',
+      expect.any(String),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+  })
+
   it('shows the zero state without hiding the three plans', async () => {
     getUsageEquivalence.mockResolvedValue(response({
       standard_cost: 0,
@@ -111,7 +160,11 @@ describe('UserUsageEquivalence', () => {
       effective_rate_multiplier: 0,
       total_requests: 0,
       total_tokens: 0,
-      plans: response().plans.map((plan) => ({ ...plan, equivalent_months: 0 }))
+      plans: response().plans.map((plan) => ({
+        ...plan,
+        equivalent_7d_windows: 0,
+        equivalent_30d_windows: 0
+      }))
     }))
 
     const wrapper = mountComponent()
@@ -150,14 +203,22 @@ describe('UserUsageEquivalence', () => {
     second.resolve(response({
       period: 'last_7d',
       standard_cost: 40,
-      plans: response().plans.map((plan) => ({ ...plan, equivalent_months: 2 }))
+      plans: response().plans.map((plan) => ({
+        ...plan,
+        equivalent_7d_windows: 2,
+        equivalent_30d_windows: 0.5
+      }))
     }))
     await flushPromises()
     expect(wrapper.get('[data-testid="usage-equivalence-plan-chatgpt_plus"]').text()).toContain('2')
 
     first.resolve(response({
       standard_cost: 999,
-      plans: response().plans.map((plan) => ({ ...plan, equivalent_months: 49.95 }))
+      plans: response().plans.map((plan) => ({
+        ...plan,
+        equivalent_7d_windows: 49.95,
+        equivalent_30d_windows: 12.49
+      }))
     }))
     await flushPromises()
     expect(wrapper.get('[data-testid="usage-equivalence-plan-chatgpt_plus"]').text()).not.toContain('49.95')

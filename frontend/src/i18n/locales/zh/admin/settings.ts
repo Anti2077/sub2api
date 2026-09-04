@@ -42,6 +42,16 @@ export default {
           enabled: '启用可用渠道',
           enabledHint: '关闭后用户端侧边栏入口隐藏，接口返回空数组。',
         },
+        usageEquivalence: {
+          title: 'OpenAI 订阅用量当量',
+          description: '控制普通仪表盘是否展示 OpenAI 订阅限额对比。默认关闭。',
+          enabled: '启用订阅用量当量',
+          enabledHint: '关闭后普通仪表盘不展示该模块，也不会请求当量统计接口。开启前必须配置两个额度基准。',
+          plus7DLimit: 'Plus 7 天额度基准（USD 标准价值）',
+          plus7DLimitHint: '填写 1 个 Plus 7 天额度窗口所对应的标准 API 价值估算。',
+          plus30DLimit: 'Plus 30 天额度基准（USD 标准价值）',
+          plus30DLimitHint: '填写 1 个 Plus 30 天额度窗口所对应的标准 API 价值估算。',
+        },
         modelPlaza: {
           title: '模型广场',
           description: '以分组为单位向访客展示可用模型与价格的公开页面。默认关闭。',

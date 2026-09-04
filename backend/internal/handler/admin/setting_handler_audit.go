@@ -579,6 +579,15 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.AvailableChannelsEnabled != after.AvailableChannelsEnabled {
 		changed = append(changed, "available_channels_enabled")
 	}
+	if before.UsageEquivalenceEnabled != after.UsageEquivalenceEnabled {
+		changed = append(changed, "usage_equivalence_enabled")
+	}
+	if before.UsageEquivalencePlus7DLimitUSD != after.UsageEquivalencePlus7DLimitUSD {
+		changed = append(changed, "usage_equivalence_plus_7d_limit_usd")
+	}
+	if before.UsageEquivalencePlus30DLimitUSD != after.UsageEquivalencePlus30DLimitUSD {
+		changed = append(changed, "usage_equivalence_plus_30d_limit_usd")
+	}
 	if before.ModelPlazaEnabled != after.ModelPlazaEnabled {
 		changed = append(changed, "model_plaza_enabled")
 	}

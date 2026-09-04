@@ -260,6 +260,7 @@ export default {
   // Navigation
   nav: {
     dashboard: 'Dashboard',
+    personalDashboard: 'Personal Dashboard',
     announcements: 'Announcements',
     apiKeys: 'API Keys',
     batchImage: 'Batch Images',

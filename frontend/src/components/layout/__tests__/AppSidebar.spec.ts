@@ -53,3 +53,20 @@ describe('AppSidebar header styles', () => {
     expect(sidebarBrandBlockMatch?.[0]).not.toContain('overflow: hidden;')
   })
 })
+
+describe('AppSidebar admin personal navigation', () => {
+  it('includes a distinctly labeled link to the user dashboard', () => {
+    expect(componentSource).toContain("buildSelfNavItems(true, t('nav.personalDashboard'))")
+    expect(componentSource).toContain("items.push({ path: '/dashboard', label: dashboardLabel, icon: DashboardIcon })")
+  })
+})
+
+describe('usage equivalence feature switch', () => {
+  it('is registered as an opt-in public setting', () => {
+    const featureFlagsPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../utils/featureFlags.ts')
+    const featureFlagsSource = readFileSync(featureFlagsPath, 'utf8')
+
+    expect(featureFlagsSource).toContain("key: 'usage_equivalence_enabled'")
+    expect(featureFlagsSource).toContain("label: 'Usage Equivalence'")
+  })
+})

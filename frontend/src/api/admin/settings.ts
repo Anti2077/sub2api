@@ -723,6 +723,9 @@ export interface SystemSettings {
 
   // Available Channels feature switch
   available_channels_enabled: boolean;
+  usage_equivalence_enabled: boolean;
+  usage_equivalence_plus_7d_limit_usd: number;
+  usage_equivalence_plus_30d_limit_usd: number;
 
   // Model Plaza feature switches + description
   model_plaza_enabled: boolean;
@@ -1024,6 +1027,9 @@ export interface UpdateSettingsRequest {
 
   // Available Channels feature switch
   available_channels_enabled?: boolean;
+  usage_equivalence_enabled?: boolean;
+  usage_equivalence_plus_7d_limit_usd?: number;
+  usage_equivalence_plus_30d_limit_usd?: number;
 
   // Model Plaza feature switches + description
   model_plaza_enabled?: boolean;

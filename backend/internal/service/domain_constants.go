@@ -503,6 +503,12 @@ const (
 	// sidebar entry is hidden. Defaults to false (opt-in feature).
 	SettingKeyAvailableChannelsEnabled = "available_channels_enabled"
 
+	// SettingKeyUsageEquivalenceEnabled controls the OpenAI subscription-quota
+	// comparison on the user dashboard. Defaults to false until explicitly enabled.
+	SettingKeyUsageEquivalenceEnabled         = "usage_equivalence_enabled"
+	SettingKeyUsageEquivalencePlus7DLimitUSD  = "usage_equivalence_plus_7d_limit_usd"
+	SettingKeyUsageEquivalencePlus30DLimitUSD = "usage_equivalence_plus_30d_limit_usd"
+
 	// SettingKeyModelPlazaEnabled is a DB-backed soft switch for the Model Plaza page
 	// (public group/model pricing showcase). When false: the plaza endpoint returns 404
 	// and the header entry is hidden. Defaults to false (opt-in feature).
