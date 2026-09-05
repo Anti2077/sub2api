@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Anti2077 AI Relay Portal</title>
+  <desc id="desc">A square icon with an A-shaped gateway where two signal routes merge into one AI relay output.</desc>
+
+  <g id="background">
+    <rect x="16" y="16" width="480" height="480" rx="80" fill="#3368A0"/>
+  </g>
+
+  <g id="mark">
+    <path
+      fill="#C8DFDB"
+      d="M96 408 210 104h92l114 304h-82l-78-218-78 218H96Z"
+    />
+  </g>
+
+  <g id="signature" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path
+      d="M76 216h78c42 0 48 40 86 40"
+      stroke="#F2EFE7"
+      stroke-width="28"
+    />
+    <path
+      d="M76 296h78c42 0 48-40 86-40"
+      stroke="#66A3BF"
+      stroke-width="28"
+    />
+    <path d="M272 256h164" stroke="#F2EFE7" stroke-width="28"/>
+
+    <rect x="230" y="230" width="52" height="52" rx="13" fill="#F2EFE7"/>
+    <circle cx="256" cy="256" r="10" fill="#3368A0"/>
+    <circle cx="76" cy="216" r="14" fill="#F2EFE7"/>
+    <circle cx="76" cy="296" r="14" fill="#66A3BF"/>
+    <circle cx="436" cy="256" r="14" fill="#F2EFE7"/>
+  </g>
+</svg>

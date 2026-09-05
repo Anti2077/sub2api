@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 512 512"
+     role="img"
+     aria-labelledby="title desc">
+  <title id="title">Sub2API interchange A mark</title>
+  <desc id="desc">Three routes converge through a geometric hub with a capital A in negative space, then leave as one clean output.</desc>
+
+  <g id="background">
+    <rect x="24" y="24" width="464" height="464" rx="88" fill="#F2EFE7"/>
+  </g>
+
+  <g id="mark">
+    <!-- Three inbound routes -->
+    <path d="M72 112H132L236 216L207 252Z" fill="#66A3BF"/>
+    <path d="M64 232H218L238 256L218 280H64Z" fill="#C8DFDB"/>
+    <path d="M72 400H132L236 296L207 260Z" fill="#66A3BF"/>
+
+    <!-- One outbound route -->
+    <path d="M292 226H440L456 256L440 286H292Z" fill="#3368A0"/>
+
+    <!-- Interchange hub -->
+    <path d="M218 178H294L348 256L294 334H218L164 256Z" fill="#3368A0"/>
+
+    <!-- Capital A held as open negative space -->
+    <path fill="#F2EFE7" fill-rule="evenodd" d="M256 203L305 306H282L272 283H240L230 306H207L256 203ZM248 265H264L256 246L248 265Z"/>
+  </g>
+
+  <g id="signature">
+    <circle cx="86" cy="112" r="14" fill="#C8DFDB"/>
+    <circle cx="86" cy="256" r="14" fill="#66A3BF"/>
+    <circle cx="86" cy="400" r="14" fill="#C8DFDB"/>
+    <circle cx="438" cy="256" r="14" fill="#C8DFDB"/>
+  </g>
+</svg>
