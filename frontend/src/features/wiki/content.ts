@@ -1,5 +1,7 @@
 import ccSwitchSource from '@/content/wiki/zh/clients/cc-switch.md?raw'
+import codexImage2Source from '@/content/wiki/zh/clients/codex-image2.md?raw'
 import firstRequestSource from '@/content/wiki/zh/getting-started/first-request.md?raw'
+import openMinisSource from '@/content/wiki/zh/clients/open-minis.md?raw'
 import requestErrorsSource from '@/content/wiki/zh/troubleshooting/request-errors.md?raw'
 
 export type WikiSectionId = 'getting-started' | 'clients' | 'troubleshooting'
@@ -62,14 +64,38 @@ export const wikiArticles: readonly WikiArticle[] = [
   {
     slug: 'cc-switch',
     section: 'clients',
-    title: '使用 CC Switch 连接 Sub2API',
-    summary: '优先从密钥页一键导入，并安全地完成供应商切换与验证。',
+    title: '使用 CC Switch 接入 Codex',
+    summary: '从创建 API Key 到导入 CC Switch，完成 Codex 的首次请求验证。',
     order: 10,
-    tags: ['CC Switch', 'Codex', 'Claude Code', 'Gemini CLI'],
+    tags: ['CC Switch', 'Codex', 'API Key'],
     status: 'verified',
-    lastVerified: '2026-09-03',
-    verifiedWith: 'CC Switch v3.20.1 与 Sub2API 导入链接',
+    lastVerified: '2026-09-05',
+    verifiedWith: 'Sub2API API 密钥页面与 CC Switch Codex 导入链路',
     source: ccSwitchSource,
+  },
+  {
+    slug: 'open-minis',
+    section: 'clients',
+    title: '使用 Open Minis 接入 Sub2API',
+    summary: '在 iOS 或 Android 上填写 Base URL 和 API Key，刷新模型并选择推荐模型。',
+    order: 20,
+    tags: ['Open Minis', '移动端', 'iOS', 'Android', 'API Key'],
+    status: 'verified',
+    lastVerified: '2026-09-05',
+    verifiedWith: 'Open Minis 官方下载入口、提供的设置截图与 Sub2API OpenAI 兼容接口',
+    source: openMinisSource,
+  },
+  {
+    slug: 'codex-image2',
+    section: 'clients',
+    title: '修复 Codex 的 gpt-image-2 调用',
+    summary: '把完整提示词交给 Codex，自动安装 Skill 并安全复用 CC Switch 当前 provider。',
+    order: 30,
+    tags: ['Codex', 'gpt-image-2', 'Skill', 'CC Switch', '生图'],
+    status: 'verified',
+    lastVerified: '2026-09-05',
+    verifiedWith: 'codex-image2 上游仓库、本地 Skill 与 CC Switch 动态 provider 适配提示词',
+    source: codexImage2Source,
   },
   {
     slug: 'request-errors',

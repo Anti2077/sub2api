@@ -8,7 +8,9 @@ should not appear before a new user can complete a first request.
 | Section | Article | Outcome | Priority |
 | --- | --- | --- | --- |
 | Getting started | 获取 API Key 与接口地址 | Reader knows which values are needed and how to store them safely | P0 |
-| Clients | 使用 CC Switch 连接 Sub2API | Reader configures a provider and completes one verified request | P0 |
+| Clients | 使用 CC Switch 接入 Codex | Reader creates a key, imports a Codex provider, and completes one verified request | P0 |
+| Clients | 使用 Open Minis 接入 Sub2API | Reader configures a mobile agent, fetches models, and completes one verified request | P0 |
+| Clients | 修复 Codex 的 gpt-image-2 调用 | Reader asks Codex to install the Skill, bind the current CC Switch provider, and verify one image request | P0 |
 | Troubleshooting | 请求失败时先看这里 | Reader distinguishes key, endpoint, model, quota, and network failures | P0 |
 | Getting started | 第一次 OpenAI 兼容请求 | Reader validates the service independently of a GUI client | P1 |
 | Getting started | 模型、分组与倍率 | Reader understands model access and billing without administrator details | P1 |
@@ -21,7 +23,7 @@ verified client version before publication.
 
 | Section | Candidate article |
 | --- | --- |
-| Clients | Codex CLI / Codex app |
+| Clients | Codex CLI / Codex app 的高级配置 |
 | Clients | Claude Code |
 | Clients | Cherry Studio |
 | Clients | OpenAI-compatible SDKs |
