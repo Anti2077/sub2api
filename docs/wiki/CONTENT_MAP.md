@@ -11,8 +11,11 @@ should not appear before a new user can complete a first request.
 | Clients | 使用 CC Switch 接入 Codex | Reader creates a key, imports a Codex provider, and completes one verified request | P0 |
 | Clients | 使用 Open Minis 接入 Sub2API | Reader configures a mobile agent, fetches models, and completes one verified request | P0 |
 | Clients | 修复 Codex 的 gpt-image-2 调用 | Reader asks Codex to install the Skill, bind the current CC Switch provider, and verify one image request | P0 |
+| Clients | 使用 CC Switch 接入 Claude Code | Reader imports a Claude provider and verifies a real Messages API request | P0 |
+| Clients | 使用 CC Switch 接入 Grok Build | Reader installs the open-source agent, imports a Grok provider, and verifies models and a real request | P0 |
 | Troubleshooting | 请求失败时先看这里 | Reader distinguishes key, endpoint, model, quota, and network failures | P0 |
 | Getting started | 第一次 OpenAI 兼容请求 | Reader validates the service independently of a GUI client | P1 |
+| Getting started | 本站用户日常使用指南 | Reader can recharge through the administrator, inspect usage records, and check channel availability and status | P1 |
 | Getting started | 模型、分组与倍率 | Reader understands model access and billing without administrator details | P1 |
 | Troubleshooting | CC Switch 切换后配置丢失 | Reader restores a backup and safely compares configuration changes | P1 |
 
@@ -24,7 +27,6 @@ verified client version before publication.
 | Section | Candidate article |
 | --- | --- |
 | Clients | Codex CLI / Codex app 的高级配置 |
-| Clients | Claude Code |
 | Clients | Cherry Studio |
 | Clients | OpenAI-compatible SDKs |
 | Concepts | Base URL、端点与模型名的关系 |

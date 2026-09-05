@@ -170,12 +170,12 @@ function handleContentClick(event: MouseEvent) {
   @apply mb-0;
 }
 
-.wiki-article-content :deep(code) {
+.wiki-article-content :deep(:not(pre) > code) {
   @apply rounded bg-gray-100 px-1.5 py-0.5 font-mono text-sm text-gray-900 dark:bg-dark-800 dark:text-gray-100;
 }
 
 .wiki-article-content :deep(pre) {
-  @apply my-6 overflow-x-auto rounded-md border border-gray-800 bg-gray-950 p-4 text-sm leading-6 text-gray-100;
+  @apply my-6 max-w-full overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-4 font-mono text-sm leading-6 text-gray-900 shadow-sm dark:border-dark-700 dark:bg-dark-900 dark:text-dark-50;
 }
 
 .wiki-article-content :deep(pre code) {
