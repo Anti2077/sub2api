@@ -12,7 +12,8 @@
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "contrast:check": "node scripts/check-color-contrast.mjs"
   },
   "dependencies": {
     "@airwallex/components-sdk": "^1.30.2",
