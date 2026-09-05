@@ -22,6 +22,10 @@ describe('Wiki content registry', () => {
     expect(searchWikiArticles('429').map((article) => article.slug)).toContain('request-errors')
   })
 
+  it('finds the daily-use guide by recharge and channel status terms', () => {
+    expect(searchWikiArticles('充值 渠道状态').map((article) => article.slug)).toContain('daily-use')
+  })
+
   it('rejects duplicate paths and incomplete verified metadata', () => {
     const duplicate = { ...wikiArticles[0], lastVerified: null } as WikiArticle
     expect(validateWikiArticles([wikiArticles[0], duplicate])).toEqual([

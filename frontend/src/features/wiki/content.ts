@@ -1,6 +1,9 @@
 import ccSwitchSource from '@/content/wiki/zh/clients/cc-switch.md?raw'
+import claudeCodeSource from '@/content/wiki/zh/clients/claude-code.md?raw'
 import codexImage2Source from '@/content/wiki/zh/clients/codex-image2.md?raw'
+import dailyUseSource from '@/content/wiki/zh/getting-started/daily-use.md?raw'
 import firstRequestSource from '@/content/wiki/zh/getting-started/first-request.md?raw'
+import grokBuildSource from '@/content/wiki/zh/clients/grok-build.md?raw'
 import openMinisSource from '@/content/wiki/zh/clients/open-minis.md?raw'
 import requestErrorsSource from '@/content/wiki/zh/troubleshooting/request-errors.md?raw'
 
@@ -62,6 +65,18 @@ export const wikiArticles: readonly WikiArticle[] = [
     source: firstRequestSource,
   },
   {
+    slug: 'daily-use',
+    section: 'getting-started',
+    title: '本站用户日常使用指南',
+    summary: '人工充值、余额、用量、使用记录、可用渠道和渠道状态的日常操作说明。',
+    order: 20,
+    tags: ['充值', '余额', '用量', '使用记录', '可用渠道', '渠道状态', 'API Key'],
+    status: 'verified',
+    lastVerified: '2026-09-05',
+    verifiedWith: 'Sub2API 普通用户页面与本站人工充值流程',
+    source: dailyUseSource,
+  },
+  {
     slug: 'cc-switch',
     section: 'clients',
     title: '使用 CC Switch 接入 Codex',
@@ -96,6 +111,30 @@ export const wikiArticles: readonly WikiArticle[] = [
     lastVerified: '2026-09-05',
     verifiedWith: 'codex-image2 上游仓库、本地 Skill 与 CC Switch 动态 provider 适配提示词',
     source: codexImage2Source,
+  },
+  {
+    slug: 'claude-code',
+    section: 'clients',
+    title: '使用 CC Switch 接入 Claude Code',
+    summary: '创建 Claude/Anthropic 分组密钥，导入 CC Switch 并完成 Claude Code 请求验证。',
+    order: 40,
+    tags: ['CC Switch', 'Claude Code', 'Anthropic', 'API Key'],
+    status: 'verified',
+    lastVerified: '2026-09-05',
+    verifiedWith: 'Claude Code 官方安装文档、CC Switch Claude provider 与 Sub2API 导入实现',
+    source: claudeCodeSource,
+  },
+  {
+    slug: 'grok-build',
+    section: 'clients',
+    title: '使用 CC Switch 接入 Grok Build',
+    summary: '安装开源 Grok Build，导入 Grok 分组密钥并验证模型与真实请求。',
+    order: 50,
+    tags: ['CC Switch', 'Grok Build', 'Grok', '开源', 'API Key'],
+    status: 'verified',
+    lastVerified: '2026-09-05',
+    verifiedWith: 'Grok Build 官方仓库与文档、CC Switch v3.18.0、Sub2API 导入实现',
+    source: grokBuildSource,
   },
   {
     slug: 'request-errors',
