@@ -377,7 +377,7 @@
             <div class="flex items-center gap-1">
               <button
                 @click="handleEdit(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-primary-700 dark:text-dark-200 dark:hover:bg-dark-700 dark:hover:text-primary-400"
               >
                 <Icon name="edit" size="sm" />
                 <span class="text-xs">{{ t("common.edit") }}</span>
@@ -391,7 +391,7 @@
                 "
                 :disabled="duplicatingGroupIds.has(row.id)"
                 @click="handleDuplicate(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-dark-200 dark:hover:bg-dark-700 dark:hover:text-primary-400"
               >
                 <Icon name="copy" size="sm" />
                 <span class="text-xs">
@@ -405,7 +405,7 @@
               <button
                 v-if="row.platform === 'composite'"
                 @click="handleCompositeRoutes(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-cyan-600 dark:hover:bg-dark-700 dark:hover:text-cyan-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-cyan-700 dark:text-dark-200 dark:hover:bg-dark-700 dark:hover:text-cyan-400"
               >
                 <Icon name="swap" size="sm" />
                 <span class="text-xs">{{
@@ -414,7 +414,7 @@
               </button>
               <button
                 @click="handleRateMultipliers(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-purple-600 dark:hover:bg-dark-700 dark:hover:text-purple-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-purple-700 dark:text-dark-200 dark:hover:bg-dark-700 dark:hover:text-purple-300"
               >
                 <Icon name="dollar" size="sm" />
                 <span class="text-xs">{{
@@ -423,7 +423,7 @@
               </button>
               <button
                 @click="handleRPMOverrides(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-orange-600 dark:hover:bg-dark-700 dark:hover:text-orange-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-orange-700 dark:text-dark-200 dark:hover:bg-dark-700 dark:hover:text-orange-300"
               >
                 <Icon name="bolt" size="sm" />
                 <span class="text-xs">{{
@@ -432,7 +432,7 @@
               </button>
               <button
                 @click="handleDelete(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-700 transition-colors hover:bg-red-50 hover:text-red-700 dark:text-dark-200 dark:hover:bg-red-900/20 dark:hover:text-red-300"
               >
                 <Icon name="trash" size="sm" />
                 <span class="text-xs">{{ t("common.delete") }}</span>
