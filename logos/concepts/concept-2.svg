@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 512 512"
+     role="img"
+     aria-labelledby="title desc">
+  <title id="title">Anti2077 Sub2API routing core</title>
+  <desc id="desc">Four blue data channels converge on a geometric AI routing core, then leave through one bold arrow-shaped output.</desc>
+
+  <g id="background">
+    <rect x="24" y="24" width="464" height="464" rx="72" fill="#F2EFE7"/>
+  </g>
+
+  <g id="mark">
+    <!-- Four broad inbound rails remain distinct at favicon scale. -->
+    <path fill="#66A3BF" d="M72 82h48l78 78-30 30-66-66H72z"/>
+    <path fill="#66A3BF" d="M392 82h48v42h-30l-66 66-30-30z"/>
+    <path fill="#66A3BF" d="M72 388h30l66-66 30 30-78 78H72z"/>
+    <path fill="#66A3BF" d="M410 388h30v42h-48l-78-78 30-30z"/>
+
+    <!-- The single eastbound rail has an unmistakable directional head. -->
+    <path fill="#66A3BF" d="M316 226h78v-34l62 64-62 64v-34h-78z"/>
+
+    <!-- Faceted perimeter suggests an A while reading first as infrastructure. -->
+    <path fill="#3368A0" d="M256 142l98 78v72l-70 78h-56l-70-78v-72z"/>
+  </g>
+
+  <g id="signature">
+    <!-- A continuous 2/7-like route doubles as the core's switching path. -->
+    <path fill="#C8DFDB" d="M202 222l24-24h62l28 26v34l-58 34h58v34H198v-38l72-42v-12h-30l-18 18z"/>
+    <rect x="238" y="174" width="36" height="22" rx="6" fill="#C8DFDB"/>
+  </g>
+</svg>

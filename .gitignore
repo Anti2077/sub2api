@@ -1,5 +1,6 @@
 # 本地杂项文档、测试数据和外部项目副本
 /docs-local/
+/sub2api-db-backup/
 .codex
 
 # ===================
