@@ -11,30 +11,47 @@
               {{ t('leaderboard.heading') }}
             </h1>
             <p class="mt-1 text-sm text-gray-600 dark:text-dark-300">
-              {{ t('leaderboard.subtitle') }}
+              {{ isSpendingRanking ? t('leaderboard.spendingSubtitle') : t('leaderboard.subtitle') }}
             </p>
           </div>
         </div>
 
-        <div
-          class="grid h-12 w-full grid-cols-4 rounded-lg bg-primary-950/5 p-1 dark:bg-white/5 sm:w-[440px]"
-          role="tablist"
-          :aria-label="t('leaderboard.heading')"
-        >
-          <button
-            v-for="option in periodOptions"
-            :key="option.value"
-            type="button"
-            role="tab"
-            class="min-w-0 rounded-md px-3 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-dark-900"
-            :class="period === option.value
-              ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-700 dark:text-primary-300'
-              : 'text-gray-500 hover:text-primary-700 dark:text-dark-300 dark:hover:text-primary-300'"
-            :aria-selected="period === option.value"
-            @click="selectPeriod(option.value)"
+        <div class="flex w-full flex-col gap-2 sm:w-[440px]">
+          <div class="grid h-10 w-full grid-cols-2 rounded-lg bg-primary-950/5 p-1 dark:bg-white/5" role="group" :aria-label="t('leaderboard.modeLabel')">
+            <button
+              v-for="option in rankingModeOptions"
+              :key="option.value"
+              type="button"
+              class="min-w-0 rounded-md px-3 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-dark-900"
+              :class="rankingMode === option.value
+                ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-700 dark:text-primary-300'
+                : 'text-gray-500 hover:text-primary-700 dark:text-dark-300 dark:hover:text-primary-300'"
+              :aria-pressed="rankingMode === option.value"
+              @click="selectRankingMode(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+          <div
+            class="grid h-10 w-full grid-cols-4 rounded-lg bg-primary-950/5 p-1 dark:bg-white/5"
+            role="tablist"
+            :aria-label="t('leaderboard.periodLabel')"
           >
-            {{ option.label }}
-          </button>
+            <button
+              v-for="option in periodOptions"
+              :key="option.value"
+              type="button"
+              role="tab"
+              class="min-w-0 rounded-md px-3 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-dark-900"
+              :class="period === option.value
+                ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-700 dark:text-primary-300'
+                : 'text-gray-500 hover:text-primary-700 dark:text-dark-300 dark:hover:text-primary-300'"
+              :aria-selected="period === option.value"
+              @click="selectPeriod(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -91,7 +108,7 @@
                   <th class="w-[12%] px-4 py-4 text-right font-medium">{{ t('leaderboard.input') }}</th>
                   <th class="w-[12%] px-4 py-4 text-right font-medium">{{ t('leaderboard.output') }}</th>
                   <th class="w-[12%] px-4 py-4 text-right font-medium">{{ t('leaderboard.cache') }}</th>
-                  <th class="w-[20%] px-5 py-4 text-right font-medium">{{ t('leaderboard.totalTokens') }}</th>
+                  <th class="w-[20%] px-5 py-4 text-right font-medium">{{ rankingValueLabel }}</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-200 dark:divide-dark-700">
@@ -112,7 +129,7 @@
                   <td class="px-4 py-3 text-right text-gray-600 dark:text-dark-200" :title="formatExact(item.input_tokens)">{{ formatCompact(item.input_tokens) }}</td>
                   <td class="px-4 py-3 text-right text-gray-600 dark:text-dark-200" :title="formatExact(item.output_tokens)">{{ formatCompact(item.output_tokens) }}</td>
                   <td class="px-4 py-3 text-right text-gray-600 dark:text-dark-200" :title="formatExact(item.cache_tokens)">{{ formatCompact(item.cache_tokens) }}</td>
-                  <td class="px-5 py-3 text-right text-base font-bold text-gray-950 dark:text-white" :title="formatExact(item.total_tokens)">{{ formatCompact(item.total_tokens) }}</td>
+                  <td class="px-5 py-3 text-right text-base font-bold text-gray-950 dark:text-white" :title="formatRankingValue(item)">{{ formatRankingValue(item) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -132,8 +149,8 @@
                   <p v-if="item.is_current_user" class="mt-0.5 text-xs font-medium text-primary-600 dark:text-primary-300">{{ t('leaderboard.currentUser') }}</p>
                 </div>
                 <div class="text-right">
-                  <p class="text-base font-bold text-gray-950 dark:text-white">{{ formatCompact(item.total_tokens) }}</p>
-                  <p class="text-xs text-gray-500 dark:text-dark-300">{{ t('leaderboard.totalTokens') }}</p>
+                  <p class="text-base font-bold text-gray-950 dark:text-white">{{ formatRankingValue(item) }}</p>
+                  <p class="text-xs text-gray-500 dark:text-dark-300">{{ rankingValueLabel }}</p>
                 </div>
               </div>
               <dl class="mt-4 grid grid-cols-4 gap-2 text-center">
@@ -158,11 +175,13 @@ import Icon from '@/components/icons/Icon.vue'
 import {
   usageAPI,
   type LeaderboardPeriod,
+  type PublicLeaderboardMode,
   type PublicTokenRankingItem
 } from '@/api/usage'
 
 const { t, locale } = useI18n()
 const period = ref<LeaderboardPeriod>('day')
+const rankingMode = ref<PublicLeaderboardMode>('tokens')
 const ranking = ref<PublicTokenRankingItem[]>([])
 const startDate = ref('')
 const endDate = ref('')
@@ -177,6 +196,14 @@ const periodOptions = computed(() => ([
   { value: 'year' as const, label: t('leaderboard.year') }
 ]))
 
+const rankingModeOptions = computed(() => ([
+  { value: 'tokens' as const, label: t('leaderboard.tokenMode') },
+  { value: 'spending' as const, label: t('leaderboard.spendingMode') }
+]))
+
+const isSpendingRanking = computed(() => rankingMode.value === 'spending')
+const rankingValueLabel = computed(() => isSpendingRanking.value ? t('leaderboard.actualCost') : t('leaderboard.totalTokens'))
+
 const activePeriodLabel = computed(() => periodOptions.value.find((item) => item.value === period.value)?.label ?? '')
 const dateRangeLabel = computed(() => startDate.value && endDate.value
   ? t('leaderboard.dateRange', { start: startDate.value, end: endDate.value })
@@ -187,8 +214,18 @@ const compactFormatter = computed(() => new Intl.NumberFormat(locale.value, {
   maximumFractionDigits: 2
 }))
 const exactFormatter = computed(() => new Intl.NumberFormat(locale.value))
+const moneyFormatter = computed(() => new Intl.NumberFormat(locale.value, {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4
+}))
 const formatCompact = (value: number) => compactFormatter.value.format(value || 0)
 const formatExact = (value: number) => exactFormatter.value.format(value || 0)
+const formatMoney = (value: number) => moneyFormatter.value.format(value || 0)
+const formatRankingValue = (item: PublicTokenRankingItem) => isSpendingRanking.value
+  ? formatMoney(item.actual_cost)
+  : formatCompact(item.total_tokens)
 
 const RankBadge = defineComponent({
   props: { rank: { type: Number, required: true } },
@@ -220,7 +257,7 @@ async function loadLeaderboard() {
   error.value = false
   try {
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-    const response = await usageAPI.getPublicTokenLeaderboard(period.value, timezone)
+    const response = await usageAPI.getPublicTokenLeaderboard(period.value, timezone, rankingMode.value)
     if (sequence !== requestSequence) return
     ranking.value = response.ranking ?? []
     startDate.value = response.start_date
@@ -237,6 +274,12 @@ async function loadLeaderboard() {
 function selectPeriod(nextPeriod: LeaderboardPeriod) {
   if (period.value === nextPeriod) return
   period.value = nextPeriod
+  loadLeaderboard()
+}
+
+function selectRankingMode(nextMode: PublicLeaderboardMode) {
+  if (rankingMode.value === nextMode) return
+  rankingMode.value = nextMode
   loadLeaderboard()
 }
 

@@ -53,8 +53,8 @@ func newLeaderboardTestRouter(repo *leaderboardUsageRepoStub, userID int64) *gin
 
 func TestPublicTokenLeaderboardUsesUsernameAndHidesPrivateIdentity(t *testing.T) {
 	repo := &leaderboardUsageRepoStub{rows: []usagestats.UserBreakdownItem{
-		{UserID: 42, Email: "alice@example.com", Username: "alice", UsernameConfirmed: true, Requests: 12, InputTokens: 100, OutputTokens: 20, CacheTokens: 30, TotalTokens: 150},
-		{UserID: 7, Email: "赵@example.cn", Username: "zhao", UsernameConfirmed: true, LeaderboardAnonymous: true, Requests: 4, InputTokens: 40, OutputTokens: 5, CacheTokens: 0, TotalTokens: 45},
+		{UserID: 42, Email: "alice@example.com", Username: "alice", UsernameConfirmed: true, Requests: 12, InputTokens: 100, OutputTokens: 20, CacheTokens: 30, TotalTokens: 150, ActualCost: 2.5},
+		{UserID: 7, Email: "赵@example.cn", Username: "zhao", UsernameConfirmed: true, LeaderboardAnonymous: true, Requests: 4, InputTokens: 40, OutputTokens: 5, CacheTokens: 0, TotalTokens: 45, ActualCost: 9.75},
 	}}
 	router := newLeaderboardTestRouter(repo, 42)
 
@@ -80,6 +80,34 @@ func TestPublicTokenLeaderboardRejectsInvalidPeriod(t *testing.T) {
 	router := newLeaderboardTestRouter(repo, 42)
 
 	req := httptest.NewRequest(http.MethodGet, "/usage/leaderboard?period=quarter", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.False(t, repo.called)
+}
+
+func TestPublicLeaderboardSupportsSpendingMode(t *testing.T) {
+	repo := &leaderboardUsageRepoStub{rows: []usagestats.UserBreakdownItem{
+		{UserID: 42, Username: "alice", UsernameConfirmed: true, ActualCost: 12.5, TotalTokens: 100},
+	}}
+	router := newLeaderboardTestRouter(repo, 42)
+
+	req := httptest.NewRequest(http.MethodGet, "/usage/leaderboard?period=month&mode=spending", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "actual_cost", repo.dimension.SortBy)
+	require.Contains(t, recorder.Body.String(), `"mode":"spending"`)
+	require.Contains(t, recorder.Body.String(), `"actual_cost":12.5`)
+}
+
+func TestPublicLeaderboardRejectsInvalidMode(t *testing.T) {
+	repo := &leaderboardUsageRepoStub{}
+	router := newLeaderboardTestRouter(repo, 42)
+
+	req := httptest.NewRequest(http.MethodGet, "/usage/leaderboard?mode=money", nil)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, req)
 

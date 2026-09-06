@@ -119,6 +119,7 @@ export interface UsageDashboardSnapshotV2Response {
 }
 
 export type LeaderboardPeriod = 'day' | 'week' | 'month' | 'year'
+export type PublicLeaderboardMode = 'tokens' | 'spending'
 
 export interface PublicTokenRankingItem {
   rank: number
@@ -129,12 +130,14 @@ export interface PublicTokenRankingItem {
   output_tokens: number
   cache_tokens: number
   total_tokens: number
+  actual_cost: number
   is_current_user: boolean
 }
 
 export interface PublicTokenLeaderboardResponse {
   ranking: PublicTokenRankingItem[]
   period: LeaderboardPeriod
+  mode?: PublicLeaderboardMode
   start_date: string
   end_date: string
 }
@@ -381,10 +384,11 @@ export async function getDashboardSnapshotV2(
 
 export async function getPublicTokenLeaderboard(
   period: LeaderboardPeriod,
-  timezone?: string
+  timezone?: string,
+  mode: PublicLeaderboardMode = 'tokens'
 ): Promise<PublicTokenLeaderboardResponse> {
   const { data } = await apiClient.get<PublicTokenLeaderboardResponse>('/usage/leaderboard', {
-    params: { period, timezone }
+    params: { period, mode, timezone }
   })
   return data
 }

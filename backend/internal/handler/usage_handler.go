@@ -574,8 +574,8 @@ func (h *UsageHandler) DashboardSnapshotV2(c *gin.Context) {
 	response.Success(c, resp)
 }
 
-// PublicTokenLeaderboard returns a privacy-preserving top-20 token ranking.
-// GET /api/v1/usage/leaderboard?period=day|week|month|year&timezone=Asia/Shanghai
+// PublicTokenLeaderboard returns a privacy-preserving top-20 user ranking.
+// GET /api/v1/usage/leaderboard?period=day|week|month|year&mode=tokens|spending&timezone=Asia/Shanghai
 func (h *UsageHandler) PublicTokenLeaderboard(c *gin.Context) {
 	subject, ok := middleware2.GetAuthSubjectFromContext(c)
 	if !ok {
@@ -588,9 +588,14 @@ func (h *UsageHandler) PublicTokenLeaderboard(c *gin.Context) {
 		response.BadRequest(c, "Invalid period, use day/week/month/year")
 		return
 	}
+	mode := service.PublicLeaderboardMode(strings.ToLower(strings.TrimSpace(c.DefaultQuery("mode", string(service.PublicLeaderboardModeTokens)))))
+	if !mode.Valid() {
+		response.BadRequest(c, "Invalid mode, use tokens/spending")
+		return
+	}
 
-	ranking, err := h.usageService.GetPublicUserTokenRanking(
-		c.Request.Context(), startTime, endTime, subject.UserID, 20,
+	ranking, err := h.usageService.GetPublicUserLeaderboard(
+		c.Request.Context(), startTime, endTime, subject.UserID, mode, 20,
 	)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -600,6 +605,7 @@ func (h *UsageHandler) PublicTokenLeaderboard(c *gin.Context) {
 	response.Success(c, gin.H{
 		"ranking":    ranking,
 		"period":     period,
+		"mode":       mode,
 		"start_date": startTime.Format("2006-01-02"),
 		"end_date":   endTime.AddDate(0, 0, -1).Format("2006-01-02"),
 	})
