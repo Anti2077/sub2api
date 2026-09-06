@@ -51,10 +51,10 @@ func newLeaderboardTestRouter(repo *leaderboardUsageRepoStub, userID int64) *gin
 	return router
 }
 
-func TestPublicTokenLeaderboardMasksIdentityAndUsesTokenSort(t *testing.T) {
+func TestPublicTokenLeaderboardUsesUsernameAndHidesPrivateIdentity(t *testing.T) {
 	repo := &leaderboardUsageRepoStub{rows: []usagestats.UserBreakdownItem{
-		{UserID: 42, Email: "alice@example.com", Requests: 12, InputTokens: 100, OutputTokens: 20, CacheTokens: 30, TotalTokens: 150},
-		{UserID: 7, Email: "赵@example.cn", Requests: 4, InputTokens: 40, OutputTokens: 5, CacheTokens: 0, TotalTokens: 45},
+		{UserID: 42, Email: "alice@example.com", Username: "alice", UsernameConfirmed: true, Requests: 12, InputTokens: 100, OutputTokens: 20, CacheTokens: 30, TotalTokens: 150},
+		{UserID: 7, Email: "赵@example.cn", Username: "zhao", UsernameConfirmed: true, LeaderboardAnonymous: true, Requests: 4, InputTokens: 40, OutputTokens: 5, CacheTokens: 0, TotalTokens: 45},
 	}}
 	router := newLeaderboardTestRouter(repo, 42)
 
@@ -66,11 +66,13 @@ func TestPublicTokenLeaderboardMasksIdentityAndUsesTokenSort(t *testing.T) {
 	require.True(t, repo.called)
 	require.Equal(t, "total_tokens", repo.dimension.SortBy)
 	require.Equal(t, 20, repo.limit)
-	require.Contains(t, recorder.Body.String(), `"masked_email":"a***e@example.com"`)
-	require.Contains(t, recorder.Body.String(), `"masked_email":"赵***@example.cn"`)
+	require.Contains(t, recorder.Body.String(), `"username":"alice"`)
+	require.Contains(t, recorder.Body.String(), `"is_anonymous":true`)
 	require.Contains(t, recorder.Body.String(), `"is_current_user":true`)
 	require.NotContains(t, recorder.Body.String(), "alice@example.com")
 	require.NotContains(t, recorder.Body.String(), `"user_id"`)
+	require.NotContains(t, recorder.Body.String(), `"masked_email"`)
+	require.NotContains(t, recorder.Body.String(), `"email"`)
 }
 
 func TestPublicTokenLeaderboardRejectsInvalidPeriod(t *testing.T) {

@@ -104,6 +104,7 @@ type RedisConfig struct {
 
 type AdminConfig struct {
 	Email    string `json:"email"`
+	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
@@ -425,15 +426,21 @@ func createAdminUser(cfg *SetupConfig) (bool, string, error) {
 		fmt.Printf("Generated admin password (one-time): %s\n", cfg.Admin.Password)
 		fmt.Println("IMPORTANT: Save this password! It will not be shown again.")
 	}
+	username, err := service.NormalizeAndValidateUsername(cfg.Admin.Username)
+	if err != nil {
+		return false, "", err
+	}
 
 	admin := &service.User{
-		Email:       cfg.Admin.Email,
-		Role:        service.RoleAdmin,
-		Status:      service.StatusActive,
-		Balance:     0,
-		Concurrency: setupDefaultAdminConcurrency(),
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		Email:             cfg.Admin.Email,
+		Username:          username,
+		UsernameConfirmed: true,
+		Role:              service.RoleAdmin,
+		Status:            service.StatusActive,
+		Balance:           0,
+		Concurrency:       setupDefaultAdminConcurrency(),
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
 	}
 
 	if err := admin.SetPassword(cfg.Admin.Password); err != nil {
@@ -442,9 +449,11 @@ func createAdminUser(cfg *SetupConfig) (bool, string, error) {
 
 	_, err = db.ExecContext(
 		ctx,
-		`INSERT INTO users (email, password_hash, role, balance, concurrency, status, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		`INSERT INTO users (email, username, username_confirmed, password_hash, role, balance, concurrency, status, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		admin.Email,
+		admin.Username,
+		admin.UsernameConfirmed,
 		admin.PasswordHash,
 		admin.Role,
 		admin.Balance,
@@ -594,6 +603,7 @@ func AutoSetupFromEnv() error {
 		},
 		Admin: AdminConfig{
 			Email:    getEnvOrDefault("ADMIN_EMAIL", "admin@sub2api.local"),
+			Username: getEnvOrDefault("ADMIN_USERNAME", "admin"),
 			Password: getEnvOrDefault("ADMIN_PASSWORD", ""),
 		},
 		Server: ServerConfig{

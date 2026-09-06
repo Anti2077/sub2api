@@ -130,7 +130,7 @@ export async function getById(id: number, includeDeleted = false): Promise<Admin
 export async function create(userData: {
   email: string
   password: string
-  username?: string
+  username: string
   notes?: string
   role?: 'admin' | 'user'
   balance?: number

@@ -28,6 +28,22 @@
 
       <!-- Registration Form -->
       <form v-else @submit.prevent="handleRegister" class="space-y-5">
+        <!-- Username Input -->
+        <div>
+          <label for="username" class="input-label">{{ t('profile.username') }}</label>
+          <input
+            id="username"
+            v-model="formData.username"
+            type="text"
+            required
+            autocomplete="username"
+            :disabled="registrationActionDisabled"
+            class="input"
+            :class="{ 'input-error': errors.username }"
+            :placeholder="t('profile.enterUsername')"
+          />
+        </div>
+
         <!-- Email Input -->
         <div>
           <label for="email" class="input-label">
@@ -459,6 +475,7 @@ const invitationValidation = reactive({
 let invitationValidateTimeout: ReturnType<typeof setTimeout> | null = null
 
 const formData = reactive({
+  username: '',
   email: '',
   password: '',
   promo_code: '',
@@ -467,6 +484,7 @@ const formData = reactive({
 })
 
 const errors = reactive({
+  username: '',
   email: '',
   password: '',
   turnstile: '',
@@ -883,11 +901,20 @@ function buildEmailSuffixNotAllowedMessage(): string {
 function validateForm(): boolean {
   // Reset errors
   errors.email = ''
+  errors.username = ''
   errors.password = ''
   errors.turnstile = ''
   errors.invitation_code = ''
 
   let isValid = true
+
+  if (!formData.username.trim()) {
+    errors.username = t('profile.usernameRequired')
+    isValid = false
+  } else if (containsControlCharacters(formData.username) || [...formData.username.trim()].length > 100) {
+    errors.username = t('profile.usernameInvalid')
+    isValid = false
+  }
 
   if (agreementGateActive.value) {
     appStore.showWarning(t('legal.loginAgreementPrompt.registerRequiredWarning'))
@@ -937,6 +964,13 @@ function validateForm(): boolean {
   }
 
   return isValid
+}
+
+function containsControlCharacters(value: string): boolean {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0
+    return codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f)
+  })
 }
 
 // ==================== Form Handlers ====================
@@ -1007,6 +1041,7 @@ async function handleRegister(): Promise<void> {
         'register_data',
         JSON.stringify({
           email: formData.email,
+          username: formData.username.trim(),
           password: formData.password,
           turnstile_token:
             turnstileEnabled.value || aliyunCaptchaEnabled.value ? turnstileToken.value : undefined,
@@ -1026,6 +1061,7 @@ async function handleRegister(): Promise<void> {
     // Otherwise, directly register
     await authStore.register({
       email: formData.email,
+      username: formData.username.trim(),
       password: formData.password,
       turnstile_token:
         turnstileEnabled.value || aliyunCaptchaEnabled.value ? turnstileToken.value : undefined,

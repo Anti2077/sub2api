@@ -152,6 +152,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'fresh@example.com',
+        username: 'fresh-user',
         password: 'secret-123',
         tencent_captcha_ticket: 'initial-ticket',
         tencent_captcha_randstr: '@initial-rand',
@@ -207,6 +208,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'fresh@example.com',
+        username: 'fresh-user',
         password: 'secret-123',
       })
     )
@@ -243,6 +245,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'fresh@example.com',
+        username: 'fresh-user',
         password: 'secret-123',
         turnstile_token: 'initial-proof',
       })
@@ -286,6 +289,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'fresh@example.com',
+        username: 'fresh-user',
         password: 'secret-123',
       })
     )
@@ -322,6 +326,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'first@custom.example',
+        username: 'first-user',
         password: 'secret-123',
       })
     )
@@ -361,6 +366,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'second@custom.example',
+        username: 'second-user',
         password: 'secret-123',
       })
     )
@@ -395,6 +401,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'second@custom.example',
+        username: 'second-user',
         password: 'secret-123',
       })
     )
@@ -437,6 +444,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'first@custom.example',
+        username: 'first-user',
         password: 'secret-123',
       })
     )
@@ -475,6 +483,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'fresh@example.com',
+        username: 'fresh-user',
         password: 'secret-123',
       })
     )
@@ -522,6 +531,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'fresh@example.com',
+        username: 'fresh-user',
         password: 'secret-123',
       })
     )
@@ -560,6 +570,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'fresh@example.com',
+        username: 'fresh-user',
         password: 'secret-123',
         aff_code: 'AFF123',
       })
@@ -624,6 +635,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'fresh@example.com',
+        username: 'fresh-user',
         password: 'secret-123',
         turnstile_token: 'send-code-token',
       })
@@ -696,6 +708,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'fresh@example.com',
+        username: 'fresh-user',
         password: 'secret-123',
         turnstile_token: 'send-code-token',
       })
@@ -753,6 +766,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'fresh@example.com',
+        username: 'fresh-user',
         password: 'secret-123',
       })
     )
@@ -805,6 +819,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'normal@example.com',
+        username: 'normal-user',
         password: 'secret-456',
         promo_code: 'PROMO',
         invitation_code: 'INVITE',
@@ -830,6 +845,7 @@ describe('EmailVerifyView', () => {
 
     expect(registerMock).toHaveBeenCalledWith({
       email: 'normal@example.com',
+      username: 'normal-user',
       password: 'secret-456',
       verify_code: '654321',
       turnstile_token: undefined,
@@ -855,6 +871,7 @@ describe('EmailVerifyView', () => {
       'register_data',
       JSON.stringify({
         email: 'normal@example.com',
+        username: 'normal-user',
         password: 'secret-456',
         tencent_captcha_ticket: 'send-code-ticket',
         tencent_captcha_randstr: '@send-code-rand',
@@ -885,6 +902,7 @@ describe('EmailVerifyView', () => {
     }))
     expect(JSON.parse(sessionStorage.getItem('register_data') || '{}')).toEqual({
       email: 'normal@example.com',
+      username: 'normal-user',
       password: 'secret-456',
     })
 
@@ -898,5 +916,32 @@ describe('EmailVerifyView', () => {
       tencent_captcha_ticket: undefined,
       tencent_captcha_randstr: undefined,
     }))
+  })
+
+  it('treats registration data without a username as expired', async () => {
+    sessionStorage.setItem(
+      'register_data',
+      JSON.stringify({
+        email: 'legacy@example.com',
+        password: 'secret-789',
+      })
+    )
+
+    const wrapper = mount(EmailVerifyView, {
+      global: {
+        stubs: {
+          AuthLayout: { template: '<div><slot /><slot name="footer" /></div>' },
+          Icon: true,
+          TurnstileWidget: true,
+          transition: false,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('auth.sessionExpired')
+    expect(sendVerifyCodeMock).not.toHaveBeenCalled()
+    expect(sendPendingOAuthVerifyCodeMock).not.toHaveBeenCalled()
   })
 })

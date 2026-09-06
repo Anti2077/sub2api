@@ -122,7 +122,8 @@ export type LeaderboardPeriod = 'day' | 'week' | 'month' | 'year'
 
 export interface PublicTokenRankingItem {
   rank: number
-  masked_email: string
+  username: string
+  is_anonymous: boolean
   requests: number
   input_tokens: number
   output_tokens: number

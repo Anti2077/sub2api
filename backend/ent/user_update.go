@@ -199,6 +199,34 @@ func (_u *UserUpdate) SetNillableUsername(v *string) *UserUpdate {
 	return _u
 }
 
+// SetUsernameConfirmed sets the "username_confirmed" field.
+func (_u *UserUpdate) SetUsernameConfirmed(v bool) *UserUpdate {
+	_u.mutation.SetUsernameConfirmed(v)
+	return _u
+}
+
+// SetNillableUsernameConfirmed sets the "username_confirmed" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableUsernameConfirmed(v *bool) *UserUpdate {
+	if v != nil {
+		_u.SetUsernameConfirmed(*v)
+	}
+	return _u
+}
+
+// SetLeaderboardAnonymous sets the "leaderboard_anonymous" field.
+func (_u *UserUpdate) SetLeaderboardAnonymous(v bool) *UserUpdate {
+	_u.mutation.SetLeaderboardAnonymous(v)
+	return _u
+}
+
+// SetNillableLeaderboardAnonymous sets the "leaderboard_anonymous" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableLeaderboardAnonymous(v *bool) *UserUpdate {
+	if v != nil {
+		_u.SetLeaderboardAnonymous(*v)
+	}
+	return _u
+}
+
 // SetNotes sets the "notes" field.
 func (_u *UserUpdate) SetNotes(v string) *UserUpdate {
 	_u.mutation.SetNotes(v)
@@ -1050,6 +1078,12 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.UsernameConfirmed(); ok {
+		_spec.SetField(user.FieldUsernameConfirmed, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.LeaderboardAnonymous(); ok {
+		_spec.SetField(user.FieldLeaderboardAnonymous, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.Notes(); ok {
 		_spec.SetField(user.FieldNotes, field.TypeString, value)
 	}
@@ -1888,6 +1922,34 @@ func (_u *UserUpdateOne) SetUsername(v string) *UserUpdateOne {
 func (_u *UserUpdateOne) SetNillableUsername(v *string) *UserUpdateOne {
 	if v != nil {
 		_u.SetUsername(*v)
+	}
+	return _u
+}
+
+// SetUsernameConfirmed sets the "username_confirmed" field.
+func (_u *UserUpdateOne) SetUsernameConfirmed(v bool) *UserUpdateOne {
+	_u.mutation.SetUsernameConfirmed(v)
+	return _u
+}
+
+// SetNillableUsernameConfirmed sets the "username_confirmed" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableUsernameConfirmed(v *bool) *UserUpdateOne {
+	if v != nil {
+		_u.SetUsernameConfirmed(*v)
+	}
+	return _u
+}
+
+// SetLeaderboardAnonymous sets the "leaderboard_anonymous" field.
+func (_u *UserUpdateOne) SetLeaderboardAnonymous(v bool) *UserUpdateOne {
+	_u.mutation.SetLeaderboardAnonymous(v)
+	return _u
+}
+
+// SetNillableLeaderboardAnonymous sets the "leaderboard_anonymous" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableLeaderboardAnonymous(v *bool) *UserUpdateOne {
+	if v != nil {
+		_u.SetLeaderboardAnonymous(*v)
 	}
 	return _u
 }
@@ -2772,6 +2834,12 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.Username(); ok {
 		_spec.SetField(user.FieldUsername, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.UsernameConfirmed(); ok {
+		_spec.SetField(user.FieldUsernameConfirmed, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.LeaderboardAnonymous(); ok {
+		_spec.SetField(user.FieldLeaderboardAnonymous, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Notes(); ok {
 		_spec.SetField(user.FieldNotes, field.TypeString, value)

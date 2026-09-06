@@ -11,6 +11,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/sysutil"
+	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -255,6 +256,7 @@ func install(c *gin.Context) {
 	}
 
 	req.Admin.Email = strings.TrimSpace(req.Admin.Email)
+	req.Admin.Username = strings.TrimSpace(req.Admin.Username)
 	req.Database.Host = strings.TrimSpace(req.Database.Host)
 	req.Database.User = strings.TrimSpace(req.Database.User)
 	req.Database.DBName = strings.TrimSpace(req.Database.DBName)
@@ -301,6 +303,10 @@ func install(c *gin.Context) {
 	// Admin validation
 	if !validateEmail(req.Admin.Email) {
 		response.Error(c, http.StatusBadRequest, "Invalid admin email format")
+		return
+	}
+	if _, err := service.NormalizeAndValidateUsername(req.Admin.Username); err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err := validatePassword(req.Admin.Password); err != nil {

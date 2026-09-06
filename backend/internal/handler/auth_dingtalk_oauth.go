@@ -801,13 +801,14 @@ func (h *AuthHandler) CompleteDingTalkOAuthRegistration(c *gin.Context) {
 		respondPendingOAuthBindingApplyError(c, err)
 		return
 	}
-	// 新用户注册完成后执行身份同步（user_id 现在已知）。
+	// 新用户注册完成后执行身份属性同步（user_id 现在已知）。
+	// 不同步 users.username：第三方名称只是建议值，必须由用户确认。
 	// 异步执行避免阻塞 token 响应。
 	if completionCfg, cfgErr := h.getDingTalkOAuthConfig(c.Request.Context()); cfgErr == nil {
 		dtClient := h.dingTalkClient(completionCfg)
 		claims := session.UpstreamIdentityClaims
 		runDingTalkSyncAsync(c.Request.Context(), func(ctx context.Context) {
-			h.syncDingTalkIdentityFromClaims(ctx, completionCfg, dtClient, user.ID, claims, true)
+			h.syncDingTalkIdentityFromClaims(ctx, completionCfg, dtClient, user.ID, claims, false)
 		})
 	}
 	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
@@ -956,12 +957,6 @@ func (h *AuthHandler) syncDingTalkIdentity(ctx context.Context, cfg config.DingT
 func (h *AuthHandler) syncDingTalkIdentityFromClaims(ctx context.Context, cfg config.DingTalkConnectConfig, client *DingTalkClient, userID int64, claims map[string]any, syncUsername bool) {
 	staff := dingTalkStaffFromClaims(claims)
 	h.syncDingTalkIdentity(ctx, cfg, client, userID, staff, syncUsername)
-}
-
-// maybeSyncDingTalkAfterRegistration 在通用 OAuth 注册路径完成后调用。
-// 同步 4 个字段：users.username（首次） + dingtalk_name/email/department（每次）。
-func (h *AuthHandler) maybeSyncDingTalkAfterRegistration(ctx context.Context, session *dbent.PendingAuthSession, userID int64) {
-	h.dispatchDingTalkPendingSync(ctx, session, userID, true)
 }
 
 // maybeSyncDingTalkAfterLogin 在通用 OAuth 登录/绑定路径完成后调用。

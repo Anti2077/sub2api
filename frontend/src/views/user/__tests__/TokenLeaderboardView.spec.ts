@@ -31,7 +31,8 @@ vi.mock('vue-i18n', async (importOriginal) => {
 const response = {
   ranking: [{
     rank: 1,
-    masked_email: 'a***e@example.com',
+    username: 'alice',
+    is_anonymous: false,
     requests: 12,
     input_tokens: 100,
     output_tokens: 20,
@@ -61,14 +62,14 @@ describe('TokenLeaderboardView', () => {
     getPublicTokenLeaderboard.mockResolvedValue(response)
   })
 
-  it('loads the daily ranking and renders only masked identity data', async () => {
+  it('loads the daily ranking and renders usernames without email data', async () => {
     const wrapper = mountView()
     await flushPromises()
 
     expect(getPublicTokenLeaderboard).toHaveBeenCalledWith('day', expect.any(String))
-    expect(wrapper.text()).toContain('a***e@example.com')
+    expect(wrapper.text()).toContain('alice')
     expect(wrapper.text()).toContain('2026-09-01 to 2026-09-01')
-    expect(wrapper.text()).not.toContain('alice@example.com')
+    expect(wrapper.text()).not.toContain('@example.com')
   })
 
   it('loads a new range when the weekly tab is selected', async () => {

@@ -227,6 +227,8 @@ export default {
       title: 'Admin Account',
       description: 'Create your administrator account',
       email: 'Email',
+      username: 'Username',
+      usernamePlaceholder: 'Enter admin username',
       password: 'Password',
       confirmPassword: 'Confirm Password',
       passwordPlaceholder: 'Min 8 characters',

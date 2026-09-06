@@ -49,6 +49,7 @@ func NewAuthHandler(cfg *config.Config, authService *service.AuthService, userSe
 // RegisterRequest represents the registration request payload
 type RegisterRequest struct {
 	Email                 string `json:"email" binding:"required,email"`
+	Username              string `json:"username" binding:"required"`
 	Password              string `json:"password" binding:"required,min=6"`
 	VerifyCode            string `json:"verify_code"`
 	TurnstileToken        string `json:"turnstile_token"`
@@ -198,6 +199,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		req.PromoCode,
 		req.InvitationCode,
 		req.AffCode,
+		req.Username,
 	)
 	if err != nil {
 		response.ErrorFrom(c, err)

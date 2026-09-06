@@ -662,7 +662,8 @@ func TestCompleteOIDCOAuthRegistrationAppliesPendingAdoptionDecision(t *testing.
 		Where(dbuser.EmailEQ(session.ResolvedEmail)).
 		Only(ctx)
 	require.NoError(t, err)
-	require.Equal(t, "OIDC Display", userEntity.Username)
+	require.Empty(t, userEntity.Username)
+	require.False(t, userEntity.UsernameConfirmed)
 
 	identity, err := client.AuthIdentity.Query().
 		Where(
@@ -842,7 +843,8 @@ func TestCompleteOIDCOAuthRegistrationBindsIdentityWithoutAdoptionFlags(t *testi
 		Where(dbuser.EmailEQ(session.ResolvedEmail)).
 		Only(ctx)
 	require.NoError(t, err)
-	require.Equal(t, "oidc_user", userEntity.Username)
+	require.Empty(t, userEntity.Username)
+	require.False(t, userEntity.UsernameConfirmed)
 
 	identity, err := client.AuthIdentity.Query().
 		Where(
@@ -964,7 +966,8 @@ func TestTryOIDCVerifiedEmailFastPathCreatesUserAndIdentity(t *testing.T) {
 
 	user, err := client.User.Query().Where(dbuser.EmailEQ("fastpath@example.com")).Only(ctx)
 	require.NoError(t, err)
-	require.Equal(t, "fastpath_user", user.Username)
+	require.Empty(t, user.Username)
+	require.False(t, user.UsernameConfirmed)
 	require.Equal(t, "oidc", user.SignupSource)
 
 	identityRecord, err := client.AuthIdentity.Query().Where(
@@ -1023,7 +1026,8 @@ func TestOIDCOAuthCallbackVerifiedEmailFastPathIssuesTokenWithoutPendingSession(
 	ctx := context.Background()
 	user, err := client.User.Query().Where(dbuser.EmailEQ("oidc-fast-callback@example.com")).Only(ctx)
 	require.NoError(t, err)
-	require.Equal(t, "oidc_fast_callback", user.Username)
+	require.Empty(t, user.Username)
+	require.False(t, user.UsernameConfirmed)
 	require.Equal(t, "oidc", user.SignupSource)
 
 	identity, err := client.AuthIdentity.Query().Where(

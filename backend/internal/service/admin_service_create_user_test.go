@@ -58,6 +58,7 @@ func TestAdminService_CreateUser_UsesDefaultBalanceWhenBalanceOmitted(t *testing
 	user, err := svc.CreateUser(context.Background(), &CreateUserInput{
 		Email:    "default-balance@test.com",
 		Password: "strong-pass",
+		Username: "default-balance-user",
 	})
 
 	require.NoError(t, err)
@@ -83,6 +84,7 @@ func TestAdminService_CreateUser_ExplicitZeroBalanceOverridesDefault(t *testing.
 	user, err := svc.CreateUser(context.Background(), &CreateUserInput{
 		Email:    "zero-balance@test.com",
 		Password: "strong-pass",
+		Username: "zero-balance-user",
 		Balance:  &balance,
 	})
 
@@ -100,6 +102,7 @@ func TestAdminService_CreateUser_EmailExists(t *testing.T) {
 	_, err := svc.CreateUser(context.Background(), &CreateUserInput{
 		Email:    "dup@test.com",
 		Password: "password",
+		Username: "duplicate-user",
 	})
 	require.ErrorIs(t, err, ErrEmailExists)
 	require.Empty(t, repo.created)
@@ -113,6 +116,7 @@ func TestAdminService_CreateUser_CreateError(t *testing.T) {
 	_, err := svc.CreateUser(context.Background(), &CreateUserInput{
 		Email:    "user@test.com",
 		Password: "password",
+		Username: "create-error-user",
 	})
 	require.ErrorIs(t, err, createErr)
 	require.Empty(t, repo.created)
@@ -139,6 +143,7 @@ func TestAdminService_CreateUser_AssignsDefaultSubscriptions(t *testing.T) {
 	_, err := svc.CreateUser(context.Background(), &CreateUserInput{
 		Email:    "new-user@test.com",
 		Password: "password",
+		Username: "new-user",
 	})
 	require.NoError(t, err)
 	require.Len(t, assigner.calls, 1)

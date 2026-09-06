@@ -184,6 +184,7 @@ func TestAdminService_CreateUser_DoesNotReturnPartialSuccessFromEmailIdentityRes
 	user, err := svc.CreateUser(context.Background(), &CreateUserInput{
 		Email:    "admin-created@example.com",
 		Password: "strong-pass",
+		Username: "admin-created",
 	})
 	require.NoError(t, err)
 	require.NotNil(t, user)

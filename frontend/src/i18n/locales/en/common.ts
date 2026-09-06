@@ -112,9 +112,9 @@ export default {
 
   leaderboard: {
     title: 'Token Leaderboard',
-    description: 'Top 20 users by total tokens with masked email addresses',
+    description: 'Top 20 users by total tokens, shown by username or anonymously',
     heading: 'User Leaderboard',
-    subtitle: 'Top 20 users by total tokens with masked email addresses',
+    subtitle: 'Top 20 users by total tokens, shown by username or anonymously',
     day: 'Daily',
     week: 'Weekly',
     month: 'Monthly',
@@ -129,6 +129,7 @@ export default {
     cache: 'Cache',
     totalTokens: 'Total Tokens',
     currentUser: 'You',
+    anonymousUser: 'Anonymous User',
     empty: 'No usage data for this period',
     loadFailed: 'Failed to load the leaderboard',
     retry: 'Try Again',

@@ -39,6 +39,10 @@ type User struct {
 	Status string `json:"status,omitempty"`
 	// Username holds the value of the "username" field.
 	Username string `json:"username,omitempty"`
+	// UsernameConfirmed holds the value of the "username_confirmed" field.
+	UsernameConfirmed bool `json:"username_confirmed,omitempty"`
+	// LeaderboardAnonymous holds the value of the "leaderboard_anonymous" field.
+	LeaderboardAnonymous bool `json:"leaderboard_anonymous,omitempty"`
 	// Notes holds the value of the "notes" field.
 	Notes string `json:"notes,omitempty"`
 	// TotpSecretEncrypted holds the value of the "totp_secret_encrypted" field.
@@ -239,7 +243,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldTotpEnabled, user.FieldRestrictPublicGroups, user.FieldBalanceNotifyEnabled:
+		case user.FieldUsernameConfirmed, user.FieldLeaderboardAnonymous, user.FieldTotpEnabled, user.FieldRestrictPublicGroups, user.FieldBalanceNotifyEnabled:
 			values[i] = new(sql.NullBool)
 		case user.FieldBalance, user.FieldFrozenBalance, user.FieldBalanceNotifyThreshold, user.FieldTotalRecharged:
 			values[i] = new(sql.NullFloat64)
@@ -336,6 +340,18 @@ func (_m *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field username", values[i])
 			} else if value.Valid {
 				_m.Username = value.String
+			}
+		case user.FieldUsernameConfirmed:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field username_confirmed", values[i])
+			} else if value.Valid {
+				_m.UsernameConfirmed = value.Bool
+			}
+		case user.FieldLeaderboardAnonymous:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field leaderboard_anonymous", values[i])
+			} else if value.Valid {
+				_m.LeaderboardAnonymous = value.Bool
 			}
 		case user.FieldNotes:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -566,6 +582,12 @@ func (_m *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("username=")
 	builder.WriteString(_m.Username)
+	builder.WriteString(", ")
+	builder.WriteString("username_confirmed=")
+	builder.WriteString(fmt.Sprintf("%v", _m.UsernameConfirmed))
+	builder.WriteString(", ")
+	builder.WriteString("leaderboard_anonymous=")
+	builder.WriteString(fmt.Sprintf("%v", _m.LeaderboardAnonymous))
 	builder.WriteString(", ")
 	builder.WriteString("notes=")
 	builder.WriteString(_m.Notes)

@@ -922,6 +922,8 @@ func userEntityToService(u *dbent.User) *service.User {
 		ID:                         u.ID,
 		Email:                      u.Email,
 		Username:                   u.Username,
+		UsernameConfirmed:          u.UsernameConfirmed,
+		LeaderboardAnonymous:       u.LeaderboardAnonymous,
 		Notes:                      u.Notes,
 		PasswordHash:               u.PasswordHash,
 		Role:                       u.Role,

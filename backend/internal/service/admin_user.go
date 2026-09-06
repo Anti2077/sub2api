@@ -118,6 +118,10 @@ func normalizeUserRole(role, fallback string) (string, error) {
 }
 
 func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInput) (*User, error) {
+	username, err := NormalizeAndValidateUsername(input.Username)
+	if err != nil {
+		return nil, err
+	}
 	balance := 0.0
 	if input.Balance != nil {
 		balance = *input.Balance
@@ -132,15 +136,16 @@ func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInpu
 	}
 
 	user := &User{
-		Email:         input.Email,
-		Username:      input.Username,
-		Notes:         input.Notes,
-		Role:          role,
-		Balance:       balance,
-		Concurrency:   input.Concurrency,
-		RPMLimit:      input.RPMLimit,
-		Status:        StatusActive,
-		AllowedGroups: input.AllowedGroups,
+		Email:             input.Email,
+		Username:          username,
+		UsernameConfirmed: true,
+		Notes:             input.Notes,
+		Role:              role,
+		Balance:           balance,
+		Concurrency:       input.Concurrency,
+		RPMLimit:          input.RPMLimit,
+		Status:            StatusActive,
+		AllowedGroups:     input.AllowedGroups,
 
 		RestrictPublicGroups: input.RestrictPublicGroups,
 	}
@@ -236,8 +241,14 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 	}
 
 	if input.Username != nil {
-		user.Username = *input.Username
+		username, err := NormalizeAndValidateUsername(*input.Username)
+		if err != nil {
+			return nil, err
+		}
+		user.Username = username
+		user.UsernameConfirmed = true
 		fields.Username = true
+		fields.UsernameConfirmed = true
 	}
 	if input.Notes != nil {
 		user.Notes = *input.Notes

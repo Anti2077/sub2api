@@ -132,12 +132,6 @@ func (s *AuthService) loginOrRegisterVerifiedEmailOAuth(
 		return nil, nil, err
 	}
 
-	if user.Username == "" && strings.TrimSpace(input.Username) != "" {
-		user.Username = strings.TrimSpace(input.Username)
-		if err := s.userRepo.Update(ctx, user, UserUpdateFields{Username: true}); err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to update username after %s oauth login: %v", providerType, err)
-		}
-	}
 	if !created {
 		if err := s.ApplyProviderDefaultSettingsOnFirstBind(ctx, user.ID, providerType); err != nil {
 			logger.LegacyPrintf("service.auth", "[Auth] Failed to apply %s first bind defaults: %v", providerType, err)
@@ -180,15 +174,18 @@ func (s *AuthService) createEmailOAuthUser(ctx context.Context, email, username,
 		defaultRPMLimit = s.settingService.GetDefaultUserRPMLimit(ctx)
 	}
 	user := &User{
-		Email:        email,
-		Username:     strings.TrimSpace(username),
-		PasswordHash: hashedPassword,
-		Role:         RoleUser,
-		Balance:      grantPlan.Balance,
-		Concurrency:  grantPlan.Concurrency,
-		RPMLimit:     defaultRPMLimit,
-		Status:       StatusActive,
-		SignupSource: providerType,
+		Email: email,
+		// The provider value is a suggestion stored in auth identity metadata;
+		// the user must confirm a unique local username after first login.
+		Username:          "",
+		UsernameConfirmed: false,
+		PasswordHash:      hashedPassword,
+		Role:              RoleUser,
+		Balance:           grantPlan.Balance,
+		Concurrency:       grantPlan.Concurrency,
+		RPMLimit:          defaultRPMLimit,
+		Status:            StatusActive,
+		SignupSource:      providerType,
 	}
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		if errors.Is(err, ErrEmailExists) {

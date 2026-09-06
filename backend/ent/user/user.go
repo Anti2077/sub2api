@@ -37,6 +37,10 @@ const (
 	FieldStatus = "status"
 	// FieldUsername holds the string denoting the username field in the database.
 	FieldUsername = "username"
+	// FieldUsernameConfirmed holds the string denoting the username_confirmed field in the database.
+	FieldUsernameConfirmed = "username_confirmed"
+	// FieldLeaderboardAnonymous holds the string denoting the leaderboard_anonymous field in the database.
+	FieldLeaderboardAnonymous = "leaderboard_anonymous"
 	// FieldNotes holds the string denoting the notes field in the database.
 	FieldNotes = "notes"
 	// FieldTotpSecretEncrypted holds the string denoting the totp_secret_encrypted field in the database.
@@ -207,6 +211,8 @@ var Columns = []string{
 	FieldConcurrency,
 	FieldStatus,
 	FieldUsername,
+	FieldUsernameConfirmed,
+	FieldLeaderboardAnonymous,
 	FieldNotes,
 	FieldTotpSecretEncrypted,
 	FieldTotpEnabled,
@@ -275,6 +281,10 @@ var (
 	DefaultUsername string
 	// UsernameValidator is a validator for the "username" field. It is called by the builders before save.
 	UsernameValidator func(string) error
+	// DefaultUsernameConfirmed holds the default value on creation for the "username_confirmed" field.
+	DefaultUsernameConfirmed bool
+	// DefaultLeaderboardAnonymous holds the default value on creation for the "leaderboard_anonymous" field.
+	DefaultLeaderboardAnonymous bool
 	// DefaultNotes holds the default value on creation for the "notes" field.
 	DefaultNotes string
 	// DefaultTotpEnabled holds the default value on creation for the "totp_enabled" field.
@@ -358,6 +368,16 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByUsername orders the results by the username field.
 func ByUsername(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUsername, opts...).ToFunc()
+}
+
+// ByUsernameConfirmed orders the results by the username_confirmed field.
+func ByUsernameConfirmed(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUsernameConfirmed, opts...).ToFunc()
+}
+
+// ByLeaderboardAnonymous orders the results by the leaderboard_anonymous field.
+func ByLeaderboardAnonymous(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLeaderboardAnonymous, opts...).ToFunc()
 }
 
 // ByNotes orders the results by the notes field.
