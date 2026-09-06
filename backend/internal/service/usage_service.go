@@ -17,6 +17,17 @@ var (
 	ErrUsageLogNotFound = infraerrors.NotFound("USAGE_LOG_NOT_FOUND", "usage log not found")
 )
 
+type PublicLeaderboardMode string
+
+const (
+	PublicLeaderboardModeTokens   PublicLeaderboardMode = "tokens"
+	PublicLeaderboardModeSpending PublicLeaderboardMode = "spending"
+)
+
+func (m PublicLeaderboardMode) Valid() bool {
+	return m == PublicLeaderboardModeTokens || m == PublicLeaderboardModeSpending
+}
+
 // CreateUsageLogRequest 创建使用日志请求
 type CreateUsageLogRequest struct {
 	UserID                int64   `json:"user_id"`
@@ -269,16 +280,20 @@ func (s *UsageService) GetStatsByModel(ctx context.Context, modelName string, st
 	}, nil
 }
 
-// GetPublicUserTokenRanking returns the top token consumers without exposing
-// internal user IDs or full email addresses to other users.
-func (s *UsageService) GetPublicUserTokenRanking(
+// GetPublicUserLeaderboard returns a privacy-preserving user ranking without
+// exposing internal user IDs or email addresses to other users.
+func (s *UsageService) GetPublicUserLeaderboard(
 	ctx context.Context,
 	startTime, endTime time.Time,
 	currentUserID int64,
+	mode PublicLeaderboardMode,
 	limit int,
 ) ([]usagestats.PublicUserTokenRankingItem, error) {
 	if limit <= 0 || limit > 20 {
 		limit = 20
+	}
+	if !mode.Valid() {
+		mode = PublicLeaderboardModeTokens
 	}
 	if s.userRepo != nil {
 		currentUser, err := s.userRepo.GetByID(ctx, currentUserID)
@@ -290,8 +305,12 @@ func (s *UsageService) GetPublicUserTokenRanking(
 		}
 	}
 
+	sortBy := "total_tokens"
+	if mode == PublicLeaderboardModeSpending {
+		sortBy = "actual_cost"
+	}
 	rows, err := s.usageRepo.GetUserBreakdownStats(ctx, startTime, endTime, usagestats.UserBreakdownDimension{
-		SortBy: "total_tokens",
+		SortBy: sortBy,
 	}, limit)
 	if err != nil {
 		return nil, fmt.Errorf("get public user token ranking: %w", err)
@@ -313,10 +332,22 @@ func (s *UsageService) GetPublicUserTokenRanking(
 			OutputTokens:  row.OutputTokens,
 			CacheTokens:   row.CacheTokens,
 			TotalTokens:   row.TotalTokens,
+			ActualCost:    row.ActualCost,
 			IsCurrentUser: row.UserID > 0 && row.UserID == currentUserID,
 		})
 	}
 	return ranking, nil
+}
+
+// GetPublicUserTokenRanking preserves the original token-only service API for
+// internal callers while the HTTP endpoint supports multiple ranking modes.
+func (s *UsageService) GetPublicUserTokenRanking(
+	ctx context.Context,
+	startTime, endTime time.Time,
+	currentUserID int64,
+	limit int,
+) ([]usagestats.PublicUserTokenRankingItem, error) {
+	return s.GetPublicUserLeaderboard(ctx, startTime, endTime, currentUserID, PublicLeaderboardModeTokens, limit)
 }
 
 // GetDailyStats 获取每日使用统计（最近N天）

@@ -38,6 +38,7 @@ const response = {
     output_tokens: 20,
     cache_tokens: 30,
     total_tokens: 150,
+    actual_cost: 2.5,
     is_current_user: true
   }],
   period: 'day' as const,
@@ -66,7 +67,7 @@ describe('TokenLeaderboardView', () => {
     const wrapper = mountView()
     await flushPromises()
 
-    expect(getPublicTokenLeaderboard).toHaveBeenCalledWith('day', expect.any(String))
+    expect(getPublicTokenLeaderboard).toHaveBeenCalledWith('day', expect.any(String), 'tokens')
     expect(wrapper.text()).toContain('alice')
     expect(wrapper.text()).toContain('2026-09-01 to 2026-09-01')
     expect(wrapper.text()).not.toContain('@example.com')
@@ -81,7 +82,18 @@ describe('TokenLeaderboardView', () => {
     await weekly!.trigger('click')
     await flushPromises()
 
-    expect(getPublicTokenLeaderboard).toHaveBeenLastCalledWith('week', expect.any(String))
+    expect(getPublicTokenLeaderboard).toHaveBeenLastCalledWith('week', expect.any(String), 'tokens')
     expect(weekly!.attributes('aria-selected')).toBe('true')
+  })
+
+  it('switches between token and spending rankings', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    const spending = wrapper.find('button[aria-pressed="false"]')
+    await spending.trigger('click')
+    await flushPromises()
+
+    expect(getPublicTokenLeaderboard).toHaveBeenLastCalledWith('day', expect.any(String), 'spending')
   })
 })
