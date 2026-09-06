@@ -61,7 +61,7 @@ func NewUserHandler(
 type CreateUserRequest struct {
 	Email                string   `json:"email" binding:"required,email"`
 	Password             string   `json:"password" binding:"required,min=6"`
-	Username             string   `json:"username"`
+	Username             string   `json:"username" binding:"required"`
 	Notes                string   `json:"notes"`
 	Role                 string   `json:"role" binding:"omitempty,oneof=admin user"`
 	Balance              *float64 `json:"balance"`

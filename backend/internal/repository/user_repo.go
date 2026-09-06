@@ -20,6 +20,7 @@ import (
 	dbuser "github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/lib/pq"
@@ -143,6 +144,8 @@ func (r *userRepository) create(ctx context.Context, userIn *service.User, guard
 	created, err := txClient.User.Create().
 		SetEmail(userIn.Email).
 		SetUsername(userIn.Username).
+		SetUsernameConfirmed(userIn.UsernameConfirmed).
+		SetLeaderboardAnonymous(userIn.LeaderboardAnonymous).
 		SetNotes(userIn.Notes).
 		SetPasswordHash(userIn.PasswordHash).
 		SetRole(userIn.Role).
@@ -156,7 +159,7 @@ func (r *userRepository) create(ctx context.Context, userIn *service.User, guard
 		SetRestrictPublicGroups(userIn.RestrictPublicGroups).
 		Save(txCtx)
 	if err != nil {
-		return translatePersistenceError(err, nil, service.ErrEmailExists)
+		return translateUserPersistenceError(err, nil)
 	}
 
 	if err := r.syncUserAllowedGroupsWithClient(txCtx, txClient, created.ID, userIn.AllowedGroups); err != nil {
@@ -299,6 +302,12 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User, field
 	if fields.Username {
 		updateOp = updateOp.SetUsername(userIn.Username)
 	}
+	if fields.UsernameConfirmed {
+		updateOp = updateOp.SetUsernameConfirmed(userIn.UsernameConfirmed)
+	}
+	if fields.LeaderboardAnonymous {
+		updateOp = updateOp.SetLeaderboardAnonymous(userIn.LeaderboardAnonymous)
+	}
 	if fields.Notes {
 		updateOp = updateOp.SetNotes(userIn.Notes)
 	}
@@ -343,7 +352,7 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User, field
 	}
 	updated, err := updateOp.Save(txCtx)
 	if err != nil {
-		return translatePersistenceError(err, service.ErrUserNotFound, service.ErrEmailExists)
+		return translateUserPersistenceError(err, service.ErrUserNotFound)
 	}
 
 	if fields.AllowedGroups {
@@ -1532,11 +1541,28 @@ func applyUserEntityToService(dst *service.User, src *dbent.User) {
 		return
 	}
 	dst.ID = src.ID
+	dst.Username = src.Username
+	dst.UsernameConfirmed = src.UsernameConfirmed
+	dst.LeaderboardAnonymous = src.LeaderboardAnonymous
 	dst.SignupSource = src.SignupSource
 	dst.LastLoginAt = src.LastLoginAt
 	dst.LastActiveAt = src.LastActiveAt
 	dst.CreatedAt = src.CreatedAt
 	dst.UpdatedAt = src.UpdatedAt
+}
+
+func translateUserPersistenceError(err error, notFound *infraerrors.ApplicationError) error {
+	if err == nil {
+		return nil
+	}
+	var pgErr *pq.Error
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.Constraint == "idx_users_username_active_ci_unique" {
+		return service.ErrUsernameExists.WithCause(err)
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "idx_users_username_active_ci_unique") {
+		return service.ErrUsernameExists.WithCause(err)
+	}
+	return translatePersistenceError(err, notFound, service.ErrEmailExists)
 }
 
 func userSignupSourceOrDefault(signupSource string) string {

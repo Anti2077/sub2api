@@ -65,7 +65,9 @@ export interface UserProfileSourceContext {
 
 export interface User {
   id: number
-  username: string
+	username: string
+	username_confirmed: boolean
+	leaderboard_anonymous: boolean
   email: string
   avatar_url?: string | null
   avatar_source?: string | UserProfileSourceContext | null
@@ -80,6 +82,7 @@ export interface User {
   }
   auth_bindings?: Partial<Record<UserAuthProvider, boolean | UserAuthBindingStatus>>
   identity_bindings?: Partial<Record<UserAuthProvider, boolean | UserAuthBindingStatus>>
+  identities?: Partial<Record<UserAuthProvider, UserAuthBindingStatus>>
   email_bound?: boolean
   linuxdo_bound?: boolean
   oidc_bound?: boolean
@@ -134,7 +137,8 @@ export interface ActionCaptchaRequestProof extends Partial<TencentCaptchaRequest
 }
 
 export interface RegisterRequest {
-  email: string
+	email: string
+	username: string
   password: string
   verify_code?: string
   turnstile_token?: string

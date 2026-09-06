@@ -62,6 +62,10 @@ func (User) Fields() []ent.Field {
 		field.String("username").
 			MaxLen(100).
 			Default(""),
+		field.Bool("username_confirmed").
+			Default(false),
+		field.Bool("leaderboard_anonymous").
+			Default(false),
 		// wechat field migrated to user_attribute_values (see migration 019)
 		field.String("notes").
 			SchemaType(map[string]string{dialect.Postgres: "text"}).

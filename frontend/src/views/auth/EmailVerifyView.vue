@@ -244,6 +244,7 @@ type PendingOAuthCreateAccountResponse = {
 }
 
 const email = ref<string>('')
+const username = ref<string>('')
 const password = ref<string>('')
 const initialTurnstileToken = ref<string>('')
 const initialTencentCaptchaRandstr = ref<string>('')
@@ -332,6 +333,7 @@ onMounted(async () => {
     try {
       const registerData = JSON.parse(registerDataStr)
       email.value = registerData.email || ''
+      username.value = registerData.username || ''
       password.value = registerData.password || ''
       initialTurnstileToken.value =
         registerData.tencent_captcha_ticket || registerData.turnstile_token || ''
@@ -349,7 +351,9 @@ onMounted(async () => {
             adoptAvatar: registerData.pending_adoption_decision.adopt_avatar === true
           }
         : null
-      hasRegisterData.value = !!(email.value && password.value)
+      // Username became mandatory. Treat old sessionStorage payloads as
+      // expired instead of allowing an empty username to reach registration.
+      hasRegisterData.value = !!(email.value && username.value && password.value)
     } catch {
       hasRegisterData.value = false
     }
@@ -721,6 +725,7 @@ async function handleVerify(): Promise<void> {
       // Register with verification code
       await authStore.register({
         email: email.value,
+        username: username.value.trim(),
         password: password.value,
         verify_code: verifyCode.value.trim(),
         turnstile_token:

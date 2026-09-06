@@ -790,7 +790,8 @@ func TestLinuxDoOAuthCallbackDirectlyLogsInNewUserWhenEmailVerificationDisabled(
 		Where(dbuser.EmailEQ("linuxdo-direct-123@linuxdo-connect.invalid")).
 		Only(ctx)
 	require.NoError(t, err)
-	require.Equal(t, "linuxdo_direct", userEntity.Username)
+	require.Empty(t, userEntity.Username)
+	require.False(t, userEntity.UsernameConfirmed)
 	require.Equal(t, "linuxdo", userEntity.SignupSource)
 
 	identity, err := client.AuthIdentity.Query().
@@ -934,7 +935,8 @@ func TestCompleteLinuxDoOAuthRegistrationAppliesPendingAdoptionDecision(t *testi
 		Where(dbuser.EmailEQ(session.ResolvedEmail)).
 		Only(ctx)
 	require.NoError(t, err)
-	require.Equal(t, "LinuxDo Display", userEntity.Username)
+	require.Empty(t, userEntity.Username)
+	require.False(t, userEntity.UsernameConfirmed)
 
 	identity, err := client.AuthIdentity.Query().
 		Where(
@@ -1112,7 +1114,8 @@ func TestCompleteLinuxDoOAuthRegistrationBindsIdentityWithoutAdoptionFlags(t *te
 		Where(dbuser.EmailEQ(session.ResolvedEmail)).
 		Only(ctx)
 	require.NoError(t, err)
-	require.Equal(t, "linuxdo_user", userEntity.Username)
+	require.Empty(t, userEntity.Username)
+	require.False(t, userEntity.UsernameConfirmed)
 
 	identity, err := client.AuthIdentity.Query().
 		Where(

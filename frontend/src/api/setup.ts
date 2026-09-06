@@ -38,6 +38,7 @@ export interface RedisConfig {
 
 export interface AdminConfig {
   email: string
+  username: string
   password: string
 }
 

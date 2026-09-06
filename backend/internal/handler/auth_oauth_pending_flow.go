@@ -1208,7 +1208,14 @@ func applyPendingOAuthBindingTx(
 		}
 	}
 
-	if decision != nil && decision.AdoptDisplayName && adoptedDisplayName != "" {
+	targetUser, err := tx.Client().User.Get(ctx, targetUserID)
+	if err != nil {
+		return err
+	}
+	// A provider display name is only a suggestion for an unconfirmed account.
+	// Keep it in identity metadata and let the user explicitly confirm the
+	// unique local username on the Web后台.
+	if decision != nil && decision.AdoptDisplayName && adoptedDisplayName != "" && targetUser.UsernameConfirmed {
 		if err := tx.Client().User.UpdateOneID(targetUserID).
 			SetUsername(adoptedDisplayName).
 			Exec(ctx); err != nil {
@@ -1887,8 +1894,9 @@ func (h *AuthHandler) createPendingOAuthAccount(c *gin.Context, provider string)
 
 	h.authService.ApplyOAuthSignupPromoCode(c.Request.Context(), user.ID, pendingOAuthPromoCode(session))
 	h.authService.RecordSuccessfulLogin(c.Request.Context(), user.ID)
-	// createPendingOAuthAccount = 注册新账户，需要把钉钉昵称同步到 users.username 作为初始值
-	h.maybeSyncDingTalkAfterRegistration(c.Request.Context(), session, user.ID)
+	// Provider display names remain identity metadata/attributes. The local
+	// username is intentionally left empty until the user confirms it.
+	h.maybeSyncDingTalkAfterLogin(c.Request.Context(), session, user.ID)
 	clearCookies()
 	writeOAuthTokenPairResponse(c, tokenPair)
 }

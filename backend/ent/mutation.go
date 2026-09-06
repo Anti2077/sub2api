@@ -48631,6 +48631,8 @@ type UserMutation struct {
 	addconcurrency                *int
 	status                        *string
 	username                      *string
+	username_confirmed            *bool
+	leaderboard_anonymous         *bool
 	notes                         *string
 	totp_secret_encrypted         *string
 	totp_enabled                  *bool
@@ -49258,6 +49260,78 @@ func (m *UserMutation) OldUsername(ctx context.Context) (v string, err error) {
 // ResetUsername resets all changes to the "username" field.
 func (m *UserMutation) ResetUsername() {
 	m.username = nil
+}
+
+// SetUsernameConfirmed sets the "username_confirmed" field.
+func (m *UserMutation) SetUsernameConfirmed(b bool) {
+	m.username_confirmed = &b
+}
+
+// UsernameConfirmed returns the value of the "username_confirmed" field in the mutation.
+func (m *UserMutation) UsernameConfirmed() (r bool, exists bool) {
+	v := m.username_confirmed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsernameConfirmed returns the old "username_confirmed" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldUsernameConfirmed(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsernameConfirmed is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsernameConfirmed requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsernameConfirmed: %w", err)
+	}
+	return oldValue.UsernameConfirmed, nil
+}
+
+// ResetUsernameConfirmed resets all changes to the "username_confirmed" field.
+func (m *UserMutation) ResetUsernameConfirmed() {
+	m.username_confirmed = nil
+}
+
+// SetLeaderboardAnonymous sets the "leaderboard_anonymous" field.
+func (m *UserMutation) SetLeaderboardAnonymous(b bool) {
+	m.leaderboard_anonymous = &b
+}
+
+// LeaderboardAnonymous returns the value of the "leaderboard_anonymous" field in the mutation.
+func (m *UserMutation) LeaderboardAnonymous() (r bool, exists bool) {
+	v := m.leaderboard_anonymous
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLeaderboardAnonymous returns the old "leaderboard_anonymous" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldLeaderboardAnonymous(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLeaderboardAnonymous is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLeaderboardAnonymous requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLeaderboardAnonymous: %w", err)
+	}
+	return oldValue.LeaderboardAnonymous, nil
+}
+
+// ResetLeaderboardAnonymous resets all changes to the "leaderboard_anonymous" field.
+func (m *UserMutation) ResetLeaderboardAnonymous() {
+	m.leaderboard_anonymous = nil
 }
 
 // SetNotes sets the "notes" field.
@@ -50626,7 +50700,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 25)
+	fields := make([]string, 0, 27)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -50659,6 +50733,12 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.username != nil {
 		fields = append(fields, user.FieldUsername)
+	}
+	if m.username_confirmed != nil {
+		fields = append(fields, user.FieldUsernameConfirmed)
+	}
+	if m.leaderboard_anonymous != nil {
+		fields = append(fields, user.FieldLeaderboardAnonymous)
 	}
 	if m.notes != nil {
 		fields = append(fields, user.FieldNotes)
@@ -50732,6 +50812,10 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Status()
 	case user.FieldUsername:
 		return m.Username()
+	case user.FieldUsernameConfirmed:
+		return m.UsernameConfirmed()
+	case user.FieldLeaderboardAnonymous:
+		return m.LeaderboardAnonymous()
 	case user.FieldNotes:
 		return m.Notes()
 	case user.FieldTotpSecretEncrypted:
@@ -50791,6 +50875,10 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldStatus(ctx)
 	case user.FieldUsername:
 		return m.OldUsername(ctx)
+	case user.FieldUsernameConfirmed:
+		return m.OldUsernameConfirmed(ctx)
+	case user.FieldLeaderboardAnonymous:
+		return m.OldLeaderboardAnonymous(ctx)
 	case user.FieldNotes:
 		return m.OldNotes(ctx)
 	case user.FieldTotpSecretEncrypted:
@@ -50904,6 +50992,20 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUsername(v)
+		return nil
+	case user.FieldUsernameConfirmed:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsernameConfirmed(v)
+		return nil
+	case user.FieldLeaderboardAnonymous:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLeaderboardAnonymous(v)
 		return nil
 	case user.FieldNotes:
 		v, ok := value.(string)
@@ -51198,6 +51300,12 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldUsername:
 		m.ResetUsername()
+		return nil
+	case user.FieldUsernameConfirmed:
+		m.ResetUsernameConfirmed()
+		return nil
+	case user.FieldLeaderboardAnonymous:
+		m.ResetLeaderboardAnonymous()
 		return nil
 	case user.FieldNotes:
 		m.ResetNotes()

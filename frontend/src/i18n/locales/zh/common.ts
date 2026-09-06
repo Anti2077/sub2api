@@ -112,9 +112,9 @@ export default {
 
   leaderboard: {
     title: 'Token 排行',
-    description: '按总 Token 统计前 20 名，用户邮箱已脱敏',
+    description: '按总 Token 统计前 20 名，展示用户名或匿名用户',
     heading: '用户排行',
-    subtitle: '按总 Token 统计前 20 名，用户邮箱已脱敏',
+    subtitle: '按总 Token 统计前 20 名，展示用户名或匿名用户',
     day: '日榜',
     week: '周榜',
     month: '月榜',
@@ -129,6 +129,7 @@ export default {
     cache: '缓存',
     totalTokens: '总 Token',
     currentUser: '我',
+    anonymousUser: '匿名用户',
     empty: '当前周期暂无使用数据',
     loadFailed: '排行榜加载失败',
     retry: '重新加载',

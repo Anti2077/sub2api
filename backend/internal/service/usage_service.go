@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -281,6 +280,15 @@ func (s *UsageService) GetPublicUserTokenRanking(
 	if limit <= 0 || limit > 20 {
 		limit = 20
 	}
+	if s.userRepo != nil {
+		currentUser, err := s.userRepo.GetByID(ctx, currentUserID)
+		if err != nil {
+			return nil, fmt.Errorf("get current user for public leaderboard: %w", err)
+		}
+		if !currentUser.UsernameConfirmed {
+			return nil, ErrUsernameRequired
+		}
+	}
 
 	rows, err := s.usageRepo.GetUserBreakdownStats(ctx, startTime, endTime, usagestats.UserBreakdownDimension{
 		SortBy: "total_tokens",
@@ -291,9 +299,15 @@ func (s *UsageService) GetPublicUserTokenRanking(
 
 	ranking := make([]usagestats.PublicUserTokenRankingItem, 0, len(rows))
 	for i, row := range rows {
+		anonymous := !row.UsernameConfirmed || row.LeaderboardAnonymous || strings.TrimSpace(row.Username) == ""
+		username := ""
+		if !anonymous {
+			username = row.Username
+		}
 		ranking = append(ranking, usagestats.PublicUserTokenRankingItem{
 			Rank:          i + 1,
-			MaskedEmail:   maskLeaderboardEmail(row.Email),
+			Username:      username,
+			IsAnonymous:   anonymous,
 			Requests:      row.Requests,
 			InputTokens:   row.InputTokens,
 			OutputTokens:  row.OutputTokens,
@@ -303,21 +317,6 @@ func (s *UsageService) GetPublicUserTokenRanking(
 		})
 	}
 	return ranking, nil
-}
-
-func maskLeaderboardEmail(email string) string {
-	email = strings.TrimSpace(email)
-	local, domain, ok := strings.Cut(email, "@")
-	if !ok || local == "" || domain == "" {
-		return "u***r"
-	}
-
-	first, _ := utf8.DecodeRuneInString(local)
-	last, _ := utf8.DecodeLastRuneInString(local)
-	if utf8.RuneCountInString(local) == 1 {
-		return string(first) + "***@" + domain
-	}
-	return string(first) + "***" + string(last) + "@" + domain
 }
 
 // GetDailyStats 获取每日使用统计（最近N天）

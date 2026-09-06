@@ -128,6 +128,7 @@ describe('RegisterView invitation layout', () => {
 
     const wrapper = mountRegister()
     await flushPromises()
+    await wrapper.get('#username').setValue('first-user')
     await wrapper.get('#email').setValue('first@custom.example')
     await wrapper.get('#password').setValue('secret-123')
     await wrapper.get('form').trigger('submit.prevent')
@@ -153,6 +154,7 @@ describe('RegisterView invitation layout', () => {
 
     const wrapper = mountRegister()
     await flushPromises()
+    await wrapper.get('#username').setValue('second-user')
     await wrapper.get('#email').setValue('second@custom.example')
     await wrapper.get('#password').setValue('secret-123')
     await wrapper.get('form').trigger('submit.prevent')
@@ -193,6 +195,7 @@ describe('RegisterView invitation layout', () => {
 
     const wrapper = mountRegister()
     await flushPromises()
+    await wrapper.get('#username').setValue('allowed-user')
     await wrapper.get('#email').setValue('user@allowed.com')
     await wrapper.get('#password').setValue('secret-123')
     await wrapper.get('form').trigger('submit.prevent')

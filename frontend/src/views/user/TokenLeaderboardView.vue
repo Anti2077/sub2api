@@ -103,7 +103,7 @@
                 >
                   <td class="px-5 py-3"><RankBadge :rank="item.rank" /></td>
                   <td class="px-5 py-3 font-semibold text-gray-800 dark:text-gray-100">
-                    <span>{{ item.masked_email }}</span>
+                    <span>{{ item.is_anonymous ? t('leaderboard.anonymousUser') : item.username }}</span>
                     <span v-if="item.is_current_user" class="ml-2 rounded bg-primary-100 px-1.5 py-0.5 text-xs text-primary-700 dark:bg-primary-900/60 dark:text-primary-300">
                       {{ t('leaderboard.currentUser') }}
                     </span>
@@ -128,7 +128,7 @@
               <div class="flex items-center gap-3">
                 <RankBadge :rank="item.rank" />
                 <div class="min-w-0 flex-1">
-                  <p class="truncate font-semibold text-gray-900 dark:text-white">{{ item.masked_email }}</p>
+                  <p class="truncate font-semibold text-gray-900 dark:text-white">{{ item.is_anonymous ? t('leaderboard.anonymousUser') : item.username }}</p>
                   <p v-if="item.is_current_user" class="mt-0.5 text-xs font-medium text-primary-600 dark:text-primary-300">{{ t('leaderboard.currentUser') }}</p>
                 </div>
                 <div class="text-right">

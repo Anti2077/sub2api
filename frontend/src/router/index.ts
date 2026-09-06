@@ -343,6 +343,17 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/username-confirm',
+    name: 'UsernameConfirm',
+    component: () => import('@/views/auth/UsernameConfirmView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      allowUnconfirmedUsername: true,
+      title: 'Confirm Username'
+    }
+  },
+  {
     path: '/subscriptions',
     name: 'Subscriptions',
     component: () => import('@/views/user/SubscriptionsView.vue'),
@@ -852,7 +863,7 @@ router.beforeEach(async (to, _from, next) => {
 
   // Restore auth state from localStorage on first navigation (page refresh)
   if (!authInitialized) {
-    authStore.checkAuth()
+    await authStore.checkAuth()
     authInitialized = true
   }
 
@@ -879,6 +890,22 @@ router.beforeEach(async (to, _from, next) => {
     } catch {
       // If setup status cannot be determined, keep the setup page reachable.
     }
+  }
+
+  // Username confirmation is the only Web后台 route available to an
+  // authenticated account that has not confirmed a username yet. Logout is
+  // performed by the confirmation page itself and therefore needs no route.
+  if (
+    authStore.isAuthenticated &&
+    authStore.user &&
+    !authStore.user.username_confirmed &&
+    to.path !== '/username-confirm'
+  ) {
+    const redirect = typeof to.fullPath === 'string' && to.fullPath.startsWith('/') && !to.fullPath.startsWith('//')
+      ? to.fullPath
+      : ''
+    next({ path: '/username-confirm', query: redirect ? { redirect } : undefined })
+    return
   }
 
   // If route doesn't require auth, allow access
@@ -945,6 +972,14 @@ router.beforeEach(async (to, _from, next) => {
       path: '/login',
       query: { redirect: to.fullPath } // Save intended destination
     })
+    return
+  }
+
+  if (!authStore.user?.username_confirmed && !to.meta.allowUnconfirmedUsername) {
+    const redirect = typeof to.fullPath === 'string' && to.fullPath.startsWith('/') && !to.fullPath.startsWith('//')
+      ? to.fullPath
+      : ''
+    next({ path: '/username-confirm', query: redirect ? { redirect } : undefined })
     return
   }
 

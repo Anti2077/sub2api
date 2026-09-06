@@ -322,6 +322,17 @@
           </div>
 
           <div>
+            <label class="input-label">{{ t('setup.admin.username') }}</label>
+            <input
+              v-model="formData.admin.username"
+              type="text"
+              required
+              class="input"
+              :placeholder="t('setup.admin.usernamePlaceholder')"
+            />
+          </div>
+
+          <div>
             <label class="input-label">{{ t('setup.admin.password') }}</label>
             <input
               v-model="formData.admin.password"
@@ -558,6 +569,7 @@ const formData = reactive<InstallRequest>({
   },
   admin: {
     email: '',
+    username: '',
     password: ''
   },
   server: {
@@ -576,6 +588,7 @@ const canProceed = computed(() => {
     case 2:
       return (
         formData.admin.email &&
+        formData.admin.username.trim() &&
         formData.admin.password.length >= 8 &&
         formData.admin.password === confirmPassword.value
       )

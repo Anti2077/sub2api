@@ -22,7 +22,7 @@ func TestUpdateProfile_OnlyDeclaresRequestedColumns(t *testing.T) {
 		{
 			name: "username only",
 			req:  UpdateProfileRequest{Username: &username},
-			want: UserUpdateFields{Username: true},
+			want: UserUpdateFields{Username: true, UsernameConfirmed: true},
 		},
 		{
 			name: "notify settings only",
@@ -32,7 +32,7 @@ func TestUpdateProfile_OnlyDeclaresRequestedColumns(t *testing.T) {
 		{
 			name: "username and notify threshold",
 			req:  UpdateProfileRequest{Username: &username, BalanceNotifyThreshold: float64Ptr(1.5)},
-			want: UserUpdateFields{Username: true, BalanceNotifySettings: true},
+			want: UserUpdateFields{Username: true, UsernameConfirmed: true, BalanceNotifySettings: true},
 		},
 	}
 
@@ -46,6 +46,27 @@ func TestUpdateProfile_OnlyDeclaresRequestedColumns(t *testing.T) {
 			require.Equal(t, []UserUpdateFields{tt.want}, repo.updateFields)
 		})
 	}
+}
+
+func TestUpdateProfile_LeaderboardAnonymousRequiresConfirmedUsername(t *testing.T) {
+	anonymous := true
+	repo := &mockUserRepo{getByIDUser: &User{ID: 7, Status: StatusActive}}
+	svc := NewUserService(repo, nil, nil, nil)
+
+	_, err := svc.UpdateProfile(context.Background(), 7, UpdateProfileRequest{LeaderboardAnonymous: &anonymous})
+	require.ErrorIs(t, err, ErrUsernameRequired)
+	require.Empty(t, repo.updateFields)
+}
+
+func TestUpdateProfile_LeaderboardAnonymousCanBeChangedAfterConfirmation(t *testing.T) {
+	anonymous := true
+	repo := &mockUserRepo{getByIDUser: &User{ID: 7, Status: StatusActive, Username: "confirmed", UsernameConfirmed: true}}
+	svc := NewUserService(repo, nil, nil, nil)
+
+	updated, err := svc.UpdateProfile(context.Background(), 7, UpdateProfileRequest{LeaderboardAnonymous: &anonymous})
+	require.NoError(t, err)
+	require.True(t, updated.LeaderboardAnonymous)
+	require.Equal(t, []UserUpdateFields{{LeaderboardAnonymous: true}}, repo.updateFields)
 }
 
 // 只改头像时用户行没有任何列要写，不应产生一次整行更新。

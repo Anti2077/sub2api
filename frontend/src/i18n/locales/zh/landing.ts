@@ -227,6 +227,8 @@ export default {
       title: '管理员账户',
       description: '创建您的管理员账户',
       email: '邮箱',
+      username: '用户名',
+      usernamePlaceholder: '输入管理员用户名',
       password: '密码',
       confirmPassword: '确认密码',
       passwordPlaceholder: '至少 8 个字符',

@@ -989,7 +989,8 @@ func TestCompleteWeChatOAuthRegistrationBindsIdentityWithoutAdoptionFlags(t *tes
 		Where(dbuser.EmailEQ(session.ResolvedEmail)).
 		Only(ctx)
 	require.NoError(t, err)
-	require.Equal(t, "wechat_user", userEntity.Username)
+	require.Empty(t, userEntity.Username)
+	require.False(t, userEntity.UsernameConfirmed)
 
 	identity, err := client.AuthIdentity.Query().
 		Where(

@@ -51,6 +51,7 @@ vi.mock('@/api/auth', () => ({
 interface MockAuthState {
   isAuthenticated: boolean
   isAdmin: boolean
+  usernameConfirmed?: boolean
   isSimpleMode: boolean
   backendModeEnabled: boolean
   hasPendingAuthSession: boolean
@@ -70,6 +71,14 @@ function simulateGuard(
 
   if (toPath === '/setup' && authState.setupNeedsSetup === false) {
     return resolveCompletedSetupRedirectPath(authState.isAuthenticated, authState.isAdmin)
+  }
+
+  if (
+    authState.isAuthenticated &&
+    authState.usernameConfirmed === false &&
+    toPath !== '/username-confirm'
+  ) {
+    return '/username-confirm'
   }
 
   // 不需要认证的路由
@@ -540,6 +549,35 @@ describe('路由守卫逻辑', () => {
       }
       const redirect = simulateGuard('/email-verify', { requiresAuth: false }, authState)
       expect(redirect).toBe('/login')
+    })
+
+    it('unconfirmed regular user can only open username confirmation', () => {
+      const authState: MockAuthState = {
+        isAuthenticated: true,
+        isAdmin: false,
+        usernameConfirmed: false,
+        isSimpleMode: false,
+        backendModeEnabled: false,
+        hasPendingAuthSession: false,
+      }
+
+      expect(simulateGuard('/dashboard', {}, authState)).toBe('/username-confirm')
+      expect(simulateGuard('/login', { requiresAuth: false }, authState)).toBe('/username-confirm')
+      expect(simulateGuard('/username-confirm', { allowUnconfirmedUsername: true }, authState)).toBeNull()
+    })
+
+    it('unconfirmed admin is also sent to username confirmation in backend mode', () => {
+      const authState: MockAuthState = {
+        isAuthenticated: true,
+        isAdmin: true,
+        usernameConfirmed: false,
+        isSimpleMode: false,
+        backendModeEnabled: true,
+        hasPendingAuthSession: false,
+      }
+
+      expect(simulateGuard('/admin/dashboard', { requiresAdmin: true }, authState)).toBe('/username-confirm')
+      expect(simulateGuard('/username-confirm', { allowUnconfirmedUsername: true }, authState)).toBeNull()
     })
   })
 })

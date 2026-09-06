@@ -126,6 +126,8 @@
             <div class="rounded-3xl border border-gray-100 bg-gray-50/80 p-5 dark:border-dark-700 dark:bg-dark-900/30">
               <ProfileEditForm
                 :initial-username="user?.username || ''"
+                :initial-leaderboard-anonymous="user?.leaderboard_anonymous"
+                :username-confirmed="user?.username_confirmed"
                 embedded
               />
             </div>

@@ -83,6 +83,7 @@ func TestExchangePendingOAuthCompletionPreviewThenFinalizeAppliesAdoptionDecisio
 	userEntity, err := client.User.Create().
 		SetEmail("linuxdo-123@linuxdo-connect.invalid").
 		SetUsername("legacy-name").
+		SetUsernameConfirmed(true).
 		SetPasswordHash("hash").
 		SetRole(service.RoleUser).
 		SetStatus(service.StatusActive).

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Wei-Shaw/sub2api/internal/service"
 	"golang.org/x/term"
 )
 
@@ -172,6 +173,14 @@ func RunCLI() error {
 	}
 
 	for {
+		cfg.Admin.Username = promptString(reader, "Admin Username", "admin")
+		if _, err := service.NormalizeAndValidateUsername(cfg.Admin.Username); err == nil {
+			break
+		}
+		fmt.Println("  Invalid username. Use 1-100 visible characters without control characters.")
+	}
+
+	for {
 		cfg.Admin.Password = promptPassword("Admin Password")
 		// SECURITY: Match Web API requirement of 8 characters minimum
 		if len(cfg.Admin.Password) < 8 {
@@ -208,7 +217,7 @@ func RunCLI() error {
 	fmt.Printf("Database: %s@%s:%d/%s\n", cfg.Database.User, cfg.Database.Host, cfg.Database.Port, cfg.Database.DBName)
 	fmt.Printf("Redis: %s:%d\n", cfg.Redis.Host, cfg.Redis.Port)
 	fmt.Printf("Redis TLS: %s\n", map[bool]string{true: "enabled", false: "disabled"}[cfg.Redis.EnableTLS])
-	fmt.Printf("Admin: %s\n", cfg.Admin.Email)
+	fmt.Printf("Admin: %s <%s>\n", cfg.Admin.Username, cfg.Admin.Email)
 	fmt.Printf("Server: :%d\n", cfg.Server.Port)
 	fmt.Println()
 

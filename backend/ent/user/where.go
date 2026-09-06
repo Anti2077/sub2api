@@ -110,6 +110,16 @@ func Username(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldUsername, v))
 }
 
+// UsernameConfirmed applies equality check predicate on the "username_confirmed" field. It's identical to UsernameConfirmedEQ.
+func UsernameConfirmed(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldUsernameConfirmed, v))
+}
+
+// LeaderboardAnonymous applies equality check predicate on the "leaderboard_anonymous" field. It's identical to LeaderboardAnonymousEQ.
+func LeaderboardAnonymous(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldLeaderboardAnonymous, v))
+}
+
 // Notes applies equality check predicate on the "notes" field. It's identical to NotesEQ.
 func Notes(v string) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldNotes, v))
@@ -753,6 +763,26 @@ func UsernameEqualFold(v string) predicate.User {
 // UsernameContainsFold applies the ContainsFold predicate on the "username" field.
 func UsernameContainsFold(v string) predicate.User {
 	return predicate.User(sql.FieldContainsFold(FieldUsername, v))
+}
+
+// UsernameConfirmedEQ applies the EQ predicate on the "username_confirmed" field.
+func UsernameConfirmedEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldUsernameConfirmed, v))
+}
+
+// UsernameConfirmedNEQ applies the NEQ predicate on the "username_confirmed" field.
+func UsernameConfirmedNEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldUsernameConfirmed, v))
+}
+
+// LeaderboardAnonymousEQ applies the EQ predicate on the "leaderboard_anonymous" field.
+func LeaderboardAnonymousEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldLeaderboardAnonymous, v))
+}
+
+// LeaderboardAnonymousNEQ applies the NEQ predicate on the "leaderboard_anonymous" field.
+func LeaderboardAnonymousNEQ(v bool) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldLeaderboardAnonymous, v))
 }
 
 // NotesEQ applies the EQ predicate on the "notes" field.

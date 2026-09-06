@@ -17,6 +17,7 @@ func TestAdminService_CreateUser_WithAdminRole(t *testing.T) {
 	user, err := svc.CreateUser(context.Background(), &CreateUserInput{
 		Email:    "admin@test.com",
 		Password: "strong-pass",
+		Username: "admin-user",
 		Role:     RoleAdmin,
 	})
 	require.NoError(t, err)
@@ -30,6 +31,7 @@ func TestAdminService_CreateUser_DefaultsToUserRole(t *testing.T) {
 	user, err := svc.CreateUser(context.Background(), &CreateUserInput{
 		Email:    "plain@test.com",
 		Password: "strong-pass",
+		Username: "plain-user",
 	})
 	require.NoError(t, err)
 	require.Equal(t, RoleUser, user.Role)
@@ -42,6 +44,7 @@ func TestAdminService_CreateUser_InvalidRoleRejected(t *testing.T) {
 	_, err := svc.CreateUser(context.Background(), &CreateUserInput{
 		Email:    "bad@test.com",
 		Password: "strong-pass",
+		Username: "bad-role-user",
 		Role:     "superuser",
 	})
 	require.Error(t, err)

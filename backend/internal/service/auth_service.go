@@ -160,7 +160,20 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (str
 }
 
 // RegisterWithVerification 用户注册（支持邮件验证、优惠码、邀请码和邀请返利码），返回token和用户。
-func (s *AuthService) RegisterWithVerification(ctx context.Context, email, password, verifyCode, promoCode, invitationCode, affiliateCode string) (string, *User, error) {
+func (s *AuthService) RegisterWithVerification(ctx context.Context, email, password, verifyCode, promoCode, invitationCode, affiliateCode string, requestedUsername ...string) (string, *User, error) {
+	username := ""
+	usernameConfirmed := false
+	if len(requestedUsername) > 0 {
+		var err error
+		username, err = NormalizeAndValidateUsername(requestedUsername[0])
+		if err != nil {
+			return "", nil, err
+		}
+		usernameConfirmed = true
+	} else if local, _, ok := strings.Cut(strings.TrimSpace(email), "@"); ok {
+		username, _ = NormalizeAndValidateUsername(local)
+		usernameConfirmed = username != ""
+	}
 	// 检查是否开放注册（默认关闭：settingService 未配置时不允许注册）
 	if s.settingService == nil || !s.settingService.IsRegistrationEnabled(ctx) {
 		return "", nil, ErrRegDisabled
@@ -236,13 +249,15 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 
 	// 创建用户
 	user := &User{
-		Email:        email,
-		PasswordHash: hashedPassword,
-		Role:         RoleUser,
-		Balance:      grantPlan.Balance,
-		Concurrency:  grantPlan.Concurrency,
-		RPMLimit:     defaultRPMLimit,
-		Status:       StatusActive,
+		Email:             email,
+		Username:          username,
+		UsernameConfirmed: usernameConfirmed,
+		PasswordHash:      hashedPassword,
+		Role:              RoleUser,
+		Balance:           grantPlan.Balance,
+		Concurrency:       grantPlan.Concurrency,
+		RPMLimit:          defaultRPMLimit,
+		Status:            StatusActive,
 	}
 
 	if err := s.createUserAndClaimInvitation(ctx, user, invitationRedeemCode); err != nil {
@@ -250,6 +265,8 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 		switch {
 		case errors.Is(err, ErrEmailExists):
 			return "", nil, ErrEmailExists
+		case errors.Is(err, ErrUsernameExists):
+			return "", nil, ErrUsernameExists
 		case errors.Is(err, ErrEmailDomainRegistrationLimit):
 			return "", nil, ErrEmailDomainRegistrationLimit
 		case errors.Is(err, ErrInvitationCodeInvalid):
@@ -578,11 +595,6 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 		return "", nil, infraerrors.BadRequest("INVALID_EMAIL", "invalid email")
 	}
 
-	username = strings.TrimSpace(username)
-	if len([]rune(username)) > 100 {
-		username = string([]rune(username)[:100])
-	}
-
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
@@ -609,8 +621,10 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 			}
 
 			newUser := &User{
-				Email:        email,
-				Username:     username,
+				Email: email,
+				// OAuth names are suggestions only. Keep the local username empty
+				// until the user confirms a unique value in the Web后台.
+				Username:     "",
 				PasswordHash: hashedPassword,
 				Role:         RoleUser,
 				Balance:      grantPlan.Balance,
@@ -649,13 +663,6 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 		return "", nil, ErrUserNotActive
 	}
 
-	// 尽力补全：当用户名为空时，使用第三方返回的用户名回填。
-	if user.Username == "" && username != "" {
-		user.Username = username
-		if err := s.userRepo.Update(ctx, user, UserUpdateFields{Username: true}); err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to update username after oauth login: %v", err)
-		}
-	}
 	token, err := s.GenerateToken(ctx, user)
 	if err != nil {
 		return "", nil, fmt.Errorf("generate token: %w", err)
@@ -706,11 +713,6 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 		return nil, nil, infraerrors.BadRequest("INVALID_EMAIL", "invalid email")
 	}
 
-	username = strings.TrimSpace(username)
-	if len([]rune(username)) > 100 {
-		username = string([]rune(username)[:100])
-	}
-
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	created := false
 	if err != nil {
@@ -758,15 +760,18 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 			}
 
 			newUser := &User{
-				Email:        email,
-				Username:     username,
-				PasswordHash: hashedPassword,
-				Role:         RoleUser,
-				Balance:      grantPlan.Balance,
-				Concurrency:  grantPlan.Concurrency,
-				RPMLimit:     defaultRPMLimit,
-				Status:       StatusActive,
-				SignupSource: signupSource,
+				Email: email,
+				// OAuth names are suggestions only. Keep the local username empty
+				// until the user confirms a unique value in the Web后台.
+				Username:          "",
+				UsernameConfirmed: false,
+				PasswordHash:      hashedPassword,
+				Role:              RoleUser,
+				Balance:           grantPlan.Balance,
+				Concurrency:       grantPlan.Concurrency,
+				RPMLimit:          defaultRPMLimit,
+				Status:            StatusActive,
+				SignupSource:      signupSource,
 			}
 
 			if s.entClient != nil && invitationRedeemCode != nil {
@@ -842,12 +847,6 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 		return nil, nil, ErrUserNotActive
 	}
 
-	if user.Username == "" && username != "" {
-		user.Username = username
-		if err := s.userRepo.Update(ctx, user, UserUpdateFields{Username: true}); err != nil {
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to update username after oauth login: %v", err)
-		}
-	}
 	if created {
 		user = s.applyOAuthSignupPromoCode(ctx, user, promoCode)
 	}

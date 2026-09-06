@@ -71,7 +71,7 @@ func TestCreateAdminUserRequiresStepUp(t *testing.T) {
 	router, _ := setupRoleStepUpRouter(t)
 
 	rec := doJSON(t, router, http.MethodPost, "/api/v1/admin/users", map[string]any{
-		"email": "new-admin@example.com", "password": "pass123", "role": "admin",
+		"email": "new-admin@example.com", "username": "new-admin", "password": "pass123", "role": "admin",
 	})
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
@@ -80,7 +80,7 @@ func TestCreateRegularUserSkipsStepUp(t *testing.T) {
 	router, _ := setupRoleStepUpRouter(t)
 
 	rec := doJSON(t, router, http.MethodPost, "/api/v1/admin/users", map[string]any{
-		"email": "new-user@example.com", "password": "pass123", "role": "user",
+		"email": "new-user@example.com", "username": "new-user", "password": "pass123", "role": "user",
 	})
 	require.Equal(t, http.StatusOK, rec.Code)
 }
