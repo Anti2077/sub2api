@@ -407,7 +407,7 @@ func (h *OpsHandler) RoutingWSHandler(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	monitor := h.opsService.RoutingMonitor()
 	if monitor == nil {
 		closeWS(conn, websocket.CloseInternalServerErr, "routing_monitor_unavailable")

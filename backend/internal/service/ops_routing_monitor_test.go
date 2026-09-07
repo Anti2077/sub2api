@@ -32,13 +32,15 @@ func TestOpsRoutingMonitorLifecycleAndFailover(t *testing.T) {
 	monitor.ObserveSelection(routingInfo("req-1", 2))
 	var switchedEnvelope map[string]any
 	require.NoError(t, json.Unmarshal(<-updates, &switchedEnvelope))
-	switched := switchedEnvelope["data"].(map[string]any)
+	switched, ok := switchedEnvelope["data"].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, "switched", switched["event_type"])
 
 	monitor.Finish(routingInfo("req-1", 2), "200", 125*time.Millisecond, false, "")
 	var completedEnvelope map[string]any
 	require.NoError(t, json.Unmarshal(<-updates, &completedEnvelope))
-	completed := completedEnvelope["data"].(map[string]any)
+	completed, ok := completedEnvelope["data"].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, "completed", completed["event_type"])
 	require.Equal(t, float64(2), completed["attempt_count"])
 	require.Len(t, completed["hops"], 2)

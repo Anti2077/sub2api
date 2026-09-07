@@ -523,7 +523,10 @@ func recordOpsRoutingSelection(c *gin.Context, accountID int64, accountName, pla
 	if c == nil || c.Request == nil {
 		return
 	}
-	value, ok := c.Get(opsRoutingMonitorKey)
+	value, exists := c.Get(opsRoutingMonitorKey)
+	if !exists {
+		return
+	}
 	monitor, ok := value.(*service.OpsRoutingMonitorService)
 	if !ok || monitor == nil {
 		return
@@ -551,7 +554,10 @@ func recordOpsRoutingTurnCompletion(c *gin.Context, turn int, requestedModel, up
 	if c == nil || c.Request == nil || turn <= 0 {
 		return
 	}
-	value, ok := c.Get(opsRoutingMonitorKey)
+	value, exists := c.Get(opsRoutingMonitorKey)
+	if !exists {
+		return
+	}
 	monitor, ok := value.(*service.OpsRoutingMonitorService)
 	if !ok || monitor == nil {
 		return
@@ -597,7 +603,10 @@ func recordOpsRoutingCompletion(c *gin.Context, ops *service.OpsService, parsed 
 	if c == nil || c.Request == nil || ops == nil {
 		return
 	}
-	value, ok := c.Get(opsRoutingMonitorKey)
+	value, exists := c.Get(opsRoutingMonitorKey)
+	if !exists {
+		return
+	}
 	monitor, ok := value.(*service.OpsRoutingMonitorService)
 	if !ok || monitor == nil {
 		return
