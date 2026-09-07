@@ -32,8 +32,10 @@ const (
 	opsRoutingCapacityLimitedKey = "ops_routing_capacity_limited"
 	opsDedicatedErrorRecordedKey = "ops_dedicated_error_recorded"
 
-	opsUpstreamModelKey = service.OpsUpstreamModelKey
-	opsRequestTypeKey   = "ops_request_type"
+	opsUpstreamModelKey  = service.OpsUpstreamModelKey
+	opsRequestTypeKey    = "ops_request_type"
+	opsRoutingMonitorKey = "ops_routing_monitor"
+	opsRoutingTurnKey    = "ops_routing_turn"
 
 	// 错误过滤匹配常量 — shouldSkipOpsErrorLog 和错误分类共用
 	opsErrContextCanceled            = "context canceled"
@@ -468,6 +470,11 @@ func setOpsSelectedAccount(c *gin.Context, accountID int64, platform ...string) 
 	if c == nil || accountID <= 0 {
 		return
 	}
+	accountName := ""
+	if len(platform) > 1 {
+		accountName = strings.TrimSpace(platform[1])
+	}
+	recordOpsRoutingSelection(c, accountID, accountName, firstOpsString(platform))
 	service.ClearOpsUpstreamModel(c)
 	c.Set(opsAccountIDKey, accountID)
 	if c.Request != nil {
@@ -480,6 +487,163 @@ func setOpsSelectedAccount(c *gin.Context, accountID int64, platform ...string) 
 		}
 		c.Request = c.Request.WithContext(ctx)
 	}
+}
+
+func setOpsRoutingTurn(c *gin.Context, turn int) {
+	if c == nil {
+		return
+	}
+	if turn <= 0 {
+		c.Set(opsRoutingTurnKey, 0)
+		return
+	}
+	c.Set(opsRoutingTurnKey, turn)
+}
+
+func getOpsRoutingTurn(c *gin.Context) int {
+	if c == nil {
+		return 0
+	}
+	turn, _ := c.Get(opsRoutingTurnKey)
+	value, _ := turn.(int)
+	if value < 0 {
+		return 0
+	}
+	return value
+}
+
+func firstOpsString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
+}
+
+func recordOpsRoutingSelection(c *gin.Context, accountID int64, accountName, platform string) {
+	if c == nil || c.Request == nil {
+		return
+	}
+	value, ok := c.Get(opsRoutingMonitorKey)
+	monitor, ok := value.(*service.OpsRoutingMonitorService)
+	if !ok || monitor == nil {
+		return
+	}
+	requestID, _ := c.Request.Context().Value(ctxkey.RequestID).(string)
+	clientRequestID, _ := c.Request.Context().Value(ctxkey.ClientRequestID).(string)
+	model, _ := c.Get(opsModelKey)
+	upstreamModel, _ := c.Get(opsUpstreamModelKey)
+	upstream := stringValue(upstreamModel)
+	if value, ok := c.Request.Context().Value(ctxkey.ResolvedUpstreamModel).(string); ok && strings.TrimSpace(upstream) == "" {
+		upstream = value
+	}
+	userLabel := ""
+	if apiKey := getOpsAPIKey(c); apiKey != nil && apiKey.User != nil {
+		userLabel = service.OpsRoutingUserLabel(apiKey.User)
+	}
+	monitor.ObserveSelection(service.OpsRoutingRequestInfo{
+		RequestID: requestID, ClientRequestID: clientRequestID, UserLabel: userLabel,
+		RequestedModel: stringValue(model), UpstreamModel: upstream, Platform: platform,
+		AccountID: accountID, AccountName: accountName, AccountPlatform: platform, Turn: getOpsRoutingTurn(c),
+	})
+}
+
+func recordOpsRoutingTurnCompletion(c *gin.Context, turn int, requestedModel, upstreamModel string, result *service.OpenAIForwardResult, turnErr error, started time.Time) {
+	if c == nil || c.Request == nil || turn <= 0 {
+		return
+	}
+	value, ok := c.Get(opsRoutingMonitorKey)
+	monitor, ok := value.(*service.OpsRoutingMonitorService)
+	if !ok || monitor == nil {
+		return
+	}
+	requestID, _ := c.Request.Context().Value(ctxkey.RequestID).(string)
+	clientRequestID, _ := c.Request.Context().Value(ctxkey.ClientRequestID).(string)
+	platform, _ := c.Request.Context().Value(ctxkey.Platform).(string)
+	failed := turnErr != nil || result == nil || strings.TrimSpace(result.UpstreamTerminalEvent) != ""
+	status := "completed"
+	errorSummary := ""
+	if failed {
+		status = "failed"
+		if turnErr != nil {
+			errorSummary = turnErr.Error()
+		} else if result != nil {
+			errorSummary = result.UpstreamTerminalEvent
+		}
+	}
+	if started.IsZero() {
+		started = time.Now()
+	}
+	monitor.Finish(service.OpsRoutingRequestInfo{
+		RequestID: requestID, ClientRequestID: clientRequestID,
+		RequestedModel: trimRoutingModel(requestedModel), UpstreamModel: trimRoutingModel(upstreamModel),
+		Platform: platform, Turn: turn,
+	}, status, time.Since(started), failed, errorSummary)
+}
+
+func trimRoutingModel(value string) string {
+	return strings.TrimSpace(strings.ToValidUTF8(value, ""))
+}
+
+func setOpsRoutingMonitor(c *gin.Context, ops *service.OpsService) {
+	if c == nil || ops == nil || !ops.IsRealtimeMonitoringEnabled(c.Request.Context()) {
+		return
+	}
+	if monitor := ops.RoutingMonitor(); monitor != nil {
+		c.Set(opsRoutingMonitorKey, monitor)
+	}
+}
+
+func recordOpsRoutingCompletion(c *gin.Context, ops *service.OpsService, parsed parsedOpsError, started time.Time) {
+	if c == nil || c.Request == nil || ops == nil {
+		return
+	}
+	value, ok := c.Get(opsRoutingMonitorKey)
+	monitor, ok := value.(*service.OpsRoutingMonitorService)
+	if !ok || monitor == nil {
+		return
+	}
+	requestID, _ := c.Request.Context().Value(ctxkey.RequestID).(string)
+	clientRequestID, _ := c.Request.Context().Value(ctxkey.ClientRequestID).(string)
+	model, _ := c.Get(opsModelKey)
+	platform, _ := c.Request.Context().Value(ctxkey.Platform).(string)
+	statusCode := c.Writer.Status()
+	failed := statusCode >= 400 || parsed.StreamFailure || len(service.GetOpsStreamErrors(c)) > 0
+	summary := ""
+	if failed {
+		// Keep the monitor to structured error metadata. In particular, never
+		// fall back to the captured response body, which may contain arbitrary
+		// provider output or credential-shaped data.
+		parts := make([]string, 0, 2)
+		if parsed.ErrorType != "" {
+			parts = append(parts, parsed.ErrorType)
+		}
+		if parsed.Code != "" {
+			parts = append(parts, parsed.Code)
+		}
+		if parsed.Message != "" && parsed.ErrorType != "" {
+			message, _ := service.SanitizeOpsErrorBodyForQueue(parsed.Message)
+			if message != "" {
+				parts = append(parts, message)
+			}
+		}
+		summary = strings.Join(parts, ": ")
+		if summary == "" {
+			summary = http.StatusText(statusCode)
+			if summary == "" {
+				summary = "request failed"
+			}
+		}
+	}
+	monitor.Finish(service.OpsRoutingRequestInfo{
+		RequestID: requestID, ClientRequestID: clientRequestID, RequestedModel: stringValue(model), Platform: platform,
+	}, http.StatusText(statusCode), time.Since(started), failed, summary)
+}
+
+func stringValue(value any) string {
+	if value, ok := value.(string); ok {
+		return value
+	}
+	return ""
 }
 
 func markOpsRoutingCapacityLimited(c *gin.Context) {
@@ -1076,6 +1240,8 @@ func (state *opsCaptureWriterState) shouldCapture() bool {
 // - Streaming errors after the response has started (SSE) may still need explicit logging.
 func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		startedAt := time.Now()
+		setOpsRoutingMonitor(c, ops)
 		originalWriter := c.Writer
 		w := acquireOpsCaptureWriter(originalWriter)
 		w.setContext(c)
@@ -1090,6 +1256,14 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 		c.Writer = w
 		c.Next()
 		w.finalizeCapture()
+		body := w.capturedBytes()
+		parsed := parseOpsErrorResponse(body)
+		if !parsed.StreamFailure {
+			if terminal, ok := w.capturedTerminalError(); ok {
+				parsed = terminal
+			}
+		}
+		recordOpsRoutingCompletion(c, ops, parsed, startedAt)
 
 		if _, rejected := middleware2.GetIngressRejectReason(c); rejected {
 			return
@@ -1110,8 +1284,8 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 		}
 
 		status := c.Writer.Status()
-		body := w.capturedBytes()
-		parsed := parseOpsErrorResponse(body)
+		// body/parsed were captured above so the routing monitor and error logger
+		// share the same bounded response observation.
 		if !parsed.StreamFailure {
 			if terminal, ok := w.capturedTerminalError(); ok {
 				parsed = terminal

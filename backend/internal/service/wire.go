@@ -572,6 +572,14 @@ func ProvideOpsSystemLogSink(opsRepo OpsRepository) *OpsSystemLogSink {
 	return sink
 }
 
+// ProvideOpsRoutingMonitorService starts the process-local/Redis-backed
+// short-lived routing event stream used by the admin Ops page.
+func ProvideOpsRoutingMonitorService(userRepo UserRepository, redisClient *redis.Client) *OpsRoutingMonitorService {
+	svc := NewOpsRoutingMonitorService(userRepo, redisClient)
+	svc.Start(context.Background())
+	return svc
+}
+
 // ProvideAuditLogService 创建操作审计日志服务并启动异步写入与保留期清理协程。
 // 停止逻辑挂在 cmd/server 的 provideCleanup。
 func ProvideAuditLogService(repo AuditLogRepository, settingService *SettingService) *AuditLogService {
@@ -724,6 +732,7 @@ func ProvideOpsService(
 	settingService *SettingService,
 	authCacheInvalidationWorker *AuthCacheInvalidationWorker,
 	apiKeyService *APIKeyService,
+	routingMonitor *OpsRoutingMonitorService,
 ) *OpsService {
 	svc := NewOpsService(
 		opsRepo,
@@ -746,6 +755,7 @@ func ProvideOpsService(
 	}
 	svc.authCacheInvalidationWorker = authCacheInvalidationWorker
 	svc.apiKeyService = apiKeyService
+	svc.SetRoutingMonitor(routingMonitor)
 	svc.StartRuntimeSettingsRefresh(context.Background())
 	return svc
 }
@@ -886,6 +896,7 @@ var ProviderSet = wire.NewSet(
 	NewDataManagementService,
 	ProvideBackupService,
 	ProvideOpsSystemLogSink,
+	ProvideOpsRoutingMonitorService,
 	ProvideOpsService,
 	ProvideOpsIngressRejectAggregator,
 	ProvideAuditLogService,

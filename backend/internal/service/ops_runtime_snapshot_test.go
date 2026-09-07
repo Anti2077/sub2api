@@ -92,6 +92,10 @@ func TestOpsRuntimeSettingsSnapshotLoadsOnceAndServesHotPath(t *testing.T) {
 func TestOpsRuntimeSettingsAdministrativeUpdatesAreImmediatelyVisible(t *testing.T) {
 	svc := &OpsService{}
 	svc.initRuntimeSettings(context.Background())
+	svc.SetRealtimeMonitoringEnabled(false)
+	if svc.IsRealtimeMonitoringEnabled(context.Background()) {
+		t.Fatal("realtime monitoring update was not visible")
+	}
 
 	svc.SetMonitoringEnabled(false)
 	if svc.IsMonitoringEnabled(context.Background()) {
@@ -110,6 +114,15 @@ func TestOpsRuntimeSettingsAdministrativeUpdatesAreImmediatelyVisible(t *testing
 	}
 	if svc.IsMonitoringEnabled(context.Background()) {
 		t.Fatal("advanced update overwrote monitoring setting")
+	}
+
+	// Check the realtime flag independently of the overall Ops switch because
+	// IsRealtimeMonitoringEnabled is intentionally gated by it.
+	svc.SetMonitoringEnabled(true)
+	cfg.IgnoreContextCanceled = true
+	svc.storeAdvancedSettingsSnapshot(cfg)
+	if svc.IsRealtimeMonitoringEnabled(context.Background()) {
+		t.Fatal("advanced update overwrote realtime monitoring setting")
 	}
 }
 

@@ -72,6 +72,8 @@ const (
 	opsWSCloseRealtimeDisabled = 4001
 )
 
+const routingWSHeartbeat = 30 * time.Second
+
 var qpsWSIdleStopMu sync.Mutex
 var qpsWSIdleStopTimer *time.Timer
 
@@ -370,6 +372,112 @@ func (h *OpsHandler) QPSWSHandler(c *gin.Context) {
 	}()
 
 	handleQPSWebSocket(c.Request.Context(), conn)
+}
+
+// RoutingWSHandler streams the bounded routing event feed to administrators.
+// GET /api/v1/admin/ops/ws/routing
+func (h *OpsHandler) RoutingWSHandler(c *gin.Context) {
+	if h == nil || h.opsService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "ops service not initialized"})
+		return
+	}
+	if !h.opsService.IsRealtimeMonitoringEnabled(c.Request.Context()) {
+		conn, err := upgrader.Upgrade(c.Writer, c.Request, servermiddleware.ServerTimingResponseHeader(c))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "ops realtime monitoring is disabled"})
+			return
+		}
+		closeWS(conn, opsWSCloseRealtimeDisabled, "realtime_disabled")
+		return
+	}
+	if !tryAcquireOpsWSTotalSlot(opsWSLimits.MaxConns) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "too many connections"})
+		return
+	}
+	defer func() { wsConnCount.Add(-1) }()
+	clientIP := requestClientIP(c.Request)
+	if opsWSLimits.MaxConnsPerIP > 0 && clientIP != "" {
+		if !tryAcquireOpsWSIPSlot(clientIP, opsWSLimits.MaxConnsPerIP) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "too many connections"})
+			return
+		}
+		defer releaseOpsWSIPSlot(clientIP)
+	}
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, servermiddleware.ServerTimingResponseHeader(c))
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	monitor := h.opsService.RoutingMonitor()
+	if monitor == nil {
+		closeWS(conn, websocket.CloseInternalServerErr, "routing_monitor_unavailable")
+		return
+	}
+	ctx, cancel := context.WithCancel(c.Request.Context())
+	defer cancel()
+	events, unsubscribe := monitor.Subscribe(ctx)
+	defer unsubscribe()
+	snapshot, err := monitor.Snapshot(ctx)
+	if err != nil {
+		closeWS(conn, websocket.CloseInternalServerErr, "snapshot_failed")
+		return
+	}
+	snapshotPayload, _ := json.Marshal(map[string]any{"type": "routing_snapshot", "data": snapshot})
+	if err := conn.SetWriteDeadline(time.Now().Add(qpsWSWriteTimeout)); err == nil {
+		if err = conn.WriteMessage(websocket.TextMessage, snapshotPayload); err != nil {
+			return
+		}
+	}
+	closeFrameCh := make(chan []byte, 1)
+	go func() {
+		conn.SetReadLimit(qpsWSMaxReadBytes)
+		_ = conn.SetReadDeadline(time.Now().Add(qpsWSPongWait))
+		conn.SetPongHandler(func(string) error { return conn.SetReadDeadline(time.Now().Add(qpsWSPongWait)) })
+		conn.SetCloseHandler(func(code int, text string) error {
+			select {
+			case closeFrameCh <- websocket.FormatCloseMessage(code, text):
+			default:
+			}
+			cancel()
+			return nil
+		})
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				cancel()
+				return
+			}
+		}
+	}()
+	pingTicker := time.NewTicker(routingWSHeartbeat)
+	defer pingTicker.Stop()
+	for {
+		select {
+		case payload, ok := <-events:
+			if !ok {
+				return
+			}
+			if err := conn.SetWriteDeadline(time.Now().Add(qpsWSWriteTimeout)); err != nil {
+				return
+			}
+			if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+				return
+			}
+		case <-pingTicker.C:
+			if err := conn.SetWriteDeadline(time.Now().Add(qpsWSWriteTimeout)); err != nil {
+				return
+			}
+			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
+		case closeFrame := <-closeFrameCh:
+			if closeFrame != nil {
+				_ = conn.WriteControl(websocket.CloseMessage, closeFrame, time.Now().Add(qpsWSWriteTimeout))
+			}
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func tryAcquireOpsWSTotalSlot(limit int32) bool {

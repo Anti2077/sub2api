@@ -14,6 +14,9 @@ func (s *OpsService) IsRealtimeMonitoringEnabled(ctx context.Context) bool {
 	if !s.IsMonitoringEnabled(ctx) {
 		return false
 	}
+	if snapshot := s.runtimeSettings.Load(); snapshot != nil {
+		return snapshot.realtimeEnabled
+	}
 	if s.settingRepo == nil {
 		return true
 	}
@@ -33,4 +36,21 @@ func (s *OpsService) IsRealtimeMonitoringEnabled(ctx context.Context) bool {
 	default:
 		return true
 	}
+}
+
+// SetRealtimeMonitoringEnabled updates the hot-path snapshot after an admin
+// settings write, avoiding a Redis/DB lookup for every gateway request.
+func (s *OpsService) SetRealtimeMonitoringEnabled(enabled bool) {
+	if s == nil {
+		return
+	}
+	s.runtimeSettingsMu.Lock()
+	current := s.runtimeSettings.Load()
+	next := &opsRuntimeSettingsSnapshot{monitoringEnabled: true, realtimeEnabled: enabled, advanced: *defaultOpsAdvancedSettings()}
+	if current != nil {
+		next.monitoringEnabled = current.monitoringEnabled
+		next.advanced = current.advanced
+	}
+	s.runtimeSettings.Store(next)
+	s.runtimeSettingsMu.Unlock()
 }

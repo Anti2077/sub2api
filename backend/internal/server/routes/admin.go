@@ -239,7 +239,11 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		ws := ops.Group("/ws")
 		{
 			ws.GET("/qps", h.Admin.Ops.QPSWSHandler)
+			ws.GET("/routing", h.Admin.Ops.RoutingWSHandler)
 		}
+
+		// Short-lived request routing monitor
+		ops.GET("/routing-monitor/snapshot", h.Admin.Ops.GetRoutingMonitorSnapshot)
 
 		// Error logs (legacy)
 		ops.GET("/errors", h.Admin.Ops.GetErrorLogs)

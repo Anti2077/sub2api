@@ -32,6 +32,7 @@ const (
 
 type opsRuntimeSettingsSnapshot struct {
 	monitoringEnabled bool
+	realtimeEnabled   bool
 	advanced          OpsAdvancedSettings
 }
 
@@ -62,6 +63,7 @@ type OpsService struct {
 	ingressRejectAggregator     *OpsIngressRejectAggregator
 	authCacheInvalidationWorker *AuthCacheInvalidationWorker
 	apiKeyService               *APIKeyService
+	routingMonitor              *OpsRoutingMonitorService
 
 	// cleanupReloader 由 wire 在 OpsCleanupService 构造完成后通过 SetCleanupReloader 注入。
 	// 解耦避免 OpsService -> OpsCleanupService 的硬依赖（cleanup 也读 settings，会循环）。
@@ -84,6 +86,21 @@ type OpsService struct {
 	runtimeRefreshSuccess        atomic.Uint64
 	runtimeRefreshFailure        atomic.Uint64
 	runtimeRefreshLastFailureLog atomic.Int64
+}
+
+// SetRoutingMonitor attaches the short-lived routing monitor without making
+// OpsService's legacy constructor depend on Redis in unit tests.
+func (s *OpsService) SetRoutingMonitor(monitor *OpsRoutingMonitorService) {
+	if s != nil {
+		s.routingMonitor = monitor
+	}
+}
+
+func (s *OpsService) RoutingMonitor() *OpsRoutingMonitorService {
+	if s == nil {
+		return nil
+	}
+	return s.routingMonitor
 }
 
 // CleanupReloader 由 OpsCleanupService 实现。
@@ -178,7 +195,7 @@ func (s *OpsService) initRuntimeSettings(ctx context.Context) {
 		return
 	}
 	defaults := defaultOpsAdvancedSettings()
-	s.runtimeSettings.Store(&opsRuntimeSettingsSnapshot{monitoringEnabled: true, advanced: *defaults})
+	s.runtimeSettings.Store(&opsRuntimeSettingsSnapshot{monitoringEnabled: true, realtimeEnabled: true, advanced: *defaults})
 	_ = s.RefreshRuntimeSettings(ctx)
 }
 
@@ -197,6 +214,7 @@ func (s *OpsService) RefreshRuntimeSettings(ctx context.Context) error {
 
 	values, err := s.settingRepo.GetMultiple(ctx, []string{
 		SettingKeyOpsMonitoringEnabled,
+		SettingKeyOpsRealtimeMonitoringEnabled,
 		SettingKeyOpsAdvancedSettings,
 	})
 	if err != nil {
@@ -207,6 +225,10 @@ func (s *OpsService) RefreshRuntimeSettings(ctx context.Context) error {
 	if raw, ok := values[SettingKeyOpsMonitoringEnabled]; ok {
 		monitoringEnabled = parseOpsMonitoringEnabled(raw)
 	}
+	realtimeEnabled := true
+	if raw, ok := values[SettingKeyOpsRealtimeMonitoringEnabled]; ok {
+		realtimeEnabled = parseOpsMonitoringEnabled(raw)
+	}
 	advanced := defaultOpsAdvancedSettings()
 	if raw, ok := values[SettingKeyOpsAdvancedSettings]; ok {
 		if err := json.Unmarshal([]byte(raw), advanced); err != nil {
@@ -215,7 +237,7 @@ func (s *OpsService) RefreshRuntimeSettings(ctx context.Context) error {
 	}
 	normalizeOpsAdvancedSettings(advanced)
 
-	s.runtimeSettings.Store(&opsRuntimeSettingsSnapshot{monitoringEnabled: monitoringEnabled, advanced: *advanced})
+	s.runtimeSettings.Store(&opsRuntimeSettingsSnapshot{monitoringEnabled: monitoringEnabled, realtimeEnabled: realtimeEnabled, advanced: *advanced})
 	return nil
 }
 
@@ -363,6 +385,7 @@ func (s *OpsService) SetMonitoringEnabled(enabled bool) {
 	next := &opsRuntimeSettingsSnapshot{monitoringEnabled: enabled, advanced: *defaultOpsAdvancedSettings()}
 	if current != nil {
 		next.advanced = current.advanced
+		next.realtimeEnabled = current.realtimeEnabled
 	}
 	s.runtimeSettings.Store(next)
 	s.runtimeSettingsMu.Unlock()
@@ -377,6 +400,7 @@ func (s *OpsService) storeAdvancedSettingsSnapshot(cfg *OpsAdvancedSettings) {
 	next := &opsRuntimeSettingsSnapshot{monitoringEnabled: true, advanced: *cfg}
 	if current != nil {
 		next.monitoringEnabled = current.monitoringEnabled
+		next.realtimeEnabled = current.realtimeEnabled
 	}
 	s.runtimeSettings.Store(next)
 	s.runtimeSettingsMu.Unlock()

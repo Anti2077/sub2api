@@ -174,6 +174,7 @@ func (h *GatewayHandler) WebSearch(c *gin.Context) {
 			continue
 		}
 		account = selected.Account
+		setOpsSelectedAccount(c, account.ID, account.Platform, account.Name)
 		accountReleaseFunc = release
 
 		if isXSearch {
@@ -283,6 +284,7 @@ func (h *GatewayHandler) acquireWebSearchAccountSlot(
 		return nil, false, nil
 	}
 	account := selected.Account
+	setOpsSelectedAccount(c, account.ID, account.Platform, account.Name)
 	accountWaitCounted := false
 	canWait, waitErr := h.concurrencyHelper.IncrementAccountWaitCount(c.Request.Context(), account.ID, selected.WaitPlan.MaxWaiting)
 	if waitErr != nil {

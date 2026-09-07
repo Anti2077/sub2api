@@ -451,6 +451,45 @@ export async function getRealtimeTrafficSummary(
   return data
 }
 
+export type OpsRoutingEventType = 'started' | 'switched' | 'completed' | 'failed'
+export interface OpsRoutingHop {
+  account_id: number
+  account_name?: string
+  platform?: string
+  occurred_at: string
+}
+export interface OpsRoutingEvent {
+  event_id: string
+  event_type: OpsRoutingEventType
+  occurred_at: string
+  request_id?: string
+  client_request_id?: string
+  route_key: string
+  turn?: number
+  user_label?: string
+  requested_model?: string
+  upstream_model?: string
+  platform?: string
+  account_id?: number
+  account_name?: string
+  account_platform?: string
+  status: string
+  duration_ms?: number
+  error_summary?: string
+  attempt_count: number
+  hops: OpsRoutingHop[]
+}
+export interface OpsRoutingSnapshot {
+  generated_at: string
+  active: OpsRoutingEvent[]
+  recent: OpsRoutingEvent[]
+}
+
+export async function getRoutingMonitorSnapshot(): Promise<OpsRoutingSnapshot> {
+  const { data } = await apiClient.get<OpsRoutingSnapshot>('/admin/ops/routing-monitor/snapshot')
+  return data
+}
+
 /**
  * Subscribe to realtime QPS updates via WebSocket.
  *
@@ -662,6 +701,116 @@ export function subscribeQPS(onMessage: (data: any) => void, options: SubscribeQ
     window.removeEventListener('offline', handleOffline)
     clearReconnectTimer()
     clearStaleTimer()
+    if (ws) ws.close()
+    ws = null
+    setStatus('closed')
+  }
+}
+
+export interface SubscribeRoutingOptions {
+  token?: string | null
+  onOpen?: () => void
+  onClose?: (event: CloseEvent) => void
+  onError?: (event: Event) => void
+  onFatalClose?: (event: CloseEvent) => void
+  onStatusChange?: (status: OpsWSStatus) => void
+  onReconnectScheduled?: (info: { attempt: number; delayMs: number }) => void
+  wsBaseUrl?: string
+  maxReconnectAttempts?: number
+  staleTimeoutMs?: number
+  staleCheckIntervalMs?: number
+}
+
+export function subscribeRouting(onMessage: (data: any) => void, options: SubscribeRoutingOptions = {}): () => void {
+  let ws: WebSocket | null = null
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  let shouldReconnect = true
+  let isConnecting = false
+  let attempts = 0
+  let hasConnected = false
+  let lastMessageAt = 0
+  let staleTimer: ReturnType<typeof setInterval> | null = null
+  const maxAttempts = Number.isFinite(options.maxReconnectAttempts as number) ? options.maxReconnectAttempts as number : Infinity
+  const clearTimer = () => { if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null } }
+  const clearStaleTimer = () => { if (staleTimer) { clearInterval(staleTimer); staleTimer = null } }
+  const startStaleTimer = () => {
+    clearStaleTimer()
+    const timeoutMs = options.staleTimeoutMs ?? 120_000
+    const intervalMs = options.staleCheckIntervalMs ?? 30_000
+    if (timeoutMs <= 0 || intervalMs <= 0) return
+    staleTimer = setInterval(() => {
+      if (!shouldReconnect || !ws || ws.readyState !== WebSocket.OPEN || !lastMessageAt) return
+      if (Date.now() - lastMessageAt > timeoutMs) ws.close()
+    }, intervalMs)
+  }
+  const setStatus = (status: OpsWSStatus) => options.onStatusChange?.(status)
+  const connect = () => {
+    if (!shouldReconnect || isConnecting || (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING))) return
+    if (hasConnected && attempts >= maxAttempts) return
+    isConnecting = true
+    setStatus(hasConnected ? 'reconnecting' : 'connecting')
+    const base = options.wsBaseUrl || import.meta.env.VITE_WS_BASE_URL
+    const url = base
+      ? new URL(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${base}/api/v1/admin/ops/ws/routing`)
+      : new URL(buildGatewayUrl('/api/v1/admin/ops/ws/routing').replace(/^http/, 'ws'))
+    const token = String(options.token ?? localStorage.getItem('auth_token') ?? '').trim()
+    const protocols = [OPS_WS_BASE_PROTOCOL]
+    if (token) protocols.push(`jwt.${token}`)
+    ws = new WebSocket(url.toString(), protocols)
+    ws.onopen = () => {
+      isConnecting = false
+      hasConnected = true
+      attempts = 0
+      clearTimer()
+      lastMessageAt = Date.now()
+      startStaleTimer()
+      setStatus('connected')
+      options.onOpen?.()
+    }
+    ws.onmessage = (event) => {
+      lastMessageAt = Date.now()
+      try { onMessage(JSON.parse(event.data)) } catch { /* Ignore malformed server frames. */ }
+    }
+    ws.onerror = (event) => options.onError?.(event)
+    ws.onclose = (event) => {
+      isConnecting = false
+      ws = null
+      clearStaleTimer()
+      options.onClose?.(event)
+      if (event.code === OPS_WS_CLOSE_CODES.REALTIME_DISABLED) {
+        shouldReconnect = false
+        clearTimer()
+        setStatus('closed')
+        options.onFatalClose?.(event)
+        return
+      }
+      if (!shouldReconnect || (hasConnected && attempts >= maxAttempts)) {
+        if (shouldReconnect) setStatus('closed')
+        return
+      }
+      if (typeof navigator !== 'undefined' && 'onLine' in navigator && !navigator.onLine) {
+        setStatus('offline')
+        return
+      }
+      const delay = Math.min(30000, 1000 * Math.pow(2, attempts)) + Math.floor(Math.random() * 250)
+      attempts += 1
+      options.onReconnectScheduled?.({ attempt: attempts + 1, delayMs: delay })
+      clearTimer()
+      reconnectTimer = setTimeout(connect, delay)
+      setStatus('reconnecting')
+    }
+  }
+  const online = () => { if (shouldReconnect && !ws) connect() }
+  const offline = () => setStatus('offline')
+  window.addEventListener('online', online)
+  window.addEventListener('offline', offline)
+  connect()
+  return () => {
+    shouldReconnect = false
+    clearTimer()
+    clearStaleTimer()
+    window.removeEventListener('online', online)
+    window.removeEventListener('offline', offline)
     if (ws) ws.close()
     ws = null
     setStatus('closed')
@@ -1317,7 +1466,9 @@ export const opsAPI = {
   getUserConcurrencyStats,
   getAccountAvailabilityStats,
   getRealtimeTrafficSummary,
+  getRoutingMonitorSnapshot,
   subscribeQPS,
+  subscribeRouting,
 
   // Legacy unified endpoints
   listErrorLogs,

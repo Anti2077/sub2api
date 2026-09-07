@@ -2074,6 +2074,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	}
 	if h.opsService != nil {
 		h.opsService.SetMonitoringEnabled(settings.OpsMonitoringEnabled)
+		h.opsService.SetRealtimeMonitoringEnabled(settings.OpsRealtimeMonitoringEnabled)
 	}
 
 	// Update OpenAI fast policy (stored under dedicated key, only when provided).

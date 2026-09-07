@@ -1,9 +1,10 @@
-name: Custom Image
+name: Custom and Dev Images
 
 on:
   push:
     branches:
       - Anti2077/custom
+      - Anti2077/dev
   workflow_dispatch:
 
 permissions:
@@ -27,8 +28,25 @@ jobs:
         id: image
         shell: bash
         run: |
+          case "${GITHUB_REF_NAME}" in
+            Anti2077/dev)
+              variant=dev
+              description="Development Sub2API build from Anti2077/dev"
+              ;;
+            Anti2077/custom)
+              variant=custom
+              description="Personal Sub2API build from Anti2077/custom"
+              ;;
+            *)
+              echo "Unsupported image branch: ${GITHUB_REF_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
           echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-          echo "version=custom-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "variant=${variant}" >> "$GITHUB_OUTPUT"
+          echo "description=${description}" >> "$GITHUB_OUTPUT"
+          echo "version=${variant}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -49,11 +67,11 @@ jobs:
         with:
           images: ${{ steps.image.outputs.name }}
           tags: |
-            type=raw,value=custom
+            type=raw,value=${{ steps.image.outputs.variant }}
             type=raw,value=${{ steps.image.outputs.version }}
           labels: |
-            org.opencontainers.image.title=Sub2API Custom
-            org.opencontainers.image.description=Personal Sub2API build from Anti2077/custom
+            org.opencontainers.image.title=Sub2API ${{ steps.image.outputs.variant }}
+            org.opencontainers.image.description=${{ steps.image.outputs.description }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -69,8 +87,8 @@ jobs:
             COMMIT=${{ github.sha }}
             BUILD_TYPE=container
             UPDATE_REPO=${{ github.repository }}
-            UPDATE_BRANCH=Anti2077/custom
-            UPDATE_IMAGE=${{ steps.image.outputs.name }}:custom
+            UPDATE_BRANCH=${{ github.ref_name }}
+            UPDATE_IMAGE=${{ steps.image.outputs.name }}:${{ steps.image.outputs.variant }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: mode=max
