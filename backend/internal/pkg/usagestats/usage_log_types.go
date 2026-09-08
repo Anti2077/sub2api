@@ -169,6 +169,7 @@ type UserSpendingRankingResponse struct {
 type PublicUserTokenRankingItem struct {
 	Rank          int     `json:"rank"`
 	Username      string  `json:"username"`
+	AvatarURL     string  `json:"avatar_url,omitempty"`
 	IsAnonymous   bool    `json:"is_anonymous"`
 	Requests      int64   `json:"requests"`
 	InputTokens   int64   `json:"input_tokens"`

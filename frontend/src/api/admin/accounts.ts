@@ -576,8 +576,15 @@ export async function setSchedulable(id: number, schedulable: boolean): Promise<
  * @returns List of available models for this account
  */
 export async function getAvailableModels(id: number): Promise<ClaudeModel[]> {
-  const { data } = await apiClient.get<ClaudeModel[]>(`/admin/accounts/${id}/models`)
-  return data
+  const { data } = await apiClient.get<Array<Partial<ClaudeModel> & { id: string }>>(
+    `/admin/accounts/${id}/models`
+  )
+  return (data ?? []).map((model) => ({
+    ...model,
+    type: model.type || 'model',
+    display_name: model.display_name?.trim() || model.id,
+    created_at: model.created_at || ''
+  })) as ClaudeModel[]
 }
 
 export interface SyncUpstreamModelsResult {

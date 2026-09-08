@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { defineComponent } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AccountTestModal from '../AccountTestModal.vue'
 
@@ -77,7 +78,29 @@ function mountModal(account: Record<string, unknown> = {
     global: {
       stubs: {
         BaseDialog: { template: '<div><slot /><slot name="footer" /></div>' },
-        Select: { template: '<div class="select-stub"></div>' },
+        Select: defineComponent({
+          props: {
+            modelValue: { type: [String, Number, Boolean, null], default: '' },
+            options: { type: Array, default: () => [] },
+            valueKey: { type: String, default: 'value' },
+            labelKey: { type: String, default: 'label' }
+          },
+          emits: ['update:modelValue'],
+          template: `
+            <select
+              :value="modelValue"
+              @change="$emit('update:modelValue', $event.target.value)"
+            >
+              <option
+                v-for="option in options"
+                :key="option[valueKey]"
+                :value="option[valueKey]"
+              >
+                {{ option[labelKey] }}
+              </option>
+            </select>
+          `
+        }),
         TextArea: {
           props: ['modelValue'],
           emits: ['update:modelValue'],
@@ -219,5 +242,32 @@ describe('AccountTestModal', () => {
       prompt: '',
       mode: 'compact'
     })
+  })
+
+  it('模型已选中时会显示模型 ID，避免下拉框出现空白选项', async () => {
+    getAvailableModels.mockResolvedValue([
+      {
+        id: 'gpt-6-astra',
+        type: 'model',
+        display_name: 'gpt-6-astra',
+        created_at: ''
+      }
+    ])
+
+    const wrapper = mountModal({
+      id: 42,
+      name: 'OpenAI OAuth',
+      platform: 'openai',
+      type: 'oauth',
+      status: 'active'
+    })
+    await wrapper.setProps({ show: true })
+
+    await flushPromises()
+
+    const modelSelect = wrapper.findAll('select')[0]
+    expect(modelSelect.exists()).toBe(true)
+    expect((modelSelect.element as HTMLSelectElement).value).toBe('gpt-6-astra')
+    expect(modelSelect.find('option').text()).toBe('gpt-6-astra')
   })
 })

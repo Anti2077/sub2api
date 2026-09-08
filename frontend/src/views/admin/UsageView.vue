@@ -85,40 +85,18 @@
 
         <UsageFilters v-model="filters" ref="usageFiltersRef" flat :mode="activeTab" class="border-b border-gray-100 dark:border-dark-700/50" :start-date="startDate" :end-date="endDate" :exporting="exporting" :model-options="modelNameOptions" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
           <template #after-reset>
-            <div v-if="activeTab !== 'ranking'" class="relative" ref="columnDropdownRef">
-              <button
-                data-testid="usage-column-settings"
-                @click="showColumnDropdown = !showColumnDropdown"
-                class="btn btn-secondary px-2 md:px-3"
-                :title="t('admin.users.columnSettings')"
-              >
-                <svg class="h-4 w-4 md:mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125z" />
-                </svg>
-                <span class="hidden md:inline">{{ t('admin.users.columnSettings') }}</span>
-              </button>
-              <div
-                v-if="showColumnDropdown"
-                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-dark-600 dark:bg-dark-800"
-              >
-                <button
-                  v-for="col in currentToggleableColumns"
-                  :key="col.key"
-                  :data-testid="`usage-column-toggle-${col.key}`"
-                  @click="toggleCurrentColumn(col.key)"
-                  class="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
-                >
-                  <span>{{ col.label }}</span>
-                  <Icon
-                    v-if="isCurrentColumnVisible(col.key)"
-                    name="check"
-                    size="sm"
-                    class="text-primary-500"
-                    :stroke-width="2"
-                  />
-                </button>
-              </div>
-            </div>
+            <ColumnSettingsDropdown
+              v-if="activeTab !== 'ranking'"
+              :columns="currentColumnDefinitions"
+              :order="currentColumnOrder"
+              :hidden-keys="currentHiddenColumnKeys"
+              :always-visible-keys="currentAlwaysVisibleKeys"
+              :title="t('admin.users.columnSettings')"
+              :button-label="t('admin.users.columnSettings')"
+              data-testid="usage-column-settings"
+              @update:order="updateCurrentColumnOrder"
+              @toggle-column="toggleCurrentColumn"
+            />
           </template>
         </UsageFilters>
 
@@ -192,7 +170,7 @@ import { useAppStore } from '@/stores/app'; import { adminAPI } from '@/api/admi
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
-import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination from '@/components/common/Pagination.vue'; import Select from '@/components/common/Select.vue'; import DateRangePicker from '@/components/common/DateRangePicker.vue'
+import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination from '@/components/common/Pagination.vue'; import Select from '@/components/common/Select.vue'; import DateRangePicker from '@/components/common/DateRangePicker.vue'; import ColumnSettingsDropdown from '@/components/common/ColumnSettingsDropdown.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'; import UsageExportProgress from '@/components/admin/usage/UsageExportProgress.vue'
 import UserTokenRanking from '@/components/admin/usage/UserTokenRanking.vue'
@@ -205,7 +183,7 @@ import type { OpsErrorLog } from '@/api/admin/ops'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'; import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'; import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
 import Icon from '@/components/icons/Icon.vue'
-import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams } from '@/api/admin/usage'
+import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams } from '@/api/admin/usage'; import type { Column } from '@/components/common/types'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -637,7 +615,7 @@ const HIDDEN_COLUMNS_VERSION_KEY = 'usage-hidden-columns-version'
 const HIDDEN_COLUMNS_PREV_VERSION = 'request-id-hidden-by-default'
 const HIDDEN_COLUMNS_CURRENT_VERSION = 'upstream-request-id-hidden-by-default'
 
-const allColumns = computed(() => [
+const allColumns = computed<Column[]>(() => [
   { key: 'user', label: t('admin.usage.user'), sortable: false },
   { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
   { key: 'account', label: t('admin.usage.account'), sortable: false },
@@ -658,18 +636,34 @@ const allColumns = computed(() => [
 ])
 
 const hiddenColumns = reactive<Set<string>>(new Set())
+const columnOrder = ref<string[]>([])
+const COLUMN_ORDER_KEY = 'usage-column-order'
 
-const toggleableColumns = computed(() =>
-  allColumns.value.filter(col => !ALWAYS_VISIBLE.includes(col.key))
-)
+const orderColumns = (columns: Column[], order: string[]) => {
+  const byKey = new Map(columns.map((column) => [column.key, column]))
+  const seen = new Set<string>()
+  const ordered: Column[] = []
+  for (const key of order) {
+    const column = byKey.get(key)
+    if (column && !seen.has(key)) {
+      seen.add(key)
+      ordered.push(column)
+    }
+  }
+  for (const column of columns) {
+    if (!seen.has(column.key)) ordered.push(column)
+  }
+  return ordered
+}
+
+const normalizeColumnOrder = (order: string[], columns: Column[]) =>
+  orderColumns(columns, order).map((column) => column.key)
 
 const visibleColumns = computed(() =>
-  allColumns.value.filter(col =>
+  orderColumns(allColumns.value, columnOrder.value).filter(col =>
     ALWAYS_VISIBLE.includes(col.key) || !hiddenColumns.has(col.key)
   )
 )
-
-const isColumnVisible = (key: string) => !hiddenColumns.has(key)
 
 const toggleColumn = (key: string) => {
   if (hiddenColumns.has(key)) {
@@ -682,6 +676,26 @@ const toggleColumn = (key: string) => {
     localStorage.setItem(HIDDEN_COLUMNS_VERSION_KEY, HIDDEN_COLUMNS_CURRENT_VERSION)
   } catch (e) {
     console.error('Failed to save columns:', e)
+  }
+}
+
+const saveColumnOrder = (key: string, order: string[], columns: Column[]) => {
+  const normalized = normalizeColumnOrder(order, columns)
+  try {
+    localStorage.setItem(key, JSON.stringify(normalized))
+  } catch (e) {
+    console.error('Failed to save column order:', e)
+  }
+  return normalized
+}
+
+const loadColumnOrder = (key: string, columns: Column[]) => {
+  try {
+    const saved = localStorage.getItem(key)
+    const parsed = saved ? JSON.parse(saved) : []
+    return normalizeColumnOrder(Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : [], columns)
+  } catch {
+    return columns.map((column) => column.key)
   }
 }
 
@@ -710,13 +724,11 @@ const errAllColumns = computed(() => [
 ])
 
 const errHiddenColumns = reactive<Set<string>>(new Set())
-
-const errToggleableColumns = computed(() =>
-  errAllColumns.value.filter(col => !ERR_ALWAYS_VISIBLE.includes(col.key))
-)
+const errColumnOrder = ref<string[]>([])
+const ERR_COLUMN_ORDER_KEY = 'usage-error-column-order'
 
 const errVisibleColumnKeys = computed(() =>
-  errAllColumns.value
+  orderColumns(errAllColumns.value, errColumnOrder.value)
     .filter(col => ERR_ALWAYS_VISIBLE.includes(col.key) || !errHiddenColumns.has(col.key))
     .map(col => col.key)
 )
@@ -744,12 +756,17 @@ const loadSavedErrColumns = () => {
   }
 }
 
-// 列设置下拉按当前 tab 分发
-const currentToggleableColumns = computed(() =>
-  activeTab.value === 'errors' ? errToggleableColumns.value : toggleableColumns.value
-)
-const isCurrentColumnVisible = (key: string) =>
-  activeTab.value === 'errors' ? !errHiddenColumns.has(key) : isColumnVisible(key)
+const currentColumnDefinitions = computed(() => activeTab.value === 'errors' ? errAllColumns.value : allColumns.value)
+const currentColumnOrder = computed(() => activeTab.value === 'errors' ? errColumnOrder.value : columnOrder.value)
+const currentHiddenColumnKeys = computed(() => activeTab.value === 'errors' ? [...errHiddenColumns] : [...hiddenColumns])
+const currentAlwaysVisibleKeys = computed(() => activeTab.value === 'errors' ? ERR_ALWAYS_VISIBLE : ALWAYS_VISIBLE)
+const updateCurrentColumnOrder = (order: string[]) => {
+  if (activeTab.value === 'errors') {
+    errColumnOrder.value = saveColumnOrder(ERR_COLUMN_ORDER_KEY, order, errAllColumns.value)
+  } else {
+    columnOrder.value = saveColumnOrder(COLUMN_ORDER_KEY, order, allColumns.value)
+  }
+}
 const toggleCurrentColumn = (key: string) =>
   activeTab.value === 'errors' ? toggleErrColumn(key) : toggleColumn(key)
 
@@ -855,15 +872,6 @@ const onErrPage = (p: number) => { errPage.value = p; loadAdminErrors() }
 const onErrPageSize = (s: number) => { errPageSize.value = s; errPage.value = 1; loadAdminErrors() }
 const openError = (id: number) => { selectedErrorId.value = id; showErrorModal.value = true }
 
-const showColumnDropdown = ref(false)
-const columnDropdownRef = ref<HTMLElement | null>(null)
-
-const handleColumnClickOutside = (event: MouseEvent) => {
-  if (columnDropdownRef.value && !columnDropdownRef.value.contains(event.target as HTMLElement)) {
-    showColumnDropdown.value = false
-  }
-}
-
 onMounted(() => {
   applyRouteQueryFilters()
   void loadRouteUserFilterLabel()
@@ -875,9 +883,10 @@ onMounted(() => {
   }, 120)
   loadSavedColumns()
   loadSavedErrColumns()
-  document.addEventListener('click', handleColumnClickOutside)
+  columnOrder.value = loadColumnOrder(COLUMN_ORDER_KEY, allColumns.value)
+  errColumnOrder.value = loadColumnOrder(ERR_COLUMN_ORDER_KEY, errAllColumns.value)
 })
-onUnmounted(() => { abortController?.abort(); exportAbortController?.abort(); document.removeEventListener('click', handleColumnClickOutside) })
+onUnmounted(() => { abortController?.abort(); exportAbortController?.abort() })
 
 watch(modelDistributionSource, (source) => {
   void loadModelStats(source)
