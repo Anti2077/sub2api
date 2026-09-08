@@ -124,6 +124,7 @@ export type PublicLeaderboardMode = 'tokens' | 'spending'
 export interface PublicTokenRankingItem {
   rank: number
   username: string
+  avatar_url?: string
   is_anonymous: boolean
   requests: number
   input_tokens: number

@@ -316,16 +316,31 @@ func (s *UsageService) GetPublicUserLeaderboard(
 		return nil, fmt.Errorf("get public user token ranking: %w", err)
 	}
 
+	publicUserIDs := make([]int64, 0, len(rows))
+	for _, row := range rows {
+		anonymous := !row.UsernameConfirmed || row.LeaderboardAnonymous || strings.TrimSpace(row.Username) == ""
+		if !anonymous && row.UserID > 0 {
+			publicUserIDs = append(publicUserIDs, row.UserID)
+		}
+	}
+	avatarURLs, err := s.getPublicLeaderboardAvatarURLs(ctx, publicUserIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get public leaderboard avatars: %w", err)
+	}
+
 	ranking := make([]usagestats.PublicUserTokenRankingItem, 0, len(rows))
 	for i, row := range rows {
 		anonymous := !row.UsernameConfirmed || row.LeaderboardAnonymous || strings.TrimSpace(row.Username) == ""
 		username := ""
+		avatarURL := ""
 		if !anonymous {
 			username = row.Username
+			avatarURL = avatarURLs[row.UserID]
 		}
 		ranking = append(ranking, usagestats.PublicUserTokenRankingItem{
 			Rank:          i + 1,
 			Username:      username,
+			AvatarURL:     avatarURL,
 			IsAnonymous:   anonymous,
 			Requests:      row.Requests,
 			InputTokens:   row.InputTokens,
@@ -337,6 +352,29 @@ func (s *UsageService) GetPublicUserLeaderboard(
 		})
 	}
 	return ranking, nil
+}
+
+func (s *UsageService) getPublicLeaderboardAvatarURLs(ctx context.Context, userIDs []int64) (map[int64]string, error) {
+	avatarURLs := make(map[int64]string)
+	if len(userIDs) == 0 || s.userRepo == nil {
+		return avatarURLs, nil
+	}
+	if batchRepo, ok := s.userRepo.(UserAvatarBatchRepository); ok {
+		return batchRepo.GetUserAvatarURLs(ctx, userIDs)
+	}
+
+	for _, userID := range userIDs {
+		avatar, err := s.userRepo.GetUserAvatar(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if avatar != nil {
+			if avatarURL := strings.TrimSpace(avatar.URL); avatarURL != "" {
+				avatarURLs[userID] = avatarURL
+			}
+		}
+	}
+	return avatarURLs, nil
 }
 
 // GetPublicUserTokenRanking preserves the original token-only service API for

@@ -16,12 +16,28 @@ import (
 
 type leaderboardUsageRepoStub struct {
 	service.UsageLogRepository
-	rows      []usagestats.UserBreakdownItem
-	called    bool
-	startTime time.Time
-	endTime   time.Time
-	dimension usagestats.UserBreakdownDimension
-	limit     int
+	rows          []usagestats.UserBreakdownItem
+	avatarURLs    map[int64]string
+	avatarUserIDs []int64
+	called        bool
+	startTime     time.Time
+	endTime       time.Time
+	dimension     usagestats.UserBreakdownDimension
+	limit         int
+}
+
+type leaderboardUserRepoStub struct {
+	service.UserRepository
+	usageRepo *leaderboardUsageRepoStub
+}
+
+func (s *leaderboardUserRepoStub) GetByID(_ context.Context, userID int64) (*service.User, error) {
+	return &service.User{ID: userID, Username: "current", UsernameConfirmed: true}, nil
+}
+
+func (s *leaderboardUserRepoStub) GetUserAvatarURLs(_ context.Context, userIDs []int64) (map[int64]string, error) {
+	s.usageRepo.avatarUserIDs = append([]int64(nil), userIDs...)
+	return s.usageRepo.avatarURLs, nil
 }
 
 func (s *leaderboardUsageRepoStub) GetUserBreakdownStats(
@@ -40,7 +56,8 @@ func (s *leaderboardUsageRepoStub) GetUserBreakdownStats(
 
 func newLeaderboardTestRouter(repo *leaderboardUsageRepoStub, userID int64) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	usageService := service.NewUsageService(repo, nil, nil, nil)
+	userRepo := &leaderboardUserRepoStub{usageRepo: repo}
+	usageService := service.NewUsageService(repo, userRepo, nil, nil)
 	usageHandler := NewUsageHandler(usageService, nil, nil, nil)
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
@@ -55,7 +72,7 @@ func TestPublicTokenLeaderboardUsesUsernameAndHidesPrivateIdentity(t *testing.T)
 	repo := &leaderboardUsageRepoStub{rows: []usagestats.UserBreakdownItem{
 		{UserID: 42, Email: "alice@example.com", Username: "alice", UsernameConfirmed: true, Requests: 12, InputTokens: 100, OutputTokens: 20, CacheTokens: 30, TotalTokens: 150, ActualCost: 2.5},
 		{UserID: 7, Email: "赵@example.cn", Username: "zhao", UsernameConfirmed: true, LeaderboardAnonymous: true, Requests: 4, InputTokens: 40, OutputTokens: 5, CacheTokens: 0, TotalTokens: 45, ActualCost: 9.75},
-	}}
+	}, avatarURLs: map[int64]string{42: "https://cdn.example.com/alice.png", 7: "https://cdn.example.com/zhao.png"}}
 	router := newLeaderboardTestRouter(repo, 42)
 
 	req := httptest.NewRequest(http.MethodGet, "/usage/leaderboard?period=day&timezone=Asia/Shanghai", nil)
@@ -67,12 +84,15 @@ func TestPublicTokenLeaderboardUsesUsernameAndHidesPrivateIdentity(t *testing.T)
 	require.Equal(t, "total_tokens", repo.dimension.SortBy)
 	require.Equal(t, 20, repo.limit)
 	require.Contains(t, recorder.Body.String(), `"username":"alice"`)
+	require.Contains(t, recorder.Body.String(), `"avatar_url":"https://cdn.example.com/alice.png"`)
 	require.Contains(t, recorder.Body.String(), `"is_anonymous":true`)
 	require.Contains(t, recorder.Body.String(), `"is_current_user":true`)
 	require.NotContains(t, recorder.Body.String(), "alice@example.com")
 	require.NotContains(t, recorder.Body.String(), `"user_id"`)
 	require.NotContains(t, recorder.Body.String(), `"masked_email"`)
 	require.NotContains(t, recorder.Body.String(), `"email"`)
+	require.NotContains(t, recorder.Body.String(), "zhao.png")
+	require.Equal(t, []int64{42}, repo.avatarUserIDs)
 }
 
 func TestPublicTokenLeaderboardRejectsInvalidPeriod(t *testing.T) {
