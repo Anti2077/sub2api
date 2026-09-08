@@ -345,19 +345,19 @@
   }
 
   .badge-primary {
-    @apply bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400;
+    @apply bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300;
   }
 
   .badge-success {
-    @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400;
+    @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300;
   }
 
   .badge-warning {
-    @apply bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400;
+    @apply bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300;
   }
 
   .badge-danger {
-    @apply bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400;
+    @apply bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300;
   }
 
   .badge-gray {
@@ -365,7 +365,7 @@
   }
 
   .badge-purple {
-    @apply bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400;
+    @apply bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300;
   }
 
   /* ============ 下拉菜单 ============ */
@@ -689,7 +689,11 @@
     @apply font-mono text-sm;
     @apply bg-gray-100 dark:bg-dark-800;
     @apply rounded px-1.5 py-0.5;
+<<<<<<< HEAD
     @apply text-primary-800 dark:text-primary-300;
+=======
+    @apply text-primary-800 dark:text-primary-100;
+>>>>>>> a1dcc87ae
   }
 
   .code-block {
@@ -748,6 +752,65 @@
 }
 
 @layer utilities {
+  /*
+   * The dark theme uses blue-gray surfaces instead of Tailwind's near-black
+   * defaults. Keep legacy gray and semantic color utilities readable when a
+   * component has not yet supplied a page-specific dark variant.
+   */
+  .dark .text-gray-300 {
+    color: theme('colors.dark.50');
+  }
+
+  .dark .text-gray-400,
+  .dark .text-dark-400 {
+    color: theme('colors.dark.100');
+  }
+
+  .dark .text-gray-500,
+  .dark .text-dark-500 {
+    color: theme('colors.dark.200');
+  }
+
+  .dark .text-primary-400,
+  .dark .text-primary-500 {
+    color: theme('colors.primary.100');
+  }
+
+  .dark .text-emerald-400,
+  .dark .text-green-400 {
+    color: theme('colors.emerald.100');
+  }
+
+  .dark .text-red-400,
+  .dark .text-rose-400 {
+    color: theme('colors.red.100');
+  }
+
+  .dark .text-amber-400,
+  .dark .text-yellow-400 {
+    color: theme('colors.amber.100');
+  }
+
+  .dark .text-blue-400,
+  .dark .text-sky-400 {
+    color: theme('colors.blue.100');
+  }
+
+  .dark .text-cyan-400,
+  .dark .text-teal-400 {
+    color: theme('colors.cyan.100');
+  }
+
+  .dark .text-purple-400,
+  .dark .text-violet-400,
+  .dark .text-indigo-400 {
+    color: theme('colors.purple.100');
+  }
+
+  .dark .text-orange-400 {
+    color: theme('colors.orange.100');
+  }
+
   /* 文字渐变 */
   .text-gradient {
     @apply bg-gradient-to-r from-primary-500 to-accent-500 bg-clip-text text-transparent;

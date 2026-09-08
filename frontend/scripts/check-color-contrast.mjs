@@ -6,6 +6,7 @@ const colors = {
   gray600: '#4b5563',
   gray700: '#374151',
   gray800: '#1f2937',
+<<<<<<< HEAD
   gray900: '#111827',
   gray950: '#030712',
   dark100: '#f1f5f9',
@@ -37,10 +38,41 @@ const colors = {
   amber900: '#78350f',
   red100: '#fee2e2',
   red400: '#f87171',
+=======
+  gray950: '#030712',
+  dark50: '#f7f9fa',
+  dark100: '#eaf0f2',
+  dark200: '#d6e2e5',
+  dark300: '#c9d7db',
+  dark400: '#b7cbd1',
+  dark500: '#83aab5',
+  dark600: '#5b8999',
+  dark700: '#426f80',
+  dark800: '#315f72',
+  dark900: '#284f61',
+  dark950: '#203f50',
+  primary50: '#f4f8fa',
+  primary100: '#e8f1f5',
+  primary300: '#b1d0dd',
+  primary400: '#66a3bf',
+  primary700: '#2d5b8b',
+  primary800: '#284d74',
+  primary900: '#23384f',
+  emerald100: '#d1fae5',
+  emerald300: '#6ee7b7',
+  emerald700: '#047857',
+  emerald800: '#065f46',
+  amber100: '#fef3c7',
+  amber300: '#fcd34d',
+  amber700: '#b45309',
+  amber800: '#92400e',
+  red100: '#fee2e2',
+>>>>>>> a1dcc87ae
   red300: '#fca5a5',
   red600: '#dc2626',
   red700: '#b91c1c',
   red800: '#991b1b',
+<<<<<<< HEAD
   red900: '#7f1d1d',
   cyan400: '#22d3ee',
   cyan700: '#0e7490',
@@ -48,6 +80,12 @@ const colors = {
   purple700: '#7e22ce',
   orange300: '#fdba74',
   orange700: '#c2410c',
+=======
+  blue100: '#dbeafe',
+  cyan100: '#cffafe',
+  purple100: '#f3e8ff',
+  orange100: '#ffedd5',
+>>>>>>> a1dcc87ae
   stripe: '#635bff',
   stripeHover: '#5851ea',
   airwallexLight: '#14171a',
@@ -110,6 +148,7 @@ const checks = [
   ['input.text.light', 'gray800', 'white'],
   ['input.text.dark', 'dark100', 'dark800'],
   ['input.placeholder.light', 'gray500', 'white'],
+<<<<<<< HEAD
   ['input.placeholder.dark', 'dark300', 'dark800'],
   ['group-actions.rest.light', 'gray700', 'white'],
   ['group-actions.rest.dark', 'dark200', 'gray900'],
@@ -123,6 +162,28 @@ const checks = [
   ['group-actions.rpm-override-hover.dark', 'orange300', 'dark700'],
   ['group-actions.delete-hover.light', 'red700', '#fef2f2'],
   ['group-actions.delete-hover.dark', 'red300', blend(colors.red900, colors.gray800, 0.2)],
+=======
+  ['input.placeholder.dark', 'dark200', 'dark800'],
+  ['legacy-gray-500.dark', 'dark200', 'dark900'],
+  ['legacy-gray-400.dark', 'dark100', 'dark800'],
+  ['text.sidebar-section.light', 'gray500', 'white'],
+  ['text.sidebar-section.dark', 'dark100', 'dark900'],
+  ['text.error.light', 'red700', 'white'],
+  ['text.code.light', 'primary800', 'gray100'],
+  ['text.code.dark', 'primary100', 'dark800'],
+  ['badge.primary.light', 'primary700', 'primary100'],
+  ['badge.success.light', 'emerald700', 'emerald100'],
+  ['badge.warning.light', 'amber700', 'amber100'],
+  ['badge.danger.light', 'red700', 'red100'],
+  ['table.header.dark', 'dark100', 'dark800'],
+  ['table.cell.dark', 'dark100', 'dark900'],
+  ['account-actions.rest.dark', 'dark100', 'dark900'],
+  ['account-actions.hover.dark', 'primary100', 'dark700'],
+  ['stat-icon.primary.dark', 'primary300', blend(colors.primary900, colors.dark800, 0.3)],
+  ['stat-icon.success.dark', 'emerald300', blend('#064e3b', colors.dark800, 0.3)],
+  ['stat-icon.warning.dark', 'amber300', blend('#78350f', colors.dark800, 0.3)],
+  ['stat-icon.danger.dark', 'red300', blend('#7f1d1d', colors.dark800, 0.3)],
+>>>>>>> a1dcc87ae
   ['button.primary.start', 'white', 'primary700'],
   ['button.primary.end', 'white', 'primary800'],
   ['button.primary.hover-end', 'white', 'primary900'],
@@ -144,6 +205,7 @@ const checks = [
   ['button.wxpay', 'gray950', 'wxpay'],
   ['button.wxpay.hover', 'gray950', 'wxpayHover'],
   ['button.wxpay.active', 'gray950', 'wxpayActive'],
+<<<<<<< HEAD
   ['text.sidebar-section.light', 'gray500', 'white'],
   ['text.sidebar-section.dark', 'dark400', 'dark900'],
   ['text.error.light', 'red700', 'white'],
@@ -161,6 +223,20 @@ const checks = [
   ['badge.success.dark', 'emerald400', blend(colors.emerald900, colors.dark800, 0.3)],
   ['badge.warning.dark', 'amber400', blend(colors.amber900, colors.dark800, 0.3)],
   ['badge.danger.dark', 'red400', blend(colors.red900, colors.dark800, 0.3)]
+=======
+  ['badge.primary.dark', 'primary300', blend('#23384f', '#315f72', 0.3)],
+  ['badge.success.dark', 'emerald300', blend('#064e3b', '#315f72', 0.3)],
+  ['badge.warning.dark', 'amber300', blend('#78350f', '#315f72', 0.3)],
+  ['badge.danger.dark', 'red300', blend('#7f1d1d', '#315f72', 0.3)],
+  ['semantic.primary-fallback.dark', 'primary100', 'dark700'],
+  ['semantic.success-fallback.dark', 'emerald100', 'dark700'],
+  ['semantic.warning-fallback.dark', 'amber100', 'dark700'],
+  ['semantic.danger-fallback.dark', 'red100', 'dark700'],
+  ['semantic.info-fallback.dark', 'blue100', 'dark700'],
+  ['semantic.cyan-fallback.dark', 'cyan100', 'dark700'],
+  ['semantic.purple-fallback.dark', 'purple100', 'dark700'],
+  ['semantic.orange-fallback.dark', 'orange100', 'dark700']
+>>>>>>> a1dcc87ae
 ]
 
 const minimumRatio = 4.5
@@ -174,9 +250,13 @@ for (const [name, foregroundToken, backgroundToken] of checks) {
 
   console.log(`${passes ? 'PASS' : 'FAIL'} ${ratio.toFixed(2).padStart(5)}:1 ${name} (${foreground} on ${background})`)
 
+<<<<<<< HEAD
   if (!passes) {
     failures.push({ name, ratio })
   }
+=======
+  if (!passes) failures.push({ name, ratio })
+>>>>>>> a1dcc87ae
 }
 
 if (failures.length > 0) {
