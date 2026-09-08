@@ -126,11 +126,7 @@ scripts
 !backend/scripts/
 !backend/scripts/resolve-version.sh
 !frontend/scripts/
-<<<<<<< HEAD
 !frontend/scripts/**
-=======
-!frontend/scripts/check-color-contrast.mjs
->>>>>>> a1dcc87ae
 .code-review-state
 #openspec/
 code-reviews/

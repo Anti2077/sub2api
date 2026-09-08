@@ -394,7 +394,7 @@
                 "
                 :disabled="duplicatingGroupIds.has(row.id)"
                 @click="handleDuplicate(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-dark-200 dark:hover:bg-dark-700 dark:hover:text-primary-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-50 dark:text-dark-200 dark:hover:bg-dark-700 dark:hover:text-primary-100"
               >
                 <Icon name="copy" size="sm" />
                 <span class="text-xs">
@@ -409,7 +409,7 @@
                 v-if="!authStore.isSimpleMode && row.platform === 'composite'"
                 data-testid="group-composite-routes"
                 @click="handleCompositeRoutes(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-cyan-700 dark:text-dark-200 dark:hover:bg-dark-700 dark:hover:text-cyan-400"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-cyan-700 dark:text-dark-200 dark:hover:bg-dark-700 dark:hover:text-cyan-100"
               >
                 <Icon name="swap" size="sm" />
                 <span class="text-xs">{{
@@ -420,7 +420,7 @@
                 v-if="!authStore.isSimpleMode"
                 data-testid="group-rate-multipliers"
                 @click="handleRateMultipliers(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-purple-700 dark:text-dark-200 dark:hover:bg-dark-700 dark:hover:text-purple-300"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-purple-700 dark:text-dark-200 dark:hover:bg-dark-700 dark:hover:text-purple-100"
               >
                 <Icon name="dollar" size="sm" />
                 <span class="text-xs">{{
@@ -431,7 +431,7 @@
                 v-if="!authStore.isSimpleMode"
                 data-testid="group-rpm-overrides"
                 @click="handleRPMOverrides(row)"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-orange-700 dark:text-dark-200 dark:hover:bg-dark-700 dark:hover:text-orange-300"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-700 transition-colors hover:bg-gray-100 hover:text-orange-700 dark:text-dark-200 dark:hover:bg-dark-700 dark:hover:text-orange-100"
               >
                 <Icon name="bolt" size="sm" />
                 <span class="text-xs">{{
