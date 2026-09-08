@@ -119,11 +119,28 @@
                   :class="item.is_current_user ? 'bg-accent-100/70 dark:bg-primary-950/30' : ''"
                 >
                   <td class="px-5 py-3"><RankBadge :rank="item.rank" /></td>
-                  <td class="px-5 py-3 font-semibold text-gray-800 dark:text-gray-100">
-                    <span>{{ item.is_anonymous ? t('leaderboard.anonymousUser') : item.username }}</span>
-                    <span v-if="item.is_current_user" class="ml-2 rounded bg-primary-100 px-1.5 py-0.5 text-xs text-primary-700 dark:bg-primary-900/60 dark:text-primary-300">
-                      {{ t('leaderboard.currentUser') }}
-                    </span>
+                  <td class="px-5 py-3">
+                    <div class="flex min-w-0 items-center gap-3">
+                      <div class="flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-full bg-primary-100 text-sm font-bold text-primary-700 ring-1 ring-primary-500/15 dark:bg-primary-900/50 dark:text-primary-200" aria-hidden="true">
+                        <img
+                          v-if="avatarURL(item)"
+                          data-testid="leaderboard-avatar-image"
+                          :src="avatarURL(item)"
+                          alt=""
+                          class="h-full w-full object-cover"
+                          loading="lazy"
+                          decoding="async"
+                          @error="markAvatarFailed(item)"
+                        >
+                        <span v-else data-testid="leaderboard-avatar-fallback">{{ avatarInitial(item) }}</span>
+                      </div>
+                      <div class="min-w-0 font-semibold text-gray-800 dark:text-gray-100">
+                        <span>{{ item.is_anonymous ? t('leaderboard.anonymousUser') : item.username }}</span>
+                        <span v-if="item.is_current_user" class="ml-2 rounded bg-primary-100 px-1.5 py-0.5 text-xs text-primary-700 dark:bg-primary-900/60 dark:text-primary-300">
+                          {{ t('leaderboard.currentUser') }}
+                        </span>
+                      </div>
+                    </div>
                   </td>
                   <td class="px-4 py-3 text-right text-gray-600 dark:text-dark-200" :title="formatExact(item.requests)">{{ formatCompact(item.requests) }}</td>
                   <td class="px-4 py-3 text-right text-gray-600 dark:text-dark-200" :title="formatExact(item.input_tokens)">{{ formatCompact(item.input_tokens) }}</td>
@@ -144,6 +161,19 @@
             >
               <div class="flex items-center gap-3">
                 <RankBadge :rank="item.rank" />
+                <div class="flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-full bg-primary-100 text-sm font-bold text-primary-700 ring-1 ring-primary-500/15 dark:bg-primary-900/50 dark:text-primary-200" aria-hidden="true">
+                  <img
+                    v-if="avatarURL(item)"
+                    data-testid="leaderboard-avatar-image"
+                    :src="avatarURL(item)"
+                    alt=""
+                    class="h-full w-full object-cover"
+                    loading="lazy"
+                    decoding="async"
+                    @error="markAvatarFailed(item)"
+                  >
+                  <span v-else data-testid="leaderboard-avatar-fallback">{{ avatarInitial(item) }}</span>
+                </div>
                 <div class="min-w-0 flex-1">
                   <p class="truncate font-semibold text-gray-900 dark:text-white">{{ item.is_anonymous ? t('leaderboard.anonymousUser') : item.username }}</p>
                   <p v-if="item.is_current_user" class="mt-0.5 text-xs font-medium text-primary-600 dark:text-primary-300">{{ t('leaderboard.currentUser') }}</p>
@@ -187,6 +217,7 @@ const startDate = ref('')
 const endDate = ref('')
 const loading = ref(false)
 const error = ref(false)
+const failedAvatarURLs = ref(new Set<string>())
 let requestSequence = 0
 
 const periodOptions = computed(() => ([
@@ -226,6 +257,23 @@ const formatMoney = (value: number) => moneyFormatter.value.format(value || 0)
 const formatRankingValue = (item: PublicTokenRankingItem) => isSpendingRanking.value
   ? formatMoney(item.actual_cost)
   : formatCompact(item.total_tokens)
+
+function avatarURL(item: PublicTokenRankingItem): string {
+  if (item.is_anonymous) return ''
+  const url = item.avatar_url?.trim() || ''
+  return url && !failedAvatarURLs.value.has(url) ? url : ''
+}
+
+function avatarInitial(item: PublicTokenRankingItem): string {
+  const label = item.is_anonymous ? t('leaderboard.anonymousUser') : item.username
+  return Array.from(label.trim())[0]?.toLocaleUpperCase(locale.value) || 'U'
+}
+
+function markAvatarFailed(item: PublicTokenRankingItem) {
+  const url = item.avatar_url?.trim()
+  if (!url) return
+  failedAvatarURLs.value = new Set([...failedAvatarURLs.value, url])
+}
 
 const RankBadge = defineComponent({
   props: { rank: { type: Number, required: true } },

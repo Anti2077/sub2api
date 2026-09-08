@@ -195,6 +195,12 @@ type RegistrationEmailDomainRepository interface {
 	CreateWithEmailAliasGuardAndDomainLimit(ctx context.Context, user *User, domain string) error
 }
 
+// UserAvatarBatchRepository is an optional capability used by read-heavy
+// surfaces that need avatars for a bounded set of users without N+1 queries.
+type UserAvatarBatchRepository interface {
+	GetUserAvatarURLs(ctx context.Context, userIDs []int64) (map[int64]string, error)
+}
+
 // RedeemUserAdjustmentRepository provides the atomic, floor-at-zero updates
 // used by negative-value redeem codes. It is intentionally narrower than
 // UserRepository because normal usage billing is allowed to overdraw.

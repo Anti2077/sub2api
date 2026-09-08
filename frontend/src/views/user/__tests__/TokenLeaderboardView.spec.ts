@@ -32,6 +32,7 @@ const response = {
   ranking: [{
     rank: 1,
     username: 'alice',
+    avatar_url: 'https://cdn.example.com/alice.png',
     is_anonymous: false,
     requests: 12,
     input_tokens: 100,
@@ -71,6 +72,32 @@ describe('TokenLeaderboardView', () => {
     expect(wrapper.text()).toContain('alice')
     expect(wrapper.text()).toContain('2026-09-01 to 2026-09-01')
     expect(wrapper.text()).not.toContain('@example.com')
+    expect(wrapper.findAll('[data-testid="leaderboard-avatar-image"]')).toHaveLength(2)
+    expect(wrapper.get('[data-testid="leaderboard-avatar-image"]').attributes('src')).toBe('https://cdn.example.com/alice.png')
+  })
+
+  it('uses a stable initial fallback when an avatar cannot be loaded', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="leaderboard-avatar-image"]').trigger('error')
+
+    expect(wrapper.findAll('[data-testid="leaderboard-avatar-image"]')).toHaveLength(0)
+    expect(wrapper.findAll('[data-testid="leaderboard-avatar-fallback"]')).toHaveLength(2)
+    expect(wrapper.get('[data-testid="leaderboard-avatar-fallback"]').text()).toBe('A')
+  })
+
+  it('never renders an avatar URL for an anonymous ranking entry', async () => {
+    getPublicTokenLeaderboard.mockResolvedValue({
+      ...response,
+      ranking: [{ ...response.ranking[0], username: '', is_anonymous: true }]
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="leaderboard-avatar-image"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-testid="leaderboard-avatar-fallback"]')).toHaveLength(2)
   })
 
   it('loads a new range when the weekly tab is selected', async () => {
