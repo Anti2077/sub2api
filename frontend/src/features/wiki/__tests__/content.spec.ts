@@ -26,6 +26,10 @@ describe('Wiki content registry', () => {
     expect(searchWikiArticles('充值 渠道状态').map((article) => article.slug)).toContain('daily-use')
   })
 
+  it('finds the direct-routing guide by proxy client and direct-route terms', () => {
+    expect(searchWikiArticles('Shadowrocket DIRECT').map((article) => article.slug)).toContain('proxy-direct-routing')
+  })
+
   it('rejects duplicate paths and incomplete verified metadata', () => {
     const duplicate = { ...wikiArticles[0], lastVerified: null } as WikiArticle
     expect(validateWikiArticles([wikiArticles[0], duplicate])).toEqual([

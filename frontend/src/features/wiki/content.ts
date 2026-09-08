@@ -5,6 +5,7 @@ import dailyUseSource from '@/content/wiki/zh/getting-started/daily-use.md?raw'
 import firstRequestSource from '@/content/wiki/zh/getting-started/first-request.md?raw'
 import grokBuildSource from '@/content/wiki/zh/clients/grok-build.md?raw'
 import openMinisSource from '@/content/wiki/zh/clients/open-minis.md?raw'
+import proxyDirectRoutingSource from '@/content/wiki/zh/troubleshooting/proxy-direct-routing.md?raw'
 import requestErrorsSource from '@/content/wiki/zh/troubleshooting/request-errors.md?raw'
 
 export type WikiSectionId = 'getting-started' | 'clients' | 'troubleshooting'
@@ -147,6 +148,18 @@ export const wikiArticles: readonly WikiArticle[] = [
     lastVerified: '2026-09-03',
     verifiedWith: 'Sub2API 网关路由与错误处理',
     source: requestErrorsSource,
+  },
+  {
+    slug: 'proxy-direct-routing',
+    section: 'troubleshooting',
+    title: '网站无法访问：让 anti2077.xyz 走直连',
+    summary: '在 Clash Verge Rev、Shadowrocket、Surge、Stash 或 sing-box 中，让本站根域名及其子域名不经过代理。',
+    order: 20,
+    tags: ['代理', '直连', 'DIRECT', 'Clash Verge Rev', 'Shadowrocket', 'Surge', 'Stash', 'sing-box', 'DNS', '超时'],
+    status: 'verified',
+    lastVerified: '2026-09-08',
+    verifiedWith: 'Clash/Mihomo、Surge 与 sing-box 域名路由规则语义；本站前置域名',
+    source: proxyDirectRoutingSource,
   },
 ]
 

@@ -14,6 +14,7 @@ should not appear before a new user can complete a first request.
 | Clients | 使用 CC Switch 接入 Claude Code | Reader imports a Claude provider and verifies a real Messages API request | P0 |
 | Clients | 使用 CC Switch 接入 Grok Build | Reader installs the open-source agent, imports a Grok provider, and verifies models and a real request | P0 |
 | Troubleshooting | 请求失败时先看这里 | Reader distinguishes key, endpoint, model, quota, and network failures | P0 |
+| Troubleshooting | 网站无法访问：让 anti2077.xyz 走直连 | Reader adds a local direct-routing rule for the site domain and all subdomains without changing global proxy behavior | P0 |
 | Getting started | 第一次 OpenAI 兼容请求 | Reader validates the service independently of a GUI client | P1 |
 | Getting started | 本站用户日常使用指南 | Reader can recharge through the administrator, inspect usage records, and check channel availability and status | P1 |
 | Getting started | 模型、分组与倍率 | Reader understands model access and billing without administrator details | P1 |
