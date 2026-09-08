@@ -39,6 +39,8 @@ export default {
     none: '无',
     selectAll: '全选',
     noData: '暂无数据',
+    dragToReorder: '拖拽调整列顺序',
+    columnAlwaysVisible: '该列固定显示，不可隐藏',
     expand: '展开',
     collapse: '收起',
     success: '成功',

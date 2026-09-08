@@ -182,7 +182,9 @@ const allColumns = computed<Column[]>(() => [
 
 const columns = computed<Column[]>(() =>
   props.visibleColumnKeys
-    ? allColumns.value.filter((c) => props.visibleColumnKeys!.includes(c.key))
+    ? props.visibleColumnKeys
+      .map((key) => allColumns.value.find((column) => column.key === key))
+      .filter((column): column is Column => !!column)
     : allColumns.value
 )
 

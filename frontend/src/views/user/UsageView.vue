@@ -132,34 +132,17 @@
             <button type="button" @click="resetFilters" class="btn btn-secondary">
               {{ t('common.reset') }}
             </button>
-            <div class="relative" ref="columnDropdownRef">
-              <button
-                type="button"
-                data-testid="usage-column-settings"
-                @click="showColumnDropdown = !showColumnDropdown"
-                class="btn btn-secondary px-2 md:px-3"
-                :title="t('admin.users.columnSettings')"
-              >
-                <Icon name="grid" size="sm" />
-                <span class="hidden md:inline">{{ t('admin.users.columnSettings') }}</span>
-              </button>
-              <div
-                v-if="showColumnDropdown"
-                class="absolute right-0 top-full z-50 mt-1 max-h-80 w-48 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-dark-600 dark:bg-dark-800"
-              >
-                <button
-                  v-for="col in currentToggleableColumns"
-                  :key="col.key"
-                  type="button"
-                  :data-testid="`usage-column-toggle-${col.key}`"
-                  @click="toggleCurrentColumn(col.key)"
-                  class="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-700"
-                >
-                  <span>{{ col.label }}</span>
-                  <Icon v-if="isCurrentColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />
-                </button>
-              </div>
-            </div>
+            <ColumnSettingsDropdown
+              :columns="currentColumnDefinitions"
+              :order="currentColumnOrder"
+              :hidden-keys="currentHiddenColumnKeys"
+              :always-visible-keys="currentAlwaysVisibleKeys"
+              :title="t('admin.users.columnSettings')"
+              :button-label="t('admin.users.columnSettings')"
+              data-testid="usage-column-settings"
+              @update:order="updateCurrentColumnOrder"
+              @toggle-column="toggleCurrentColumn"
+            />
             <button v-if="activeTab !== 'errors'" type="button" @click="exportToCSV" :disabled="exporting" class="btn btn-primary">
               {{ exporting ? t('usage.exporting') : t('usage.exportCsv') }}
             </button>
@@ -229,11 +212,11 @@ import Select, { type SelectOption } from '@/components/common/Select.vue'
 import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'
+import ColumnSettingsDropdown from '@/components/common/ColumnSettingsDropdown.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
-import Icon from '@/components/icons/Icon.vue'
 import UserErrorRequestsTable from '@/components/user/UserErrorRequestsTable.vue'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
@@ -726,15 +709,46 @@ const allColumns = computed<Column[]>(() => [
 ])
 
 const hiddenColumns = reactive<Set<string>>(new Set())
-const toggleableColumns = computed(() => allColumns.value.filter((col) => !ALWAYS_VISIBLE.includes(col.key)))
+const columnOrder = ref<string[]>([])
+const COLUMN_ORDER_KEY = 'user-usage-column-order'
+const orderColumns = (columns: Column[], order: string[]) => {
+  const byKey = new Map(columns.map((column) => [column.key, column]))
+  const seen = new Set<string>()
+  const ordered: Column[] = []
+  for (const key of order) {
+    const column = byKey.get(key)
+    if (column && !seen.has(key)) {
+      seen.add(key)
+      ordered.push(column)
+    }
+  }
+  for (const column of columns) {
+    if (!seen.has(column.key)) ordered.push(column)
+  }
+  return ordered
+}
+const normalizeColumnOrder = (order: string[], columns: Column[]) => orderColumns(columns, order).map((column) => column.key)
 const visibleColumns = computed(() =>
-  allColumns.value.filter((col) => ALWAYS_VISIBLE.includes(col.key) || !hiddenColumns.has(col.key))
+  orderColumns(allColumns.value, columnOrder.value).filter((col) => ALWAYS_VISIBLE.includes(col.key) || !hiddenColumns.has(col.key))
 )
-const isColumnVisible = (key: string) => !hiddenColumns.has(key)
 const toggleColumn = (key: string) => {
   if (hiddenColumns.has(key)) hiddenColumns.delete(key)
   else hiddenColumns.add(key)
   localStorage.setItem(HIDDEN_COLUMNS_KEY, JSON.stringify([...hiddenColumns]))
+}
+const saveColumnOrder = (key: string, order: string[], columns: Column[]) => {
+  const normalized = normalizeColumnOrder(order, columns)
+  localStorage.setItem(key, JSON.stringify(normalized))
+  return normalized
+}
+const loadColumnOrder = (key: string, columns: Column[]) => {
+  try {
+    const saved = localStorage.getItem(key)
+    const parsed = saved ? JSON.parse(saved) : []
+    return normalizeColumnOrder(Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : [], columns)
+  } catch {
+    return columns.map((column) => column.key)
+  }
 }
 const loadSavedColumns = () => {
   try {
@@ -768,15 +782,13 @@ const errAllColumns = computed<Column[]>(() => [
 ])
 
 const errHiddenColumns = reactive<Set<string>>(new Set())
-const errToggleableColumns = computed(() =>
-  errAllColumns.value.filter((col) => !ERR_ALWAYS_VISIBLE.includes(col.key))
-)
+const errColumnOrder = ref<string[]>([])
+const ERR_COLUMN_ORDER_KEY = 'user-usage-error-column-order'
 const errVisibleColumnKeys = computed(() =>
-  errAllColumns.value
+  orderColumns(errAllColumns.value, errColumnOrder.value)
     .filter((col) => ERR_ALWAYS_VISIBLE.includes(col.key) || !errHiddenColumns.has(col.key))
     .map((col) => col.key)
 )
-const isErrColumnVisible = (key: string) => !errHiddenColumns.has(key)
 const toggleErrColumn = (key: string) => {
   if (errHiddenColumns.has(key)) errHiddenColumns.delete(key)
   else errHiddenColumns.add(key)
@@ -792,23 +804,20 @@ const loadSavedErrColumns = () => {
   }
 }
 
-// 列设置下拉按当前 tab 分发
-const currentToggleableColumns = computed(() =>
-  activeTab.value === 'errors' ? errToggleableColumns.value : toggleableColumns.value
-)
-const isCurrentColumnVisible = (key: string) =>
-  activeTab.value === 'errors' ? isErrColumnVisible(key) : isColumnVisible(key)
+const currentColumnDefinitions = computed(() => activeTab.value === 'errors' ? errAllColumns.value : allColumns.value)
+const currentColumnOrder = computed(() => activeTab.value === 'errors' ? errColumnOrder.value : columnOrder.value)
+const currentHiddenColumnKeys = computed(() => activeTab.value === 'errors' ? [...errHiddenColumns] : [...hiddenColumns])
+const currentAlwaysVisibleKeys = computed(() => activeTab.value === 'errors' ? ERR_ALWAYS_VISIBLE : ALWAYS_VISIBLE)
+const updateCurrentColumnOrder = (order: string[]) => {
+  if (activeTab.value === 'errors') {
+    errColumnOrder.value = saveColumnOrder(ERR_COLUMN_ORDER_KEY, order, errAllColumns.value)
+  } else {
+    columnOrder.value = saveColumnOrder(COLUMN_ORDER_KEY, order, allColumns.value)
+  }
+}
 const toggleCurrentColumn = (key: string) => {
   if (activeTab.value === 'errors') toggleErrColumn(key)
   else toggleColumn(key)
-}
-
-const showColumnDropdown = ref(false)
-const columnDropdownRef = ref<HTMLElement | null>(null)
-const handleColumnClickOutside = (event: MouseEvent) => {
-  if (columnDropdownRef.value && !columnDropdownRef.value.contains(event.target as HTMLElement)) {
-    showColumnDropdown.value = false
-  }
 }
 
 const loadApiKeys = async () => {
@@ -896,14 +905,14 @@ const switchToErrors = () => {
 onMounted(() => {
   loadSavedColumns()
   loadSavedErrColumns()
-  document.addEventListener('click', handleColumnClickOutside)
+  columnOrder.value = loadColumnOrder(COLUMN_ORDER_KEY, allColumns.value)
+  errColumnOrder.value = loadColumnOrder(ERR_COLUMN_ORDER_KEY, errAllColumns.value)
   void loadFilterOptions()
   refreshData()
 })
 
 onUnmounted(() => {
   abortController?.abort()
-  document.removeEventListener('click', handleColumnClickOutside)
 })
 
 watch(endpointDistributionSource, () => {

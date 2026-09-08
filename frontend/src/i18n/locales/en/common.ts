@@ -39,6 +39,8 @@ export default {
     none: 'None',
     selectAll: 'Select all',
     noData: 'No data',
+    dragToReorder: 'Drag to reorder columns',
+    columnAlwaysVisible: 'This column is always visible',
     expand: 'Expand',
     collapse: 'Collapse',
     success: 'Success',
