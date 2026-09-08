@@ -1,6 +1,7 @@
 export default {
     // Dashboard
     dashboard: {
+      todaySpend: {"title": "Today’s spending", "window": "Since 00:00 in the server time zone, independent of the trend date filter below.", "actual": "Actual charges", "actualHelp": "Total actual user charges recorded today.", "cost": "Upstream cost", "costHelp": "Upstream cost based on recorded account costs and cost multipliers.", "updating": "Statistics updating"},
       title: 'Admin Dashboard',
       description: 'System overview and real-time statistics',
       apiKeys: 'API Keys',

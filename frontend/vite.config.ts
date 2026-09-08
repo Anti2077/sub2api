@@ -160,6 +160,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         '/api': {
           target: backendUrl,
+          ws: true,
           changeOrigin: true
         },
         '/v1': {

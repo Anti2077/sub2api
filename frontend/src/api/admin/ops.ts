@@ -466,6 +466,7 @@ export interface OpsRoutingEvent {
   client_request_id?: string
   route_key: string
   turn?: number
+  user_id?: number
   user_label?: string
   requested_model?: string
   upstream_model?: string

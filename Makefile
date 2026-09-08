@@ -1,6 +1,11 @@
 .PHONY: build build-backend build-frontend test test-backend test-frontend test-frontend-critical
 
 FRONTEND_CRITICAL_VITEST := \
+	src/components/admin/dashboard/__tests__/TodaySpendCard.spec.ts \
+	src/views/admin/__tests__/DashboardView.spec.ts \
+	src/views/admin/ops/utils/__tests__/routingMonitor.spec.ts \
+	src/views/admin/ops/utils/__tests__/routingGraph.spec.ts \
+	src/views/admin/ops/components/__tests__/OpsRoutingMonitor.spec.ts \
 	src/i18n/__tests__/localeKeyCompleteness.spec.ts \
 	src/api/__tests__/client.spec.ts \
 	src/api/__tests__/tokenRefresh.spec.ts \

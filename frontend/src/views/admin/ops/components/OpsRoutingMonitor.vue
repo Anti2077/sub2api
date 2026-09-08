@@ -1,284 +1,191 @@
 <template>
-  <section class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-900">
-    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-4 dark:border-dark-700">
-      <div>
-        <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.routingMonitor.title') }}</h2>
-        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.routingMonitor.description') }}</p>
+  <section class="routing-monitor space-y-4" :aria-label="t(`${prefix}.title`)">
+    <div class="routing-panel flex flex-wrap items-start justify-between gap-4 p-5">
+      <div class="max-w-2xl">
+        <h2 v-if="showHeading !== false" class="text-lg font-semibold text-gray-900 dark:text-white">{{ t(`${prefix}.title`) }}</h2>
+        <p v-if="showHeading !== false" class="mt-2 text-sm text-gray-600 dark:text-gray-300">{{ t(`${prefix}.description`) }}</p>
+        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ t(`${prefix}.lastUpdated`) }} {{ updatedAt ? new Date(updatedAt).toLocaleTimeString() : '—' }}</p>
       </div>
-      <div class="flex items-center gap-2 text-xs">
-        <span class="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-600 dark:bg-dark-800 dark:text-gray-300">
-          <span class="h-2 w-2 rounded-full" :class="statusDotClass" />
-          {{ statusLabel }}
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="routing-status" role="status">
+          <span class="h-2 w-2 rounded-full" :class="status === 'connected' ? 'bg-emerald-500' : 'bg-amber-500'" />
+          {{ t(`${prefix}.status.${status}`) }}
         </span>
-        <button type="button" class="rounded-lg border border-gray-200 px-3 py-1.5 font-medium text-gray-700 hover:bg-gray-50 dark:border-dark-600 dark:text-gray-200 dark:hover:bg-dark-800" @click="loadSnapshot">
-          {{ t('admin.ops.routingMonitor.refresh') }}
-        </button>
+        <button type="button" class="routing-button" :aria-pressed="paused" @click="togglePause">{{ t(`${prefix}.${paused ? 'resume' : 'pause'}`) }}</button>
+        <button type="button" class="routing-button" :disabled="refreshing || disabled" @click="refresh">{{ t(`${prefix}.${refreshing ? 'refreshing' : 'refresh'}`) }}</button>
       </div>
     </div>
 
-    <div v-if="connectionStatus === 'closed' && fatalDisabled" class="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-      {{ t('admin.ops.routingMonitor.disabled') }}
-    </div>
-    <div v-else-if="loadError" class="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
-      {{ t('admin.ops.routingMonitor.loadFailed') }}
+    <p v-if="disabled || loadError || paused" class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200" role="status">
+      {{ t(`${prefix}.${disabled ? 'disabled' : loadError ? 'loadFailed' : 'pausedHint'}`) }}
+    </p>
+
+    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div v-for="metric in metrics" :key="metric.key" class="routing-panel px-5 py-4">
+        <div class="text-xs font-medium text-gray-600 dark:text-gray-300">{{ t(`${prefix}.metrics.${metric.key}`) }}</div>
+        <div class="mt-1 text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">{{ metric.value }}</div>
+      </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-3 border-b border-gray-200 p-4 md:grid-cols-4 dark:border-dark-700">
-      <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
-        {{ t('admin.ops.routingMonitor.filters.platform') }}
-        <input v-model="filters.platform" class="mt-1 w-full rounded-lg border-gray-300 bg-white text-sm dark:border-dark-600 dark:bg-dark-800 dark:text-white" :placeholder="t('admin.ops.routingMonitor.filters.all')" />
-      </label>
-      <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
-        {{ t('admin.ops.routingMonitor.filters.user') }}
-        <input v-model="filters.user" class="mt-1 w-full rounded-lg border-gray-300 bg-white text-sm dark:border-dark-600 dark:bg-dark-800 dark:text-white" />
-      </label>
-      <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
-        {{ t('admin.ops.routingMonitor.filters.requestedModel') }}
-        <input v-model="filters.requestedModel" class="mt-1 w-full rounded-lg border-gray-300 bg-white text-sm dark:border-dark-600 dark:bg-dark-800 dark:text-white" />
-      </label>
-      <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
-        {{ t('admin.ops.routingMonitor.filters.account') }}
-        <input v-model="filters.account" class="mt-1 w-full rounded-lg border-gray-300 bg-white text-sm dark:border-dark-600 dark:bg-dark-800 dark:text-white" />
+    <div class="routing-panel grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+      <label v-for="filter in filterKeys" :key="filter" class="text-xs font-medium text-gray-600 dark:text-gray-300">
+        {{ t(`${prefix}.filters.${filter}`) }}
+        <input v-model="filters[filter]" class="input mt-1 w-full" :placeholder="t(`${prefix}.filters.all`)" type="search" />
       </label>
     </div>
 
-    <div v-if="!hasEvents" class="flex min-h-[360px] flex-col items-center justify-center px-6 text-center text-sm text-gray-500 dark:text-gray-400">
-      <span class="mb-3 text-3xl text-gray-300 dark:text-dark-500">&#8594;</span>
-      <p>{{ connectionStatus === 'connecting' || connectionStatus === 'reconnecting' ? t('admin.ops.routingMonitor.waiting') : t('admin.ops.routingMonitor.empty') }}</p>
+    <div v-if="!routes.length" class="routing-panel px-6 py-16 text-center" role="status">
+      <p class="text-sm text-gray-600 dark:text-gray-300">{{ t(`${prefix}.${hasFilters ? 'noMatches' : status === 'connecting' ? 'waiting' : 'empty'}`) }}</p>
+      <button v-if="hasFilters" type="button" class="routing-button mt-4" @click="clearFilters">{{ t(`${prefix}.clearFilters`) }}</button>
     </div>
     <template v-else>
-      <div class="overflow-x-auto p-4">
-        <svg viewBox="0 0 1000 460" class="min-w-[760px] w-full" role="img" :aria-label="t('admin.ops.routingMonitor.graphLabel')">
-          <text x="36" y="24" class="fill-gray-500 text-[13px]">{{ t('admin.ops.routingMonitor.columns.user') }}</text>
-          <text x="405" y="24" class="fill-gray-500 text-[13px]">{{ t('admin.ops.routingMonitor.columns.requestedModel') }}</text>
-          <text x="755" y="24" class="fill-gray-500 text-[13px]">{{ t('admin.ops.routingMonitor.columns.account') }}</text>
-          <g v-for="edge in graphEdges" :key="edge.key" class="cursor-pointer" @click="selectRoute(edge.route)">
-            <path :d="edge.path" fill="none" :stroke="edge.route.failed ? '#ef4444' : edge.route.active ? '#0ea5e9' : '#94a3b8'" :stroke-width="edge.width" stroke-linecap="round" stroke-opacity="0.65" />
-          </g>
-          <g v-for="node in graphNodes" :key="node.key" class="cursor-pointer" @click="selectNode(node)">
-            <rect :x="node.x" :y="node.y" :width="node.width" height="38" rx="7" :class="nodeClass(node)" />
-            <text :x="node.x + 12" :y="node.y + 24" class="pointer-events-none fill-gray-800 text-[12px] dark:fill-gray-100">{{ truncate(node.label, node.type === 'user' ? 25 : 27) }}</text>
-            <text v-if="node.count > 1" :x="node.x + node.width - 12" :y="node.y + 24" text-anchor="end" class="pointer-events-none fill-gray-500 text-[11px]">{{ node.count }}</text>
-          </g>
-        </svg>
-      </div>
-      <div class="flex items-center justify-between border-t border-gray-200 px-4 py-3 text-xs text-gray-500 dark:border-dark-700 dark:text-gray-400">
-        <span>{{ t('admin.ops.routingMonitor.routeCount', { count: graphRoutes.length }) }}</span>
-        <button v-if="graphRoutes.length > 10" type="button" class="font-semibold text-primary-600 hover:text-primary-700 dark:text-primary-400" @click="showAll = !showAll">
-          {{ showAll ? t('admin.ops.routingMonitor.top10') : t('admin.ops.routingMonitor.viewAll') }}
-        </button>
-      </div>
-      <div v-if="showAll" class="max-h-[420px] overflow-y-auto border-t border-gray-200 dark:border-dark-700">
-        <button v-for="route in graphRoutes" :key="`list-${route.key}`" type="button" class="flex w-full items-center justify-between border-b border-gray-100 px-4 py-3 text-left text-xs hover:bg-gray-50 dark:border-dark-800 dark:hover:bg-dark-800" @click="selectRoute(route)">
-          <span class="min-w-0 truncate text-gray-700 dark:text-gray-200">{{ route.user }} → {{ route.requestedModel }} → {{ route.accountPath }}</span>
-          <span class="ml-3 shrink-0 text-gray-500">{{ route.count }}</span>
-        </button>
-      </div>
-    </template>
-
-    <div v-if="selectedRoute" class="border-t border-gray-200 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-950/50">
-      <div class="mb-3 flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.routingMonitor.details') }}</h3>
-        <button type="button" class="text-gray-400 hover:text-gray-700 dark:hover:text-white" :aria-label="t('admin.ops.routingMonitor.close')" @click="selectedRoute = null">×</button>
-      </div>
-      <div class="grid grid-cols-1 gap-2 text-xs text-gray-600 sm:grid-cols-2 dark:text-gray-300">
-        <div><span class="text-gray-400">{{ t('admin.ops.routingMonitor.detail.status') }}:</span> {{ selectedRoute.status }}</div>
-        <div><span class="text-gray-400">{{ t('admin.ops.routingMonitor.detail.duration') }}:</span> {{ formatDuration(selectedRoute.durationMs) }}</div>
-        <div><span class="text-gray-400">{{ t('admin.ops.routingMonitor.detail.time') }}:</span> {{ formatTime(selectedRoute.occurredAt) }}</div>
-        <div class="truncate"><span class="text-gray-400">{{ t('admin.ops.routingMonitor.detail.requestId') }}:</span> {{ selectedRoute.requestId || selectedRoute.clientRequestId || '—' }}</div>
-        <div><span class="text-gray-400">{{ t('admin.ops.routingMonitor.detail.requestedModel') }}:</span> {{ selectedRoute.requestedModel || '—' }}</div>
-        <div><span class="text-gray-400">{{ t('admin.ops.routingMonitor.detail.upstreamModel') }}:</span> {{ selectedRoute.upstreamModel || '—' }}</div>
-      </div>
-      <div class="mt-3 text-xs text-gray-600 dark:text-gray-300">
-        <span class="text-gray-400">{{ t('admin.ops.routingMonitor.detail.hops') }}:</span>
-        {{ selectedRoute.hops.map((hop) => hop.account_name || `#${hop.account_id}`).join(' → ') || '—' }}
-      </div>
-      <p v-if="selectedRoute.errorSummary" class="mt-2 text-xs text-red-600 dark:text-red-300">{{ selectedRoute.errorSummary }}</p>
-      <div class="mt-4">
-        <div class="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.ops.routingMonitor.detail.requestList') }}</div>
-        <div class="max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-900">
-          <div v-for="request in selectedRoute.requests" :key="`${request.route_key}-${request.event_id}`" class="grid grid-cols-1 gap-1 border-b border-gray-100 px-3 py-2 text-xs last:border-b-0 sm:grid-cols-[1fr_auto_auto] sm:items-center dark:border-dark-800">
-            <span class="truncate text-gray-700 dark:text-gray-200">{{ request.request_id || request.client_request_id || '—' }}</span>
-            <span :class="request.event_type === 'failed' ? 'text-red-600 dark:text-red-300' : request.status === 'active' ? 'text-sky-600 dark:text-sky-300' : 'text-emerald-600 dark:text-emerald-300'">{{ request.status }}</span>
-            <span class="text-gray-500 dark:text-gray-400">{{ formatDuration(request.duration_ms || 0) }} · {{ formatTime(request.occurred_at) }}</span>
+      <div class="routing-panel hidden overflow-hidden md:block">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-dark-700">
+          <div>
+            <h3 class="font-semibold text-gray-900 dark:text-white">{{ t(`${prefix}.graphTitle`) }}</h3>
+            <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">{{ t(`${prefix}.graphHint`) }}</p>
           </div>
+          <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+            {{ t(`${prefix}.graphLimit`) }}
+            <select v-model.number="graphLimit" class="input w-auto py-2"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option></select>
+          </label>
+        </div>
+        <div class="max-h-[620px] overflow-auto p-3" tabindex="0" :aria-label="t(`${prefix}.graphLabel`)">
+          <svg :viewBox="`0 0 ${graph.width} ${graph.height}`" class="block w-full min-w-[1024px]" role="group" :aria-label="t(`${prefix}.graphLabel`)">
+            <text v-for="column in columns" :key="column.key" :x="column.x" y="32" class="fill-gray-600 text-[15px] font-semibold dark:fill-gray-300">{{ t(`${prefix}.columns.${column.key}`) }}</text>
+            <g v-for="edge in graph.edges" :key="edge.key" role="button" tabindex="0" class="routing-edge" :class="{ 'is-dimmed': hasSelection && !edgeHighlighted(edge), 'is-highlighted': edgeHighlighted(edge) }" :aria-label="`${edge.source.label} → ${edge.target.label}: ${edge.count}`" :aria-pressed="focus?.kind === 'edge' && focus.key === edge.key" @click="selectFocus('edge', edge.key)" @keydown.enter.prevent="selectFocus('edge', edge.key)" @keydown.space.prevent="selectFocus('edge', edge.key)">
+              <title>{{ edge.source.label }} → {{ edge.target.label }} · {{ edge.count }}</title>
+              <path :d="edge.path" class="routing-edge-hit" />
+              <path :d="edge.path" class="routing-edge-line" :class="{ 'is-active': edge.active > 0 }" :stroke-width="Math.min(7, 2 + Math.sqrt(edge.count))" />
+              <path :d="`M ${edge.target.x - 7} ${edge.target.y + edge.target.height / 2 - 4} l 7 4 l -7 4`" class="routing-arrow" />
+            </g>
+            <g v-for="node in graph.nodes" :key="node.key" role="button" tabindex="0" class="routing-node" :class="[`routing-node-${node.type}`, { 'is-dimmed': hasSelection && !nodeHighlighted(node), 'is-highlighted': nodeHighlighted(node) }]" :aria-label="`${node.label}: ${node.count}`" :aria-pressed="focus?.kind === 'node' && focus.key === node.key" @click="selectFocus('node', node.key)" @keydown.enter.prevent="selectFocus('node', node.key)" @keydown.space.prevent="selectFocus('node', node.key)">
+              <title>{{ node.label }} · {{ node.count }}</title>
+              <rect :x="node.x" :y="node.y" :width="node.width" :height="node.height" rx="10" />
+              <foreignObject :x="node.x + 12" :y="node.y" :width="node.width - 24" :height="node.height" class="pointer-events-none">
+                <div class="flex h-full items-center gap-2 text-[15px] text-gray-900 dark:text-gray-100"><span class="min-w-0 flex-1 truncate">{{ node.label }}</span><span class="shrink-0 font-semibold tabular-nums">{{ node.count }}</span></div>
+              </foreignObject>
+            </g>
+          </svg>
+        </div>
+        <div class="border-t border-gray-200 px-5 py-3 text-xs text-gray-600 dark:border-dark-700 dark:text-gray-300">{{ t(`${prefix}.shownRoutes`, { shown: graphRoutes.length, total: routes.length }) }} · {{ t(`${prefix}.edgeHint`) }}</div>
+      </div>
+
+      <div class="routing-panel overflow-hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-dark-700">
+          <div><h3 class="font-semibold text-gray-900 dark:text-white">{{ t(`${prefix}.routeList`) }}</h3><p class="mt-1 text-xs text-gray-600 dark:text-gray-300">{{ t(`${prefix}.routeCount`, { count: listedRoutes.length }) }}</p></div>
+          <button v-if="hasSelection" type="button" class="routing-button" @click="clearSelection">{{ t(`${prefix}.clearSelection`) }}</button>
+        </div>
+        <div class="max-h-[480px] overflow-y-auto">
+          <button v-for="route in listedRoutes" :key="route.key" type="button" class="routing-row" :class="{ 'is-selected': selectedKey === route.key }" :aria-expanded="selectedKey === route.key" @click="selectedKey = selectedKey === route.key ? null : route.key">
+            <span class="grid min-w-0 flex-1 gap-2 text-left md:grid-cols-[1fr_1.2fr_1.2fr]">
+              <span class="min-w-0"><span class="routing-row-label">{{ t(`${prefix}.columns.user`) }}</span><span class="block truncate" :title="route.user">{{ route.user }}</span></span>
+              <span class="min-w-0"><span class="routing-row-label">{{ t(`${prefix}.columns.requestedModel`) }} · {{ route.platform }}</span><span class="block truncate" :title="route.model">{{ route.model }}</span></span>
+              <span class="min-w-0"><span class="routing-row-label">{{ t(`${prefix}.columns.account`) }}</span><span class="block truncate" :title="route.account">{{ route.account }}</span></span>
+            </span>
+            <span class="flex shrink-0 flex-col items-end gap-1 text-xs tabular-nums">
+              <span v-if="route.active" class="font-semibold text-sky-700 dark:text-sky-300">{{ t(`${prefix}.states.active`) }} {{ route.active }}</span>
+              <span v-if="route.failed" class="font-semibold text-red-700 dark:text-red-300">{{ t(`${prefix}.states.failed`) }} {{ route.failed }}</span>
+              <span v-if="route.completed" class="text-emerald-700 dark:text-emerald-300">{{ t(`${prefix}.states.completed`) }} {{ route.completed }}</span>
+            </span>
+          </button>
         </div>
       </div>
-    </div>
+
+      <section v-if="selectedRoute" class="routing-panel overflow-hidden" :aria-label="t(`${prefix}.details`)">
+        <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-dark-700"><h3 class="font-semibold text-gray-900 dark:text-white">{{ t(`${prefix}.details`) }}</h3><button class="routing-button" type="button" @click="selectedKey = null">{{ t(`${prefix}.close`) }}</button></div>
+        <div class="max-h-[540px] overflow-y-auto divide-y divide-gray-200 dark:divide-dark-700">
+          <article v-for="request in selectedRoute.requests" :key="request.route_key" class="space-y-3 p-5 text-sm">
+            <div class="flex flex-wrap items-center justify-between gap-2"><code class="break-all text-xs text-gray-700 dark:text-gray-200">{{ request.request_id || request.client_request_id || request.route_key }}</code><span class="routing-status">{{ t(`${prefix}.states.${routingState(request)}`) }} · {{ request.duration_ms ? `${request.duration_ms.toLocaleString()} ms` : '—' }}</span></div>
+            <dl class="grid gap-2 text-xs text-gray-600 sm:grid-cols-2 dark:text-gray-300">
+              <div><dt class="inline">{{ t(`${prefix}.detail.requestedModel`) }}: </dt><dd class="inline break-all">{{ request.requested_model || '—' }}</dd></div>
+              <div><dt class="inline">{{ t(`${prefix}.detail.upstreamModel`) }}: </dt><dd class="inline break-all">{{ request.upstream_model || '—' }}</dd></div>
+              <div><dt class="inline">{{ t(`${prefix}.detail.time`) }}: </dt><dd class="inline">{{ new Date(request.occurred_at).toLocaleTimeString() }}</dd></div>
+              <div><dt class="inline">{{ t(`${prefix}.attempts`) }}: </dt><dd class="inline">{{ request.attempt_count }}</dd></div>
+            </dl>
+            <div><p class="routing-row-label">{{ t(`${prefix}.detail.hops`) }}</p><ol class="mt-2 flex flex-wrap gap-2"><li v-for="(hop, index) in request.hops" :key="`${index}-${hop.account_id}`" class="rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 dark:border-dark-600 dark:text-gray-200">{{ index + 1 }}. {{ hop.account_name || '—' }} · #{{ hop.account_id }}</li></ol></div>
+            <p v-if="request.error_summary" class="break-words rounded-lg bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-200">{{ request.error_summary }}</p>
+          </article>
+        </div>
+      </section>
+    </template>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { opsAPI, type OpsRoutingEvent, type OpsRoutingSnapshot, type OpsWSStatus } from '@/api/admin/ops'
-import { reduceRoutingEvent, reduceRoutingSnapshot } from '../utils/routingMonitor'
+import { opsAPI, type OpsRoutingEvent } from '@/api/admin/ops'
+import { useRoutingMonitor, type RoutingSource } from '../composables/useRoutingMonitor'
+import { buildRoutingGraph, groupRoutingEvents, routingState, type RoutingEdge, type RoutingNode } from '../utils/routingGraph'
 
+const props = withDefaults(defineProps<{ source?: RoutingSource; showHeading?: boolean }>(), { showHeading: true })
 const { t } = useI18n()
-const connectionStatus = ref<OpsWSStatus>('connecting')
-const fatalDisabled = ref(false)
-const loadError = ref(false)
-const showAll = ref(false)
-const selectedRoute = ref<RouteSummary | null>(null)
+const prefix = 'admin.ops.routingMonitor'
+const { events, status, disabled, loadError, refreshing, updatedAt, refresh } = useRoutingMonitor(props.source ?? opsAPI)
+const frozenEvents = ref<OpsRoutingEvent[] | null>(null)
+const paused = computed(() => frozenEvents.value !== null)
+function togglePause() { frozenEvents.value = paused.value ? null : [...events.value.values()] }
+const filterKeys = ['platform', 'user', 'requestedModel', 'account'] as const
 const filters = reactive({ platform: '', user: '', requestedModel: '', account: '' })
-const events = ref(new Map<string, OpsRoutingEvent>())
-let unsubscribe: (() => void) | null = null
-
-const statusLabel = computed(() => t(`admin.ops.routingMonitor.status.${connectionStatus.value}`))
-const statusDotClass = computed(() => ({
-  'bg-emerald-500': connectionStatus.value === 'connected',
-  'bg-amber-500': connectionStatus.value === 'connecting' || connectionStatus.value === 'reconnecting',
-  'bg-gray-400': connectionStatus.value === 'closed' || connectionStatus.value === 'offline'
+const hasFilters = computed(() => Object.values(filters).some(value => value.trim()))
+function clearFilters() { for (const key of filterKeys) filters[key] = ''; clearSelection() }
+const filteredEvents = computed(() => (frozenEvents.value ?? [...events.value.values()]).filter(event => {
+  const match = (value: string, query: string) => value.toLowerCase().includes(query.trim().toLowerCase())
+  return match(event.platform || event.account_platform || '', filters.platform)
+    && match(`${event.user_label || ''} ${event.user_id || ''}`, filters.user)
+    && match(event.requested_model || '', filters.requestedModel)
+    && match(`${event.account_name || ''} ${event.account_id || ''} ${(event.hops || []).map(hop => `${hop.account_name || ''} ${hop.account_id}`).join(' ')}`, filters.account)
 }))
-
-interface RouteSummary {
-  key: string
-  user: string
-  requestedModel: string
-  account: string
-  accountPath: string
-  platform: string
-  count: number
-  active: boolean
-  failed: boolean
-  status: string
-  durationMs: number
-  occurredAt: string
-  requestId?: string
-  clientRequestId?: string
-  upstreamModel?: string
-  errorSummary?: string
-  hops: OpsRoutingEvent['hops']
-  requests: OpsRoutingEvent[]
-}
-
-function applyEvent(event: OpsRoutingEvent) {
-  events.value = reduceRoutingEvent(events.value, event)
-}
-
-function applySnapshot(snapshot: OpsRoutingSnapshot) {
-  events.value = reduceRoutingSnapshot(snapshot)
-}
-
-function onMessage(message: any) {
-  if (message?.type === 'routing_snapshot') applySnapshot(message.data)
-  if (message?.type === 'routing_event') applyEvent(message.data)
-  loadError.value = false
-}
-
-async function loadSnapshot() {
-  try {
-    applySnapshot(await opsAPI.getRoutingMonitorSnapshot())
-    loadError.value = false
-  } catch (error) {
-    console.warn('[OpsRoutingMonitor] snapshot failed', error)
-    loadError.value = true
-  }
-}
-
-const filteredEvents = computed(() => Array.from(events.value.values()).filter((event) => {
-  const match = (value: string | undefined, query: string) => !query || String(value || '').toLowerCase().includes(query.toLowerCase())
-  const accountValues = [event.account_name, ...(event.hops || []).map((hop) => hop.account_name)].filter(Boolean).join(' ')
-  return match(event.platform || event.account_platform, filters.platform) && match(event.user_label, filters.user) && match(event.requested_model, filters.requestedModel) && match(accountValues, filters.account)
-}))
-
-const graphRoutes = computed(() => {
-  const grouped = new Map<string, RouteSummary>()
-  for (const event of filteredEvents.value) {
-    const accountPath = (event.hops || []).map((hop) => hop.account_name || `#${hop.account_id}`).join(' → ') || event.account_name || `#${event.account_id || 0}`
-    const key = `${event.user_label || '—'}|${event.requested_model || '—'}|${accountPath}`
-    const current = grouped.get(key)
-    const summary: RouteSummary = current || {
-      key, user: event.user_label || '—', requestedModel: event.requested_model || '—', account: event.account_name || `#${event.account_id || 0}`,
-      accountPath,
-      platform: event.platform || event.account_platform || '—', count: 0, active: false, failed: false, status: event.status || '—', durationMs: event.duration_ms || 0,
-      occurredAt: event.occurred_at, requestId: event.request_id, clientRequestId: event.client_request_id, upstreamModel: event.upstream_model, errorSummary: event.error_summary, hops: event.hops || [], requests: [event]
-    }
-    if (current) summary.requests.push(event)
-    summary.count += 1
-    summary.active ||= event.status === 'active'
-    summary.failed ||= event.event_type === 'failed' || event.status === 'failed'
-    if (new Date(event.occurred_at).getTime() >= new Date(summary.occurredAt).getTime()) Object.assign(summary, {
-      status: event.status,
-      durationMs: event.duration_ms || 0,
-      occurredAt: event.occurred_at,
-      requestId: event.request_id,
-      clientRequestId: event.client_request_id,
-      upstreamModel: event.upstream_model,
-      errorSummary: event.error_summary,
-      hops: event.hops || [],
-      accountPath
-    })
-    grouped.set(key, summary)
-  }
-  return Array.from(grouped.values()).sort((a, b) => b.count - a.count || b.occurredAt.localeCompare(a.occurredAt))
+const routes = computed(() => groupRoutingEvents(filteredEvents.value))
+const graphLimit = ref(10)
+const graphRoutes = computed(() => routes.value.slice(0, graphLimit.value))
+const graph = computed(() => buildRoutingGraph(graphRoutes.value))
+const columns = [{ key: 'user', x: 24 }, { key: 'requestedModel', x: 410 }, { key: 'account', x: 796 }]
+const selectedKey = ref<string | null>(null)
+const focus = ref<{ kind: 'node' | 'edge'; key: string } | null>(null)
+const focusedRoutes = computed(() => {
+  if (!focus.value) return null
+  const items = focus.value.kind === 'node' ? graph.value.nodes : graph.value.edges
+  return items.find(item => item.key === focus.value?.key)?.routes ?? null
 })
-
-const visibleRoutes = computed(() => showAll.value ? graphRoutes.value : graphRoutes.value.slice(0, 10))
-const hasEvents = computed(() => visibleRoutes.value.length > 0)
-
-interface GraphNode { key: string; type: 'user' | 'model' | 'account'; label: string; x: number; y: number; width: number; count: number }
-interface GraphEdge { key: string; path: string; width: number; route: RouteSummary }
-
-const graphNodes = computed<GraphNode[]>(() => {
-  const columns: Array<{ type: GraphNode['type']; x: number; width: number }> = [{ type: 'user', x: 24, width: 250 }, { type: 'model', x: 370, width: 250 }, { type: 'account', x: 720, width: 250 }]
-  const maps = columns.map((column) => {
-    const labels = new Map<string, number>()
-    for (const route of visibleRoutes.value) {
-      const label = column.type === 'user' ? route.user : column.type === 'model' ? route.requestedModel : route.accountPath
-      labels.set(label, (labels.get(label) || 0) + route.count)
-    }
-    return { column, labels }
-  })
-  const nodes: GraphNode[] = []
-  for (const { column, labels } of maps) Array.from(labels.entries()).forEach(([label, count], index) => nodes.push({ key: `${column.type}-${label}`, type: column.type, label, count, x: column.x, y: 48 + index * 50, width: column.width }))
-  return nodes
-})
-
-const graphEdges = computed<GraphEdge[]>(() => visibleRoutes.value.map((route, index) => {
-  const userIndex = graphNodes.value.findIndex((node) => node.type === 'user' && node.label === route.user)
-  const modelIndex = graphNodes.value.findIndex((node) => node.type === 'model' && node.label === route.requestedModel)
-  const accountIndex = graphNodes.value.findIndex((node) => node.type === 'account' && node.label === route.accountPath)
-  const y1 = 67 + Math.max(userIndex, 0) * 50
-  const y2 = 67 + Math.max(modelIndex, 0) * 50
-  const y3 = 67 + Math.max(accountIndex, 0) * 50
-  return { key: `${route.key}-${index}`, path: `M 274 ${y1} C 320 ${y1}, 335 ${y2}, 370 ${y2} M 620 ${y2} C 665 ${y2}, 680 ${y3}, 720 ${y3}`, width: Math.min(10, 2 + route.count), route }
-}))
-
-function selectRoute(route: RouteSummary) { selectedRoute.value = route }
-function selectNode(node: GraphNode) {
-  const matches = graphRoutes.value.filter((route) => (node.type === 'user' ? route.user : node.type === 'model' ? route.requestedModel : route.accountPath) === node.label)
-  if (matches.length <= 1) {
-    selectedRoute.value = matches[0] || null
-    return
-  }
-  const latest = [...matches].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))[0]
-  selectedRoute.value = {
-    ...latest,
-    key: `node-${node.type}-${node.label}`,
-    user: node.type === 'user' ? node.label : '—',
-    requestedModel: node.type === 'model' ? node.label : '—',
-    account: node.type === 'account' ? node.label : '—',
-    accountPath: node.type === 'account' ? node.label : '—',
-    count: matches.reduce((total, route) => total + route.count, 0),
-    active: matches.some((route) => route.active),
-    failed: matches.some((route) => route.failed),
-    requests: matches.flatMap((route) => route.requests).sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
-  }
+const selectedRoute = computed(() => routes.value.find(route => route.key === selectedKey.value) ?? null)
+const hasSelection = computed(() => selectedRoute.value !== null || focusedRoutes.value !== null)
+const highlightedKeys = computed(() => selectedRoute.value ? [selectedRoute.value.key] : focusedRoutes.value ?? [])
+const listedRoutes = computed(() => focusedRoutes.value ? routes.value.filter(route => focusedRoutes.value!.includes(route.key)) : routes.value)
+function selectFocus(kind: 'node' | 'edge', key: string) {
+  selectedKey.value = null
+  focus.value = focus.value?.kind === kind && focus.value.key === key ? null : { kind, key }
 }
-function nodeClass(node: GraphNode) {
-  return node.type === 'user' ? 'fill-sky-50 stroke-sky-300 dark:fill-sky-950/40 dark:stroke-sky-700' : node.type === 'model' ? 'fill-violet-50 stroke-violet-300 dark:fill-violet-950/40 dark:stroke-violet-700' : 'fill-emerald-50 stroke-emerald-300 dark:fill-emerald-950/40 dark:stroke-emerald-700'
-}
-function truncate(value: string, max: number) { return value.length > max ? `${value.slice(0, max - 1)}…` : value }
-function formatDuration(ms: number) { return ms > 0 ? `${ms} ms` : '—' }
-function formatTime(value: string) { return value ? new Date(value).toLocaleTimeString() : '—' }
-
-onMounted(async () => {
-  await loadSnapshot()
-  unsubscribe = opsAPI.subscribeRouting(onMessage, {
-    onStatusChange: (status) => { connectionStatus.value = status },
-    onFatalClose: () => { fatalDisabled.value = true }
-  })
-})
-onUnmounted(() => { unsubscribe?.(); unsubscribe = null })
+function clearSelection() { focus.value = null; selectedKey.value = null }
+function nodeHighlighted(node: RoutingNode) { return node.routes.some(key => highlightedKeys.value.includes(key)) }
+function edgeHighlighted(edge: RoutingEdge) { return edge.routes.some(key => highlightedKeys.value.includes(key)) }
+const metrics = computed(() => [
+  { key: 'requests', value: filteredEvents.value.length },
+  ...(['active', 'completed', 'failed'] as const).map(key => ({ key, value: filteredEvents.value.filter(event => routingState(event) === key).length }))
+])
 </script>
+
+<style scoped>
+.routing-panel { @apply rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-900; }
+.routing-button { @apply min-h-[44px] rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-200 dark:hover:bg-dark-700; }
+.routing-status { @apply inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 dark:bg-dark-800 dark:text-gray-200; }
+.routing-row { @apply flex w-full items-center gap-4 border-b border-gray-100 px-5 py-4 text-sm text-gray-800 last:border-b-0 hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-500 dark:border-dark-800 dark:text-gray-100 dark:hover:bg-dark-800; }
+.routing-row.is-selected { @apply bg-primary-50 dark:bg-primary-950/40; }
+.routing-row-label { @apply mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400; }
+.routing-edge, .routing-node { cursor: pointer; }
+.routing-edge-hit { fill: none; stroke: transparent; stroke-width: 18; pointer-events: stroke; }
+.routing-edge-line { fill: none; stroke: #94a3b8; pointer-events: none; }
+.routing-edge-line.is-active { @apply stroke-sky-600 dark:stroke-sky-400; stroke-dasharray: 6 4; }
+.routing-arrow { @apply stroke-slate-500 dark:stroke-slate-300; fill: none; stroke-width: 2; pointer-events: none; }
+.routing-edge.is-highlighted .routing-edge-line, .routing-edge:hover .routing-edge-line, .routing-edge:focus .routing-edge-line { @apply stroke-sky-600 dark:stroke-sky-400; stroke-width: 5; }
+.routing-edge:focus { outline: none; }
+.routing-edge:focus .routing-edge-hit { stroke: #bae6fd; stroke-width: 12; }
+.routing-node rect { stroke-width: 1.5; }
+.routing-node-user rect { @apply fill-sky-50 stroke-sky-300 dark:fill-sky-950 dark:stroke-sky-700; }
+.routing-node-model rect { @apply fill-violet-50 stroke-violet-300 dark:fill-violet-950 dark:stroke-violet-700; }
+.routing-node-account rect { @apply fill-emerald-50 stroke-emerald-300 dark:fill-emerald-950 dark:stroke-emerald-700; }
+.routing-node.is-highlighted rect, .routing-node:hover rect, .routing-node:focus rect { @apply stroke-sky-600 dark:stroke-sky-400; stroke-width: 3; }
+.routing-node:focus { outline: none; }
+.is-dimmed { opacity: 0.22; }
+</style>

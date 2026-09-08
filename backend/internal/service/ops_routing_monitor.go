@@ -51,6 +51,7 @@ type OpsRoutingEvent struct {
 	ClientRequestID string              `json:"client_request_id,omitempty"`
 	RouteKey        string              `json:"route_key"`
 	Turn            int                 `json:"turn,omitempty"`
+	UserID          int64               `json:"user_id,omitempty"`
 	UserLabel       string              `json:"user_label,omitempty"`
 	RequestedModel  string              `json:"requested_model,omitempty"`
 	UpstreamModel   string              `json:"upstream_model,omitempty"`
@@ -74,6 +75,7 @@ type OpsRoutingSnapshot struct {
 type OpsRoutingRequestInfo struct {
 	RequestID       string
 	ClientRequestID string
+	UserID          int64
 	UserLabel       string
 	RequestedModel  string
 	UpstreamModel   string
@@ -349,7 +351,7 @@ func (s *OpsRoutingMonitorService) ObserveSelection(info OpsRoutingRequestInfo) 
 		current = &OpsRoutingEvent{
 			EventID: s.nextEventID(), EventType: OpsRoutingEventStarted, OccurredAt: now,
 			RequestID: info.RequestID, ClientRequestID: info.ClientRequestID, RouteKey: routeKey,
-			Turn: info.Turn, UserLabel: trimField(info.UserLabel, 128), RequestedModel: trimField(info.RequestedModel, 256),
+			Turn: info.Turn, UserID: info.UserID, UserLabel: trimField(info.UserLabel, 128), RequestedModel: trimField(info.RequestedModel, 256),
 			UpstreamModel: trimField(info.UpstreamModel, 256), Platform: trimField(info.Platform, 64), Status: "active",
 		}
 	}

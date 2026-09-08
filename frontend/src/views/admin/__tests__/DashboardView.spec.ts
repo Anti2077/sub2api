@@ -72,6 +72,7 @@ const createDashboardStats = (): DashboardStats => ({
   total_tokens: 0,
   total_cost: 0,
   total_actual_cost: 0,
+  total_account_cost: 0,
   today_requests: 0,
   today_input_tokens: 0,
   today_output_tokens: 0,
@@ -80,6 +81,7 @@ const createDashboardStats = (): DashboardStats => ({
   today_tokens: 0,
   today_cost: 0,
   today_actual_cost: 0,
+  today_account_cost: 0,
   average_duration_ms: 0,
   uptime: 0,
   rpm: 0,
@@ -108,11 +110,22 @@ describe('admin DashboardView', () => {
     getUserSpendingRanking.mockResolvedValue({
       ranking: [],
       total_actual_cost: 0,
+  total_account_cost: 0,
       total_requests: 0,
       total_tokens: 0,
       start_date: '',
       end_date: ''
     })
+  })
+
+  it('shows distinct daily actual charges and account costs, rather than standard prices or lifetime totals', async () => {
+    getSnapshotV2.mockResolvedValue({ stats: { ...createDashboardStats(), today_actual_cost:1234.5678, today_account_cost:321.0987, today_cost:9000, total_actual_cost:8888, total_account_cost:7777 }, trend:[], models:[] })
+    const wrapper = mount(DashboardView, {global:{stubs:{AppLayout:{template:'<div><slot /></div>'},LoadingSpinner:true,Icon:true,DateRangePicker:true,Select:true,ModelDistributionChart:true,TokenUsageTrend:true,Line:true}}})
+    await flushPromises()
+    expect(wrapper.get('[data-testid="today-actual-spend"]').text()).toContain('$1,234.5678')
+    expect(wrapper.get('[data-testid="today-account-spend"]').text()).toContain('$321.0987')
+    expect(wrapper.get('[data-testid="today-actual-spend"]').text()).not.toContain('9,000')
+    wrapper.unmount()
   })
 
   it('uses last 24 hours as default dashboard range', async () => {

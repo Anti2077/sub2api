@@ -1,6 +1,7 @@
 export default {
     // Dashboard
     dashboard: {
+      todaySpend: {"title": "今日消费", "window": "今日 00:00 起累计，按服务器时区统计；不受下方趋势日期筛选影响。", "actual": "实际消费", "actualHelp": "今日使用记录中的用户实际扣费合计。", "cost": "成本消费", "costHelp": "按使用记录的账号成本及成本倍率汇总的上游成本。", "updating": "统计更新中"},
       title: '管理控制台',
       description: '系统概览与统计数据',
       apiKeys: 'API 密钥',

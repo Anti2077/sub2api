@@ -25,6 +25,12 @@ describe('routing monitor reducer', () => {
     expect(state.get('request-1')?.event_type).toBe('completed')
   })
 
+  it('does not reopen a completion when a delayed start has the same millisecond timestamp', () => {
+    const completed = event({event_type:'completed',status:'OK'})
+    const current = reduceRoutingEvent(new Map(), completed)
+    expect(reduceRoutingEvent(current, event({event_type:'started',status:'active'}))).toBe(current)
+  })
+
   it('ignores an out-of-order event without replacing the current state', () => {
     const current = reduceRoutingSnapshot({ recent: [event({ event_id: 'completed', event_type: 'completed', status: 'completed', occurred_at: '2026-09-07T00:00:03.000Z' })] })
     const next = reduceRoutingEvent(current, event({ event_id: 'started', occurred_at: '2026-09-07T00:00:02.000Z' }))
@@ -55,5 +61,16 @@ describe('routing monitor reducer', () => {
 
     expect(next.get('request-1')?.attempt_count).toBe(2)
     expect(next.get('request-1')?.hops).toHaveLength(2)
+  })
+})
+
+describe('routing event expiry', () => {
+  it('expires completed requests without removing long-running active requests', async () => {
+    const { pruneRoutingEvents } = await import('../routingMonitor')
+    const current = reduceRoutingSnapshot({
+      active: [event({route_key:'active',occurred_at:'2026-09-07T00:00:00Z'})],
+      recent: [event({route_key:'old',event_type:'completed',status:'OK',occurred_at:'2026-09-07T00:03:00Z'}),event({route_key:'new',event_type:'failed',status:'Bad Gateway',occurred_at:'2026-09-07T00:03:50Z'})]
+    })
+    expect([...pruneRoutingEvents(current, Date.parse('2026-09-07T00:04:00Z')).keys()]).toEqual(['active','new'])
   })
 })

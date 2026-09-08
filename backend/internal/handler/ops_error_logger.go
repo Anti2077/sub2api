@@ -540,11 +540,13 @@ func recordOpsRoutingSelection(c *gin.Context, accountID int64, accountName, pla
 		upstream = value
 	}
 	userLabel := ""
+	var userID int64
 	if apiKey := getOpsAPIKey(c); apiKey != nil && apiKey.User != nil {
 		userLabel = service.OpsRoutingUserLabel(apiKey.User)
+		userID = apiKey.User.ID
 	}
 	monitor.ObserveSelection(service.OpsRoutingRequestInfo{
-		RequestID: requestID, ClientRequestID: clientRequestID, UserLabel: userLabel,
+		RequestID: requestID, ClientRequestID: clientRequestID, UserID: userID, UserLabel: userLabel,
 		RequestedModel: stringValue(model), UpstreamModel: upstream, Platform: platform,
 		AccountID: accountID, AccountName: accountName, AccountPlatform: platform, Turn: getOpsRoutingTurn(c),
 	})

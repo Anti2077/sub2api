@@ -74,10 +74,10 @@ func TestOpsRoutingMonitorRedisSnapshotAndPubSub(t *testing.T) {
 	updates, cancel := monitorTwo.Subscribe(context.Background())
 	defer cancel()
 	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && client.PubSubNumSub(context.Background(), opsRoutingChannel).Val()[opsRoutingChannel] < 1 {
+	for time.Now().Before(deadline) && client.PubSubNumSub(context.Background(), opsRoutingChannel).Val()[opsRoutingChannel] < 2 {
 		time.Sleep(10 * time.Millisecond)
 	}
-	require.GreaterOrEqual(t, client.PubSubNumSub(context.Background(), opsRoutingChannel).Val()[opsRoutingChannel], int64(1))
+	require.GreaterOrEqual(t, client.PubSubNumSub(context.Background(), opsRoutingChannel).Val()[opsRoutingChannel], int64(2))
 	monitorOne.ObserveSelection(routingInfo("req-redis", 3))
 	select {
 	case payload := <-updates:
@@ -130,4 +130,14 @@ func TestOpsRoutingMonitorStopCancelsRedisSubscriber(t *testing.T) {
 		return client.PubSubNumSub(context.Background(), opsRoutingChannel).Val()[opsRoutingChannel] == 0
 	}, time.Second, 10*time.Millisecond)
 	_ = client.Close()
+}
+
+func TestOpsRoutingMonitorPreservesUserIdentity(t *testing.T) {
+	monitor := NewOpsRoutingMonitorService(nil, nil)
+	monitor.ObserveSelection(OpsRoutingRequestInfo{RequestID: "user-id-route", UserID: 73, UserLabel: "same-name", AccountID: 1})
+	monitor.Finish(OpsRoutingRequestInfo{RequestID: "user-id-route"}, "OK", time.Second, false, "")
+	snapshot, err := monitor.Snapshot(context.Background())
+	require.NoError(t, err)
+	require.Len(t, snapshot.Recent, 1)
+	require.Equal(t, int64(73), snapshot.Recent[0].UserID)
 }
