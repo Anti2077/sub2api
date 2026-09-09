@@ -27,8 +27,11 @@ jobs:
       - name: Run govulncheck
         working-directory: backend
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          govulncheck -format json ./... > govuln.json
+          python ../tools/check_govuln_exceptions.py \
+            --report govuln.json \
+            --exceptions ../.github/govuln-exceptions.json
 
   frontend-security:
     runs-on: ubuntu-latest

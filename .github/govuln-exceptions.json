@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "exceptions": [
+    {
+      "id": "GO-2026-5288",
+      "module": "github.com/apernet/hysteria/core/v2",
+      "minimum_safe_version": "v2.8.2",
+      "reason": "The Go vulnerability record is unreviewed and marks every module version as affected, while the Hysteria v2.8.2 release explicitly contains the server-side sniff OOM fix. Sub2API uses the newer v2.12.2 client package only.",
+      "mitigation": "Keep Hysteria at v2.8.2 or newer, do not import its server sniff implementation, and remove this exception when the Go vulnerability metadata is corrected.",
+      "reference": "https://github.com/HyNetworks/hysteria/releases/tag/app/v2.8.2",
+      "expires_on": "2026-10-09",
+      "owner": "Anti2077"
+    }
+  ]
+}
