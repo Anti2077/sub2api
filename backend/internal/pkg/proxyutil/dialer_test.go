@@ -29,6 +29,24 @@ func TestConfigureTransportProxy_HTTP(t *testing.T) {
 	assert.Nil(t, transport.DialContext, "HTTP proxy should not set DialContext")
 }
 
+func TestConfigureTransportProxy_Hysteria2(t *testing.T) {
+	transport := &http.Transport{}
+	proxyURL, err := url.Parse("hysteria2://:secret@127.0.0.1:443")
+	require.NoError(t, err)
+
+	require.NoError(t, ConfigureTransportProxy(transport, proxyURL))
+	require.Nil(t, transport.Proxy)
+	require.NotNil(t, transport.DialContext)
+}
+
+func TestNewHysteria2DialContext_RejectsInsecureTLS(t *testing.T) {
+	proxyURL, err := url.Parse("hysteria2://:secret@127.0.0.1:443?insecure=1")
+	require.NoError(t, err)
+
+	_, err = NewHysteria2DialContext(proxyURL)
+	require.ErrorContains(t, err, "insecure TLS verification is not allowed")
+}
+
 func TestConfigureTransportProxy_HTTPS(t *testing.T) {
 	transport := &http.Transport{}
 	proxyURL, _ := url.Parse("https://secure-proxy.example.com:8443")

@@ -57,6 +57,22 @@ func TestParse_有效HTTPS代理(t *testing.T) {
 	}
 }
 
+func TestParse_有效Hysteria2代理(t *testing.T) {
+	trimmed, parsed, err := Parse("hysteria2://:secret@proxy.example.com:443?sni=edge.example.com")
+	if err != nil {
+		t.Fatalf("有效 Hysteria 2 代理应成功: %v", err)
+	}
+	if trimmed != "hysteria2://:secret@proxy.example.com:443?sni=edge.example.com" {
+		t.Errorf("trimmed 不匹配: got %q", trimmed)
+	}
+	if parsed == nil || parsed.Scheme != "hysteria2" {
+		t.Fatalf("parsed scheme 不匹配: %#v", parsed)
+	}
+	if password, ok := parsed.User.Password(); !ok || password != "secret" {
+		t.Errorf("Hysteria 2 密码不匹配: got %q, present=%t", password, ok)
+	}
+}
+
 func TestParse_有效SOCKS5代理_自动升级为SOCKS5H(t *testing.T) {
 	trimmed, parsed, err := Parse("socks5://127.0.0.1:1080")
 	if err != nil {

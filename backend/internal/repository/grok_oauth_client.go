@@ -15,6 +15,8 @@ import (
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	sharedhttp "github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyurl"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyutil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
@@ -241,12 +243,18 @@ func grokOAuthHasExplicitEntitlementDenial(body string) bool {
 }
 
 func createGrokHTTPClient(proxyURL string, noRedirect bool) (*http.Client, error) {
-	transport := &http.Transport{}
-	if strings.TrimSpace(proxyURL) != "" {
-		parsed, err := url.Parse(proxyURL)
+	transport := &http.Transport{TLSHandshakeTimeout: 10 * time.Second}
+	trimmed, parsed, err := proxyurl.Parse(proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	if parsed != nil && strings.EqualFold(parsed.Scheme, "hysteria2") {
+		dialContext, err := proxyutil.NewHysteria2DialContext(parsed)
 		if err != nil {
 			return nil, err
 		}
+		transport.DialContext = dialContext
+	} else if trimmed != "" {
 		transport.Proxy = http.ProxyURL(parsed)
 	}
 	client := &http.Client{Timeout: 120 * time.Second, Transport: transport}

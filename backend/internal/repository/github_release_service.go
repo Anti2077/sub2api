@@ -27,7 +27,7 @@ type githubReleaseClientError struct {
 }
 
 // NewGitHubReleaseClient 创建 GitHub Release 客户端
-// proxyURL 为空时直连 GitHub，支持 http/https/socks5/socks5h 协议
+// proxyURL 为空时直连 GitHub，支持 http/https/socks5/socks5h/hysteria2 协议
 // 代理配置失败时行为由 allowDirectOnProxyError 控制：
 //   - false（默认）：返回错误占位客户端，禁止回退到直连
 //   - true：回退到直连（仅限管理员显式开启）

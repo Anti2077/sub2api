@@ -403,7 +403,7 @@ func (m *Manager) getOrCreateHTTPClient(proxyURL string) (*http.Client, error) {
 
 // newHTTPClient creates an HTTP client with proper timeout settings.
 // Uses proxyutil.ConfigureTransportProxy for unified proxy protocol support
-// (HTTP/HTTPS/SOCKS5/SOCKS5H).
+// (HTTP/HTTPS/SOCKS5/SOCKS5H/Hysteria 2).
 // Returns error if proxyURL is invalid — never falls back to direct connection.
 func newHTTPClient(proxyURL string) (*http.Client, error) {
 	transport := &http.Transport{

@@ -30,6 +30,8 @@ describe('proxy batch URL parsing (IPv6 support)', () => {
     ['socks5://proxy.example.com:1080', true],
     ['http://192.168.1.1:8080', true],
     ['socks5://user:pass@proxy.example.com:1080', true],
+    ['hysteria2://secret@proxy.example.com:443', true],
+    ['hysteria2://:secret@proxy.example.com:443', true],
     // bare IPv6 without brackets is ambiguous with host:port — rejected
     ['socks5://2001:db8::1:1080', false],
     // unsupported schemes / malformed ports stay invalid

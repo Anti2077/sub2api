@@ -465,7 +465,7 @@
             />
           </div>
         </div>
-        <div>
+        <div v-if="createForm.protocol !== 'hysteria2'">
           <label class="input-label">{{ t('admin.proxies.username') }}</label>
           <input
             v-model="createForm.username"
@@ -475,7 +475,7 @@
           />
         </div>
         <div>
-          <label class="input-label">{{ t('admin.proxies.password') }}</label>
+          <label class="input-label">{{ createForm.protocol === 'hysteria2' ? t('admin.proxies.hysteria2Password') : t('admin.proxies.password') }}</label>
           <div class="relative">
             <input
               v-model="createForm.password"
@@ -698,12 +698,12 @@
             />
           </div>
         </div>
-        <div>
+        <div v-if="editForm.protocol !== 'hysteria2'">
           <label class="input-label">{{ t('admin.proxies.username') }}</label>
           <input v-model="editForm.username" type="text" class="input" />
         </div>
         <div>
-          <label class="input-label">{{ t('admin.proxies.password') }}</label>
+          <label class="input-label">{{ editForm.protocol === 'hysteria2' ? t('admin.proxies.hysteria2Password') : t('admin.proxies.password') }}</label>
           <div class="relative">
             <input
               v-model="editForm.password"
@@ -1014,7 +1014,8 @@ const protocolOptions = computed(() => [
   { value: 'http', label: 'HTTP' },
   { value: 'https', label: 'HTTPS' },
   { value: 'socks5', label: 'SOCKS5' },
-  { value: 'socks5h', label: 'SOCKS5H' }
+  { value: 'socks5h', label: 'SOCKS5H' },
+  { value: 'hysteria2', label: 'Hysteria 2' }
 ])
 
 const statusOptions = computed(() => [
@@ -1029,7 +1030,8 @@ const protocolSelectOptions = computed(() => [
   { value: 'http', label: t('admin.proxies.protocols.http') },
   { value: 'https', label: t('admin.proxies.protocols.https') },
   { value: 'socks5', label: t('admin.proxies.protocols.socks5') },
-  { value: 'socks5h', label: t('admin.proxies.protocols.socks5h') }
+  { value: 'socks5h', label: t('admin.proxies.protocols.socks5h') },
+  { value: 'hysteria2', label: t('admin.proxies.protocols.hysteria2') }
 ])
 
 const editStatusOptions = computed(() => [
@@ -1289,11 +1291,11 @@ const parseProxyUrl = (
   const trimmed = line.trim()
   if (!trimmed) return null
 
-  // Regex to parse proxy URL (supports http, https, socks5, socks5h).
+  // Regex to parse proxy URL (supports http, https, socks5, socks5h, hysteria2).
   // Host alternatives: [bracketed-IPv6] | hostname/IPv4 (colon-free, so the
   // match stops before the final :port).
   const regex =
-    /^(https?|socks5h?):\/\/(?:([^:@\[\]]+):([^@\[\]]+)@)?(\[[0-9a-f:.]+\]|[^:\[\]]+):(\d+)$/i
+    /^(https?|socks5h?|hysteria2):\/\/(?:([^:@\[\]]*)(?::([^@\[\]]+))?@)?(\[[0-9a-f:.]+\]|[^:\[\]]+):(\d+)$/i
   const match = trimmed.match(regex)
 
   if (!match) return null
@@ -1306,12 +1308,17 @@ const parseProxyUrl = (
   // Strip brackets from IPv6 literals; the backend re-brackets via net.JoinHostPort.
   const host = rawHost.replace(/^\[|\]$/g, '').trim()
 
+  const normalizedProtocol = protocol.toLowerCase() as ProxyProtocol
+  const normalizedUsername = username?.trim() || ''
+  const normalizedPassword = password?.trim() || ''
+
   return {
-    protocol: protocol.toLowerCase() as ProxyProtocol,
+    protocol: normalizedProtocol,
     host,
     port: portNum,
-    username: username?.trim() || '',
-    password: password?.trim() || ''
+    // A bare hysteria2 userinfo value is the protocol password, not a username.
+    username: normalizedProtocol === 'hysteria2' && !normalizedPassword ? '' : normalizedUsername,
+    password: normalizedProtocol === 'hysteria2' && !normalizedPassword ? normalizedUsername : normalizedPassword
   }
 }
 
@@ -1391,7 +1398,7 @@ const handleCreateProxy = async () => {
       protocol: createForm.protocol,
       host: createForm.host.trim(),
       port: createForm.port,
-      username: createForm.username.trim() || null,
+      username: createForm.protocol === 'hysteria2' ? null : createForm.username.trim() || null,
       password: createForm.password.trim() || null,
       expires_at: createForm.expires_at ? Math.floor(new Date(createForm.expires_at).getTime() / 1000) : null,
       fallback_mode: createForm.fallback_mode,
@@ -1456,7 +1463,7 @@ const handleUpdateProxy = async () => {
       protocol: editForm.protocol,
       host: editForm.host.trim(),
       port: editForm.port,
-      username: editForm.username.trim() || null,
+      username: editForm.protocol === 'hysteria2' ? null : editForm.username.trim() || null,
       status: editForm.status,
       expires_at: editForm.expires_at ? Math.floor(new Date(editForm.expires_at).getTime() / 1000) : null,
       fallback_mode: editForm.fallback_mode,
@@ -2027,6 +2034,10 @@ function buildAuthPart(row: any): string {
 }
 
 function buildProxyUrl(row: any): string {
+  if (row.protocol === 'hysteria2') {
+    const auth = row.password || row.username
+    return `hysteria2://${auth ? `${encodeURIComponent(auth)}@` : ''}${row.host}:${row.port}`
+  }
   return `${row.protocol}://${buildAuthPart(row)}${row.host}:${row.port}`
 }
 

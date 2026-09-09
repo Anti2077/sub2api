@@ -68,14 +68,15 @@ func (s *adminServiceImpl) CreateProxy(ctx context.Context, input *CreateProxyIn
 	if input.ExpiryWarnDays < 0 {
 		return nil, infraerrors.BadRequest("PROXY_WARN_DAYS_INVALID", "expiry_warn_days must be >= 0")
 	}
+	username, password := normalizeProxyCredentials(input.Protocol, input.Username, input.Password)
 
 	proxy := &Proxy{
 		Name:           input.Name,
 		Protocol:       input.Protocol,
 		Host:           input.Host,
 		Port:           input.Port,
-		Username:       input.Username,
-		Password:       input.Password,
+		Username:       username,
+		Password:       password,
 		Status:         StatusActive,
 		ExpiresAt:      input.ExpiresAt,
 		FallbackMode:   mode,
@@ -131,6 +132,7 @@ func (s *adminServiceImpl) UpdateProxy(ctx context.Context, id int64, input *Upd
 	if input.Password != "" {
 		proxy.Password = input.Password
 	}
+	proxy.Username, proxy.Password = normalizeProxyCredentials(proxy.Protocol, proxy.Username, proxy.Password)
 	if input.Status != "" {
 		proxy.Status = input.Status
 	}

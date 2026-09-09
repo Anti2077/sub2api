@@ -173,7 +173,7 @@ type GeminiTierQuotaConfig struct {
 
 type UpdateConfig struct {
 	// ProxyURL 用于访问 GitHub 的代理地址
-	// 支持 http/https/socks5/socks5h 协议
+	// 支持 http/https/socks5/socks5h/hysteria2 协议
 	// 例如: "http://127.0.0.1:7890", "socks5://127.0.0.1:1080"
 	ProxyURL string `mapstructure:"proxy_url"`
 }

@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -39,12 +40,32 @@ func (p *Proxy) IsExpired(now time.Time) bool {
 	return p.ExpiresAt != nil && !p.ExpiresAt.After(now)
 }
 
+func normalizeProxyCredentials(protocol, username, password string) (string, string) {
+	if !strings.EqualFold(protocol, "hysteria2") {
+		return username, password
+	}
+	if password == "" {
+		password = username
+	}
+	return "", password
+}
+
 func (p *Proxy) URL() string {
 	u := &url.URL{
 		Scheme: p.Protocol,
 		Host:   net.JoinHostPort(p.Host, strconv.Itoa(p.Port)),
 	}
-	if p.Username != "" && p.Password != "" {
+	if strings.EqualFold(p.Protocol, "hysteria2") {
+		// Hysteria 2 uses the URL userinfo as its authentication password.
+		// Keep the legacy username field as a fallback for imported entries.
+		auth := p.Password
+		if auth == "" {
+			auth = p.Username
+		}
+		if auth != "" {
+			u.User = url.User(auth)
+		}
+	} else if p.Username != "" && p.Password != "" {
 		u.User = url.UserPassword(p.Username, p.Password)
 	}
 	return u.String()

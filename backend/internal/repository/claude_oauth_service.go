@@ -12,6 +12,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/oauth"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyurl"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyutil"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
 
@@ -268,11 +269,17 @@ func createReqClient(proxyURL string) (*req.Client, error) {
 		ImpersonateChrome().
 		SetCookieJar(nil) // 禁用 CookieJar
 
-	trimmed, _, err := proxyurl.Parse(proxyURL)
+	trimmed, parsed, err := proxyurl.Parse(proxyURL)
 	if err != nil {
 		return nil, err
 	}
-	if trimmed != "" {
+	if parsed != nil && strings.EqualFold(parsed.Scheme, "hysteria2") {
+		dialContext, err := proxyutil.NewHysteria2DialContext(parsed)
+		if err != nil {
+			return nil, err
+		}
+		client.GetTransport().SetProxy(nil).SetDial(dialContext)
+	} else if trimmed != "" {
 		client.SetProxyURL(trimmed)
 	}
 

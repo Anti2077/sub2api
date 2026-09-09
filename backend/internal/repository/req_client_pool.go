@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyurl"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyutil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/servertiming"
 
 	"github.com/imroc/req/v3"
@@ -15,7 +16,7 @@ import (
 
 // reqClientOptions 定义 req 客户端的构建参数
 type reqClientOptions struct {
-	ProxyURL    string        // 代理 URL（支持 http/https/socks5）
+	ProxyURL    string        // 代理 URL（支持 http/https/socks5/socks5h/hysteria2）
 	Timeout     time.Duration // 请求超时时间
 	Impersonate bool          // 是否模拟 Chrome 浏览器指纹
 	ForceHTTP2  bool          // 是否强制使用 HTTP/2
@@ -52,11 +53,17 @@ func getSharedReqClient(opts reqClientOptions) (*req.Client, error) {
 	if opts.Impersonate {
 		client = client.ImpersonateChrome()
 	}
-	trimmed, _, err := proxyurl.Parse(opts.ProxyURL)
+	trimmed, parsed, err := proxyurl.Parse(opts.ProxyURL)
 	if err != nil {
 		return nil, err
 	}
-	if trimmed != "" {
+	if parsed != nil && strings.EqualFold(parsed.Scheme, "hysteria2") {
+		dialContext, err := proxyutil.NewHysteria2DialContext(parsed)
+		if err != nil {
+			return nil, err
+		}
+		client.GetTransport().SetProxy(nil).SetDial(dialContext)
+	} else if trimmed != "" {
 		client.SetProxyURL(trimmed)
 	}
 	client = instrumentReqClient(client)

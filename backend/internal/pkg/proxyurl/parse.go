@@ -14,10 +14,11 @@ import (
 
 // allowedSchemes 代理协议白名单
 var allowedSchemes = map[string]bool{
-	"http":    true,
-	"https":   true,
-	"socks5":  true,
-	"socks5h": true,
+	"http":      true,
+	"https":     true,
+	"socks5":    true,
+	"socks5h":   true,
+	"hysteria2": true,
 }
 
 // Parse 解析并验证代理 URL。
@@ -31,7 +32,7 @@ var allowedSchemes = map[string]bool{
 //   - TrimSpace 后为空视为直连
 //   - url.Parse 失败返回 error（不含原始 URL，防凭据泄露）
 //   - Host 为空返回 error（用 Redacted() 脱敏）
-//   - Scheme 必须为 http/https/socks5/socks5h
+//   - Scheme 必须为 http/https/socks5/socks5h/hysteria2
 //   - socks5:// 自动升级为 socks5h://（确保 DNS 由代理端解析，防止 DNS 泄漏）
 func Parse(raw string) (trimmed string, parsed *url.URL, err error) {
 	trimmed = strings.TrimSpace(raw)
@@ -51,7 +52,7 @@ func Parse(raw string) (trimmed string, parsed *url.URL, err error) {
 
 	scheme := strings.ToLower(parsed.Scheme)
 	if !allowedSchemes[scheme] {
-		return "", nil, fmt.Errorf("unsupported proxy scheme %q (allowed: http, https, socks5, socks5h)", scheme)
+		return "", nil, fmt.Errorf("unsupported proxy scheme %q (allowed: http, https, socks5, socks5h, hysteria2)", scheme)
 	}
 
 	// 自动升级 socks5 → socks5h，确保 DNS 由代理端解析，防止 DNS 泄漏。

@@ -34,6 +34,16 @@ func TestProxyURL(t *testing.T) {
 			want: "socks5://user:pass@socks.example.com:1080",
 		},
 		{
+			name: "hysteria2 uses password as URL userinfo",
+			proxy: Proxy{
+				Protocol: "hysteria2",
+				Host:     "hy.example.com",
+				Port:     443,
+				Password: "secret@value",
+			},
+			want: "hysteria2://secret%40value@hy.example.com:443",
+		},
+		{
 			name: "username only keeps no auth for compatibility",
 			proxy: Proxy{
 				Protocol: "http",
@@ -62,6 +72,34 @@ func TestProxyURL(t *testing.T) {
 			t.Parallel()
 			if got := tc.proxy.URL(); got != tc.want {
 				t.Fatalf("Proxy.URL() mismatch: got=%q want=%q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeProxyCredentials_Hysteria2(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		username     string
+		password     string
+		wantPassword string
+	}{
+		{name: "password is authoritative", username: "legacy-user", password: "secret", wantPassword: "secret"},
+		{name: "username-only legacy data is migrated", username: "legacy-secret", wantPassword: "legacy-secret"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			username, password := normalizeProxyCredentials("hysteria2", tc.username, tc.password)
+			if username != "" {
+				t.Fatalf("Hysteria 2 username should be cleared, got %q", username)
+			}
+			if password != tc.wantPassword {
+				t.Fatalf("Hysteria 2 password mismatch: got %q want %q", password, tc.wantPassword)
 			}
 		})
 	}
