@@ -69,7 +69,7 @@ describe('routing event expiry', () => {
     const { pruneRoutingEvents } = await import('../routingMonitor')
     const current = reduceRoutingSnapshot({
       active: [event({route_key:'active',occurred_at:'2026-09-07T00:00:00Z'})],
-      recent: [event({route_key:'old',event_type:'completed',status:'OK',occurred_at:'2026-09-07T00:03:00Z'}),event({route_key:'new',event_type:'failed',status:'Bad Gateway',occurred_at:'2026-09-07T00:03:50Z'})]
+      recent: [event({route_key:'old',event_type:'completed',status:'OK',occurred_at:'2026-09-07T00:02:59Z'}),event({route_key:'new',event_type:'failed',status:'Bad Gateway',occurred_at:'2026-09-07T00:03:50Z'})]
     })
     expect([...pruneRoutingEvents(current, Date.parse('2026-09-07T00:04:00Z')).keys()]).toEqual(['active','new'])
   })

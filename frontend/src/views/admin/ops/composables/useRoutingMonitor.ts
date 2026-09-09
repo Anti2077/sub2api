@@ -7,9 +7,11 @@ export interface RoutingSource {
   subscribeRouting: (onMessage: (data: { type: string; data?: OpsRoutingEvent | OpsRoutingSnapshot }) => void, options: SubscribeRoutingOptions) => () => void
 }
 
+export type RoutingMonitorStatus = OpsWSStatus | 'polling'
+
 export function useRoutingMonitor(source: RoutingSource) {
   const events = ref(new Map<string, OpsRoutingEvent>())
-  const status = ref<OpsWSStatus>('connecting')
+  const status = ref<RoutingMonitorStatus>('connecting')
   const disabled = ref(false)
   const loadError = ref(false)
   const refreshing = ref(false)
@@ -22,6 +24,7 @@ export function useRoutingMonitor(source: RoutingSource) {
   let unsubscribe: (() => void) | undefined
   let timer: ReturnType<typeof setInterval> | undefined
   let refreshTimer: ReturnType<typeof setInterval> | undefined
+  let hasHealthySnapshot = false
 
   function snapshot(data: OpsRoutingSnapshot, preserveAfter?: number) {
     const serverTime = Date.parse(data.generated_at)
@@ -36,6 +39,8 @@ export function useRoutingMonitor(source: RoutingSource) {
     eventRevisions = new Map([...eventRevisions].filter(([key]) => events.value.has(key)))
     updatedAt.value = Date.now()
     loadError.value = false
+    hasHealthySnapshot = true
+    if (!disabled.value && status.value !== 'connected') status.value = 'polling'
   }
   function onMessage(message: { type: string; data?: OpsRoutingEvent | OpsRoutingSnapshot }) {
     if (disposed) return
@@ -71,7 +76,13 @@ export function useRoutingMonitor(source: RoutingSource) {
   function onVisible() { if (!document.hidden) void refresh() }
   onMounted(() => {
     unsubscribe = source.subscribeRouting(onMessage, {
-      onStatusChange: value => { if (!disposed) status.value = value },
+      onStatusChange: value => {
+        if (disposed) return
+        // Keep the HTTP snapshot fallback usable when a reverse proxy cannot
+        // keep the admin WebSocket open. A transient WS reconnect should not
+        // make an otherwise live monitor appear unavailable.
+        status.value = value === 'connected' || !hasHealthySnapshot ? value : 'polling'
+      },
       onFatalClose: () => { if (!disposed) disabled.value = true }
     })
     void refresh()

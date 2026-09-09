@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	opsRoutingRecentWindow = 30 * time.Second
+	opsRoutingRecentWindow = 1 * time.Minute
 	opsRoutingActiveTTL    = 2 * time.Minute
-	opsRoutingRecentTTL    = 35 * time.Second
+	opsRoutingRecentTTL    = 65 * time.Second
 	opsRoutingMaxEvents    = 500
 	opsRoutingMaxPayload   = 16 * 1024
 	opsRoutingSubscriberQ  = 64

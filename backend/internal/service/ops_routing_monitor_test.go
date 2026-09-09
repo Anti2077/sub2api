@@ -51,6 +51,20 @@ func TestOpsRoutingMonitorLifecycleAndFailover(t *testing.T) {
 	require.Len(t, snapshot.Recent, 1)
 }
 
+func TestOpsRoutingMonitorRecentWindowIsOneMinute(t *testing.T) {
+	monitor := NewOpsRoutingMonitorService(nil, nil)
+	now := time.Now().UTC()
+	monitor.recent = []*OpsRoutingEvent{
+		{EventID: "retained", RouteKey: "retained", EventType: OpsRoutingEventCompleted, OccurredAt: now.Add(-45 * time.Second)},
+		{EventID: "expired", RouteKey: "expired", EventType: OpsRoutingEventCompleted, OccurredAt: now.Add(-61 * time.Second)},
+	}
+
+	monitor.pruneLocked(now)
+
+	require.Len(t, monitor.recent, 1)
+	require.Equal(t, "retained", monitor.recent[0].EventID)
+}
+
 func TestOpsRoutingUserLabelPrefersUsernameAndMasksEmail(t *testing.T) {
 	require.Equal(t, "alice", OpsRoutingUserLabel(&User{Username: "alice", Email: "alice@example.com"}))
 	require.Equal(t, "a***e@example.com", OpsRoutingUserLabel(&User{Email: "alice@example.com"}))

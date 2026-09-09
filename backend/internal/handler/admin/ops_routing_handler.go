@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetRoutingMonitorSnapshot returns active requests and the last 30 seconds
+// GetRoutingMonitorSnapshot returns active requests and the last minute
 // of completed/failed routing events.
 // GET /api/v1/admin/ops/routing-monitor/snapshot
 func (h *OpsHandler) GetRoutingMonitorSnapshot(c *gin.Context) {

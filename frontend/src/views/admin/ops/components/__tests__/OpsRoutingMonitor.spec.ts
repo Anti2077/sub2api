@@ -62,9 +62,21 @@ describe('routing monitor interactions', () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-08T00:00:00Z'))
     const mock=makeSource([event({event_type:'completed',status:'OK'})]); const wrapper=panel(mock.source); await flushPromises()
     await wrapper.find('.routing-row').trigger('click')
-    await vi.advanceTimersByTimeAsync(31_000)
+    await vi.advanceTimersByTimeAsync(61_000)
     expect(wrapper.findAll('.routing-row')).toHaveLength(0)
-    expect(wrapper.text()).toContain('最近 30 秒暂无路由事件')
+    expect(wrapper.text()).toContain('最近 1 分钟暂无路由事件')
+  })
+
+  it('offers dynamic user, model, and account dropdown filters without a platform filter', async () => {
+    const mock = makeSource([event({ user_id: 7, user_label: 'Grace', requested_model: 'gpt-5.6-sol', account_id: 9, account_name: 'primary' })])
+    const wrapper = panel(mock.source)
+    await flushPromises()
+    const selects = wrapper.findAll('select')
+    expect(selects).toHaveLength(4) // three routing filters plus graph limit
+    expect(selects[0].text()).toContain('Grace · #7')
+    expect(selects[1].text()).toContain('gpt-5.6-sol')
+    expect(selects[2].text()).toContain('primary · #9')
+    expect(wrapper.text()).not.toContain('平台')
   })
 })
 
@@ -89,6 +101,19 @@ describe('routing subscription lifecycle', () => {
     resolve({generated_at:new Date().toISOString(),active:[],recent:[]})
     await refresh
     expect([...state.events.value.keys()]).toEqual(['new-request'])
+  })
+
+  it('shows snapshot fallback instead of staying in reconnecting after HTTP succeeds', async () => {
+    const mock = makeSource([event()])
+    mock.source.subscribeRouting = (_cb, options) => {
+      options.onStatusChange?.('reconnecting')
+      return mock.stop
+    }
+    let state!: ReturnType<typeof useRoutingMonitor>
+    const wrapper = mount(defineComponent({ setup() { state = useRoutingMonitor(mock.source); return () => h('div') } }))
+    wrappers.push(wrapper)
+    await flushPromises()
+    expect(state.status.value).toBe('polling')
   })
 
   it('unsubscribes even when the initial request has not returned on unmount', async () => {

@@ -27,10 +27,27 @@
       </div>
     </div>
 
-    <div class="routing-panel grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-      <label v-for="filter in filterKeys" :key="filter" class="text-xs font-medium text-gray-600 dark:text-gray-300">
-        {{ t(`${prefix}.filters.${filter}`) }}
-        <input v-model="filters[filter]" class="input mt-1 w-full" :placeholder="t(`${prefix}.filters.all`)" type="search" />
+    <div class="routing-panel grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+      <label class="text-xs font-medium text-gray-600 dark:text-gray-300">
+        {{ t(`${prefix}.filters.user`) }}
+        <select v-model="filters.user" class="input mt-1 w-full">
+          <option value="">{{ t(`${prefix}.filters.all`) }}</option>
+          <option v-for="option in userOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+        </select>
+      </label>
+      <label class="text-xs font-medium text-gray-600 dark:text-gray-300">
+        {{ t(`${prefix}.filters.requestedModel`) }}
+        <select v-model="filters.requestedModel" class="input mt-1 w-full">
+          <option value="">{{ t(`${prefix}.filters.all`) }}</option>
+          <option v-for="option in modelOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+        </select>
+      </label>
+      <label class="text-xs font-medium text-gray-600 dark:text-gray-300">
+        {{ t(`${prefix}.filters.account`) }}
+        <select v-model="filters.account" class="input mt-1 w-full">
+          <option value="">{{ t(`${prefix}.filters.all`) }}</option>
+          <option v-for="option in accountOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+        </select>
       </label>
     </div>
 
@@ -80,7 +97,7 @@
           <button v-for="route in listedRoutes" :key="route.key" type="button" class="routing-row" :class="{ 'is-selected': selectedKey === route.key }" :aria-expanded="selectedKey === route.key" @click="selectedKey = selectedKey === route.key ? null : route.key">
             <span class="grid min-w-0 flex-1 gap-2 text-left md:grid-cols-[1fr_1.2fr_1.2fr]">
               <span class="min-w-0"><span class="routing-row-label">{{ t(`${prefix}.columns.user`) }}</span><span class="block truncate" :title="route.user">{{ route.user }}</span></span>
-              <span class="min-w-0"><span class="routing-row-label">{{ t(`${prefix}.columns.requestedModel`) }} · {{ route.platform }}</span><span class="block truncate" :title="route.model">{{ route.model }}</span></span>
+              <span class="min-w-0"><span class="routing-row-label">{{ t(`${prefix}.columns.requestedModel`) }}</span><span class="block truncate" :title="route.model">{{ route.model }}</span></span>
               <span class="min-w-0"><span class="routing-row-label">{{ t(`${prefix}.columns.account`) }}</span><span class="block truncate" :title="route.account">{{ route.account }}</span></span>
             </span>
             <span class="flex shrink-0 flex-col items-end gap-1 text-xs tabular-nums">
@@ -126,16 +143,56 @@ const { events, status, disabled, loadError, refreshing, updatedAt, refresh } = 
 const frozenEvents = ref<OpsRoutingEvent[] | null>(null)
 const paused = computed(() => frozenEvents.value !== null)
 function togglePause() { frozenEvents.value = paused.value ? null : [...events.value.values()] }
-const filterKeys = ['platform', 'user', 'requestedModel', 'account'] as const
-const filters = reactive({ platform: '', user: '', requestedModel: '', account: '' })
-const hasFilters = computed(() => Object.values(filters).some(value => value.trim()))
-function clearFilters() { for (const key of filterKeys) filters[key] = ''; clearSelection() }
-const filteredEvents = computed(() => (frozenEvents.value ?? [...events.value.values()]).filter(event => {
-  const match = (value: string, query: string) => value.toLowerCase().includes(query.trim().toLowerCase())
-  return match(event.platform || event.account_platform || '', filters.platform)
-    && match(`${event.user_label || ''} ${event.user_id || ''}`, filters.user)
-    && match(event.requested_model || '', filters.requestedModel)
-    && match(`${event.account_name || ''} ${event.account_id || ''} ${(event.hops || []).map(hop => `${hop.account_name || ''} ${hop.account_id}`).join(' ')}`, filters.account)
+const filters = reactive({ user: '', requestedModel: '', account: '' })
+const sourceEvents = computed(() => frozenEvents.value ?? [...events.value.values()])
+type FilterOption = { value: string; label: string }
+function userFilterValue(event: OpsRoutingEvent) {
+  if (event.user_id !== undefined) return `id:${event.user_id}`
+  const label = (event.user_label || '').trim()
+  return label ? `label:${label}` : ''
+}
+function accountFilterValue(accountId: number | undefined, accountName: string | undefined) {
+  if (accountId !== undefined && accountId > 0) return `id:${accountId}`
+  const name = (accountName || '').trim()
+  return name ? `name:${name}` : ''
+}
+function sortedOptions(options: Map<string, string>): FilterOption[] {
+  return [...options.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((left, right) => left.label.localeCompare(right.label))
+}
+const userOptions = computed(() => {
+  const options = new Map<string, string>()
+  for (const event of sourceEvents.value) {
+    const value = userFilterValue(event)
+    if (!value) continue
+    options.set(value, event.user_label ? `${event.user_label} · #${event.user_id ?? '-'}` : `#${event.user_id}`)
+  }
+  return sortedOptions(options)
+})
+const modelOptions = computed(() => {
+  const options = new Map<string, string>()
+  for (const event of sourceEvents.value) {
+    const model = (event.requested_model || '').trim()
+    if (model) options.set(model, model)
+  }
+  return sortedOptions(options)
+})
+const accountOptions = computed(() => {
+  const options = new Map<string, string>()
+  for (const event of sourceEvents.value) {
+    const value = accountFilterValue(event.account_id, event.account_name)
+    if (!value) continue
+    options.set(value, `${event.account_name || '-'} · #${event.account_id ?? '-'}`)
+  }
+  return sortedOptions(options)
+})
+const hasFilters = computed(() => Object.values(filters).some(Boolean))
+function clearFilters() { filters.user = ''; filters.requestedModel = ''; filters.account = ''; clearSelection() }
+const filteredEvents = computed(() => sourceEvents.value.filter(event => {
+  return (!filters.user || userFilterValue(event) === filters.user)
+    && (!filters.requestedModel || event.requested_model === filters.requestedModel)
+    && (!filters.account || accountFilterValue(event.account_id, event.account_name) === filters.account)
 }))
 const routes = computed(() => groupRoutingEvents(filteredEvents.value))
 const graphLimit = ref(10)

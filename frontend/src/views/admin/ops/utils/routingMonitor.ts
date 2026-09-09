@@ -28,7 +28,7 @@ export function reduceRoutingSnapshot(snapshot: { active?: OpsRoutingEvent[]; re
 
 // Active requests are reconciled by authoritative snapshots. Only terminal
 // events age out locally; a long running request must not become a completion.
-export function pruneRoutingEvents(current: RoutingEventMap, now: number, windowMs = 30_000): RoutingEventMap {
+export function pruneRoutingEvents(current: RoutingEventMap, now: number, windowMs = 60_000): RoutingEventMap {
   const next = new Map([...current].filter(([, event]) =>
     (event.event_type !== 'completed' && event.event_type !== 'failed') || now - timestamp(event) <= windowMs
   ))
