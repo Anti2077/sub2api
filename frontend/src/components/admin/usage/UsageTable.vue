@@ -44,6 +44,10 @@
           </div>
         </template>
 
+        <template #cell-username="{ row }">
+          <span class="text-sm text-gray-900 dark:text-white">{{ row.user?.username || '-' }}</span>
+        </template>
+
         <template #cell-api_key="{ row }">
           <span class="text-sm text-gray-900 dark:text-white">{{ row.api_key?.name || '-' }}</span>
         </template>

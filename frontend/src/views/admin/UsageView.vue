@@ -617,6 +617,7 @@ const HIDDEN_COLUMNS_CURRENT_VERSION = 'upstream-request-id-hidden-by-default'
 
 const allColumns = computed<Column[]>(() => [
   { key: 'user', label: t('admin.usage.user'), sortable: false },
+  { key: 'username', label: t('admin.usage.username'), sortable: false },
   { key: 'api_key', label: t('usage.apiKeyFilter'), sortable: false },
   { key: 'account', label: t('admin.usage.account'), sortable: false },
   { key: 'model', label: t('usage.model'), sortable: true },

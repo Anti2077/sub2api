@@ -517,6 +517,7 @@ export default {
       searchAccountPlaceholder: '按名称搜索账号...',
       selectedUser: '已选择',
       user: '用户',
+      username: '用户名',
       account: '账户',
       group: '分组',
       requestId: '请求ID',
@@ -562,6 +563,7 @@ export default {
         userCount: '共 {count} 位用户',
         columns: {
           user: '用户',
+
           requests: '请求数',
           inputTokens: '输入 Token',
           outputTokens: '输出 Token',

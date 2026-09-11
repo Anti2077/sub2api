@@ -7,9 +7,9 @@
       <h2 class="text-xl font-semibold">{{ t(`incentives.${config.kind}`) }}</h2>
       <label class="flex min-h-11 items-center gap-3"><input v-model="config.enabled" type="checkbox">{{ t('incentives.enabled') }}</label>
       <div class="grid gap-5 sm:grid-cols-2">
-        <label>{{ t('incentives.groups') }}<input class="input mt-2" :value="config.group_ids.join(', ')" @change="config.group_ids = ids($event)"><small>{{ t('incentives.idsHint') }}</small></label>
-        <label>{{ t('incentives.excludedUsers') }}<input class="input mt-2" :value="config.excluded_user_ids.join(', ')" @change="config.excluded_user_ids = ids($event)"></label>
-        <label>{{ t('incentives.excludedModels') }}<input class="input mt-2" :value="config.excluded_models.join(', ')" @change="config.excluded_models = strings($event)"></label>
+        <SearchMultiSelect v-model="config.group_ids" :label="t('incentives.groups')" :options="groupOptions" :placeholder="t('incentives.selectGroups')" :search-placeholder="t('incentives.searchGroups')" :empty-text="t('incentives.noGroups')" :remove-label="t('incentives.removeOption')" />
+        <SearchMultiSelect v-model="config.excluded_user_ids" :label="t('incentives.excludedUsers')" :options="userOptions" :placeholder="t('incentives.selectUsers')" :search-placeholder="t('incentives.searchUsers')" :empty-text="t('incentives.noUsers')" :remove-label="t('incentives.removeOption')" />
+        <SearchMultiSelect v-model="config.excluded_models" :label="t('incentives.excludedModels')" :options="modelOptions" :placeholder="t('incentives.selectModels')" :search-placeholder="t('incentives.searchModels')" :empty-text="t('incentives.noModels')" :remove-label="t('incentives.removeOption')" />
         <label>{{ t('incentives.threshold') }}<input v-model.number="config.spend_threshold" class="input mt-2" type="number" min="0.0000000001" step="any" required></label>
         <template v-if="config.kind === 'global_rate'">
           <label>{{ t('incentives.decrease') }}<input v-model.number="config.rate_decrease" class="input mt-2" type="number" min="0.0000000001" step="any" required></label>
@@ -40,19 +40,31 @@
   </div></AppLayout>
 </template>
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import SearchMultiSelect, { type SearchMultiSelectOption } from '@/components/common/SearchMultiSelect.vue'
+import { adminAPI } from '@/api/admin'
+import type { AdminGroup, AdminUser } from '@/types'
 import { incentivesAPI, type IncentiveConfig, type IncentiveHistory, type IncentiveStatus } from '@/api/incentives'
 const { t } = useI18n()
 const configs = ref<IncentiveConfig[]>([]), statuses = ref<IncentiveStatus[]>([]), history = ref<IncentiveHistory>()
 const loading = ref(false), saving = ref(''), error = ref(''), notice = ref(''), previewSpend = ref(100), previewRate = ref(0.45)
 const cryptoID = () => crypto.randomUUID()
-const strings = (e: Event) => (e.target as HTMLInputElement).value.split(/[,，\n]/).map(v => v.trim()).filter(Boolean)
-const ids = (e: Event) => strings(e).map(Number)
+const groups = ref<AdminGroup[]>([]), users = ref<AdminUser[]>([]), models = ref<string[]>([])
+const groupOptions = computed<SearchMultiSelectOption[]>(() => groups.value.map(group => ({ value: group.id, label: `${group.name} (#${group.id})` })))
+const userOptions = computed<SearchMultiSelectOption[]>(() => users.value.map(user => ({ value: user.id, label: `${user.username || user.email} (#${user.id})${user.username && user.email ? ` · ${user.email}` : ''}` })))
+const modelOptions = computed<SearchMultiSelectOption[]>(() => models.value.map(model => ({ value: model, label: model })))
+async function loadSelectors() {
+  const [groupResult, modelResult] = await Promise.all([adminAPI.groups.getAllIncludingInactive(), adminAPI.groups.getModelAllowlistCandidates(0)])
+  groups.value = groupResult; models.value = modelResult
+  const pageSize = 100; const allUsers: AdminUser[] = []
+  for (let page = 1; page <= 100; page += 1) { const result = await adminAPI.users.list(page, pageSize); allUsers.push(...result.items); if (allUsers.length >= result.total || result.items.length < pageSize) break }
+  users.value = allUsers
+}
 function preview(c: IncentiveConfig) { if (!(c.spend_threshold > 0)) return '—'; const tiers = Math.floor(Math.max(0,previewSpend.value) / c.spend_threshold); return c.kind === 'global_rate' ? Math.min(previewRate.value,Math.max(c.minimum_rate,previewRate.value - tiers*c.rate_decrease)).toFixed(4) : String(c.max_chances ? Math.min(c.max_chances,tiers) : tiers) }
 async function load() { loading.value = true; error.value = ''; try { [configs.value,statuses.value,history.value] = await Promise.all([incentivesAPI.configs(),incentivesAPI.status(true),incentivesAPI.history(true)]) } catch(e) { error.value = e instanceof Error ? e.message : t('incentives.error') } finally { loading.value = false } }
 async function save(c: IncentiveConfig) { saving.value = c.kind; error.value = ''; notice.value = ''; try { const saved = await incentivesAPI.save(c); Object.assign(c,saved); notice.value = t('incentives.saved'); statuses.value = await incentivesAPI.status(true) } catch(e) { error.value = e instanceof Error ? e.message : t('incentives.error') } finally { saving.value = '' } }
 async function reset(id: number) { if (!window.confirm(t('incentives.resetConfirm'))) return; try { await incentivesAPI.reset(id); await load() } catch(e) { error.value = e instanceof Error ? e.message : t('incentives.error') } }
-onMounted(load)
+onMounted(async () => { try { await Promise.all([load(), loadSelectors()]) } catch (e) { error.value = e instanceof Error ? e.message : t('incentives.error') } })
 </script>
