@@ -151,9 +151,13 @@ export default {
   },
 
   incentives: {
-    "title": "Incentive plan",
-    "settings": "Incentive settings",
-    "description": "Shared usage unlocks lower group rates. Your usage earns lucky draws.",
+    "title": "Benefits center",
+    "settings": "Benefits settings",
+    "description": "Shared usage unlocks lower group rates. Check-ins and usage earn lucky draws.",
+    "rateProgress": "Community rate progress",
+    "currentRate": "Current rate",
+    "rateDrop": "Dropped this period",
+    "viewDetails": "View benefits",
     "global_rate": "Community rate",
     "lottery": "Lucky draw",
     "disabled": "Not active",

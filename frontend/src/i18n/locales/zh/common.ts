@@ -151,9 +151,13 @@ export default {
   },
 
   incentives: {
-    "title": "激励计划",
-    "settings": "激励设置",
-    "description": "共同使用解锁更低分组倍率，个人消费获得幸运抽奖机会。",
+    "title": "福利中心",
+    "settings": "福利设置",
+    "description": "共同使用解锁更低分组倍率，签到和消费都能获得幸运抽奖机会。",
+    "rateProgress": "全站倍率进度",
+    "currentRate": "当前倍率",
+    "rateDrop": "本周期已下降",
+    "viewDetails": "查看福利详情",
     "global_rate": "全站倍率活动",
     "lottery": "幸运抽奖",
     "disabled": "当前未开启",
