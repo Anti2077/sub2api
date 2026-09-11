@@ -110,7 +110,7 @@ func (s *IncentiveService) Configs(ctx context.Context) ([]IncentiveConfig, erro
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var kind string
 		var version int64
@@ -147,7 +147,7 @@ func (s *IncentiveService) Save(ctx context.Context, c IncentiveConfig, actor in
 	if err != nil {
 		return c, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	// Serialize initial insert as well as updates with usage accounting and resets.
 	if _, err = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(783219)"); err != nil {
 		return c, err
@@ -162,18 +162,18 @@ func (s *IncentiveService) Save(ctx context.Context, c IncentiveConfig, actor in
 		return c, err
 	}
 	inserted := rows.Next()
-	rows.Close()
+	_ = rows.Close()
 	if !inserted {
 		rows, err = tx.QueryContext(ctx, `UPDATE incentive_campaigns SET version=version+1,config=$2::jsonb,updated_at=clock_timestamp() WHERE kind=$1 AND version=$3 RETURNING version`, c.Kind, string(raw), c.Version)
 		if err != nil {
 			return c, err
 		}
 		if !rows.Next() {
-			rows.Close()
+			_ = rows.Close()
 			return c, infraerrors.Conflict("INCENTIVE_CONFIG_CHANGED", "reload settings before saving")
 		}
 		err = rows.Scan(&c.Version)
-		rows.Close()
+		_ = rows.Close()
 		if err != nil {
 			return c, err
 		}
@@ -191,7 +191,7 @@ func (s *IncentiveService) Save(ctx context.Context, c IncentiveConfig, actor in
 	if rows.Next() {
 		err = rows.Scan(&period)
 	}
-	rows.Close()
+	_ = rows.Close()
 	if err != nil {
 		return c, err
 	}
@@ -240,7 +240,7 @@ func (s *IncentiveService) Status(ctx context.Context, userID int64) ([]Incentiv
 		if periodRows.Next() {
 			e = periodRows.Scan(&v.PeriodID)
 		}
-		periodRows.Close()
+		_ = periodRows.Close()
 		if e != nil {
 			return nil, e
 		}
@@ -251,7 +251,7 @@ func (s *IncentiveService) Status(ctx context.Context, userID int64) ([]Incentiv
 		if rows.Next() {
 			e = rows.Scan(&v.PeriodID, &v.StartsAt, &v.EndsAt, &v.Spend, &ruleSpend)
 		}
-		rows.Close()
+		_ = rows.Close()
 		if e != nil {
 			return nil, e
 		}
@@ -263,7 +263,7 @@ func (s *IncentiveService) Status(ctx context.Context, userID int64) ([]Incentiv
 		if rows.Next() {
 			e = rows.Scan(&v.PersonalSpend, &v.Earned, &v.Used, &personalRuleSpend)
 		}
-		rows.Close()
+		_ = rows.Close()
 		if e != nil {
 			return nil, e
 		}
@@ -296,7 +296,7 @@ func (s *IncentiveService) Status(ctx context.Context, userID int64) ([]Incentiv
 		if e == nil {
 			e = rows.Err()
 		}
-		rows.Close()
+		_ = rows.Close()
 		if e != nil {
 			return nil, e
 		}
@@ -320,7 +320,7 @@ func (s *IncentiveService) ApplyRate(ctx context.Context, user *User, group *Gro
 	if err != nil {
 		return base
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	if !rows.Next() {
 		return base
 	}
@@ -355,7 +355,7 @@ func (s *IncentiveService) History(ctx context.Context, userID int64) (map[strin
 		if rows.Next() {
 			err = rows.Scan(&raw)
 		}
-		rows.Close()
+		_ = rows.Close()
 		if err != nil {
 			return nil, err
 		}
@@ -368,7 +368,7 @@ func (s *IncentiveService) Reset(ctx context.Context, id, actor int64) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if _, err = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(783219)"); err != nil {
 		return err
 	}
@@ -381,7 +381,7 @@ func (s *IncentiveService) Reset(ctx context.Context, id, actor int64) error {
 	if rows.Next() {
 		err = rows.Scan(&kind)
 	}
-	rows.Close()
+	_ = rows.Close()
 	if err != nil {
 		return err
 	}
@@ -412,7 +412,7 @@ func (s *IncentiveService) Draw(ctx context.Context, userID int64, key string) (
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	rows, err := tx.QueryContext(ctx, `SELECT config FROM incentive_campaigns WHERE kind='lottery' FOR UPDATE`)
 	if err != nil {
 		return nil, err
@@ -421,7 +421,7 @@ func (s *IncentiveService) Draw(ctx context.Context, userID int64, key string) (
 	if rows.Next() {
 		err = rows.Scan(&raw)
 	}
-	rows.Close()
+	_ = rows.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -441,13 +441,13 @@ func (s *IncentiveService) Draw(ctx context.Context, userID int64, key string) (
 	var amount float64
 	if rows.Next() {
 		err = rows.Scan(&prizeRaw, &amount)
-		rows.Close()
+		_ = rows.Close()
 		if err != nil {
 			return nil, err
 		}
 		return map[string]any{"prize": prizeRaw, "reward_amount": amount}, nil
 	}
-	rows.Close()
+	_ = rows.Close()
 	user, err := s.users.GetByID(dbent.NewTxContext(ctx, tx), userID)
 	if err != nil {
 		return nil, err
@@ -463,7 +463,7 @@ func (s *IncentiveService) Draw(ctx context.Context, userID int64, key string) (
 	if rows.Next() {
 		err = rows.Scan(&period)
 	}
-	rows.Close()
+	_ = rows.Close()
 	if err != nil {
 		return nil, err
 	}

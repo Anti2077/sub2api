@@ -34,7 +34,7 @@ func TestIncentiveRatePreservesExclusionsAndFloor(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			db, mock, err := sqlmock.New()
 			require.NoError(t, err)
-			defer db.Close()
+			defer func() { _ = db.Close() }()
 			client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 			c := DefaultIncentiveConfig("global_rate")
 			c.Enabled = tt.enabled
@@ -58,7 +58,7 @@ func TestIncentiveRatePreservesExclusionsAndFloor(t *testing.T) {
 func TestIncentiveDrawRetryReturnsReceiptWithoutDebit(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 	c := DefaultIncentiveConfig("lottery")
 	raw, err := json.Marshal(c)
