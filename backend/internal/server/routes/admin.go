@@ -74,6 +74,14 @@ func RegisterAdminRoutes(
 		registerPromoCodeRoutes(admin, h)
 
 		// 每日签到抽奖
+		if h.Incentives != nil {
+			incentives := admin.Group("/incentives")
+			incentives.GET("/config", h.Incentives.Config)
+			incentives.PUT("/config", h.Incentives.Save)
+			incentives.GET("/status", h.Incentives.AdminStatus)
+			incentives.GET("/history", h.Incentives.AdminHistory)
+			incentives.POST("/periods/:id/reset", h.Incentives.Reset)
+		}
 		registerDailyLotteryRoutes(admin, h)
 
 		// 系统设置

@@ -754,6 +754,9 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	if pricingAt.IsZero() {
 		pricingAt = timezone.Now()
 	}
+	if s.settingService != nil && s.settingService.incentives != nil {
+		multiplier = s.settingService.incentives.ApplyRate(ctx, user, apiKey.Group, result.Model, multiplier, pricingAt)
+	}
 	multiplier, imageMultiplier := computePeakAwareMultipliers(apiKey, multiplier, pricingAt)
 
 	// 确定计费模型

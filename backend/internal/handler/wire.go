@@ -181,6 +181,9 @@ func ProvideHandlers(
 	usageHandler *UsageHandler,
 	redeemHandler *RedeemHandler,
 	dailyLotteryHandler *DailyLotteryHandler,
+	incentiveHandler *IncentiveHandler,
+	incentiveService *service.IncentiveService,
+	incentiveSettings *service.SettingService,
 	subscriptionHandler *SubscriptionHandler,
 	announcementHandler *AnnouncementHandler,
 	channelMonitorUserHandler *ChannelMonitorUserHandler,
@@ -201,6 +204,7 @@ func ProvideHandlers(
 	_ *service.IdempotencyCleanupService,
 	_ *service.OpenAIQuotaAutoResetService,
 ) *Handlers {
+	incentiveSettings.SetIncentiveService(incentiveService)
 	return &Handlers{
 		Auth:             authHandler,
 		User:             userHandler,
@@ -208,6 +212,7 @@ func ProvideHandlers(
 		Usage:            usageHandler,
 		Redeem:           redeemHandler,
 		DailyLottery:     dailyLotteryHandler,
+		Incentives:       incentiveHandler,
 		Subscription:     subscriptionHandler,
 		Announcement:     announcementHandler,
 		ChannelMonitor:   channelMonitorUserHandler,
@@ -236,6 +241,7 @@ var ProviderSet = wire.NewSet(
 	NewUsageHandler,
 	NewRedeemHandler,
 	NewDailyLotteryHandler,
+	NewIncentiveHandler,
 	NewSubscriptionHandler,
 	NewAnnouncementHandler,
 	NewChannelMonitorUserHandler,

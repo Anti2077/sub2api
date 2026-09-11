@@ -282,18 +282,8 @@ const routes: RouteRecordRaw[] = [
       descriptionKey: 'leaderboard.description'
     }
   },
-  {
-    path: '/daily-lottery',
-    name: 'DailyLottery',
-    component: () => import('@/views/user/DailyLotteryView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: false,
-      title: 'Daily Lottery',
-      titleKey: 'dailyLottery.title',
-      descriptionKey: 'dailyLottery.description'
-    }
-  },
+  { path: '/daily-lottery', redirect: '/incentives#lottery' },
+  { path: '/incentives', name: 'Incentives', component: () => import('@/views/user/IncentivesView.vue'), meta: { requiresAuth: true, requiresAdmin: false, titleKey: 'incentives.title' } },
   {
     path: '/redeem',
     name: 'Redeem',
@@ -655,18 +645,8 @@ const routes: RouteRecordRaw[] = [
       descriptionKey: 'admin.promo.description'
     }
   },
-  {
-    path: '/admin/daily-lottery',
-    name: 'AdminDailyLottery',
-    component: () => import('@/views/admin/DailyLotteryView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Daily Lottery Settings',
-      titleKey: 'dailyLottery.admin.title',
-      descriptionKey: 'dailyLottery.admin.description'
-    }
-  },
+  { path: '/admin/daily-lottery', redirect: '/admin/incentives' },
+  { path: '/admin/incentives', name: 'AdminIncentives', component: () => import('@/views/admin/IncentivesView.vue'), meta: { requiresAuth: true, requiresAdmin: true, titleKey: 'incentives.settings' } },
   {
     path: '/admin/settings',
     name: 'AdminSettings',

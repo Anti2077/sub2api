@@ -137,11 +137,11 @@ func TestListLotteryBalanceHistoryMapsPositivePrize(t *testing.T) {
 
 	drawnAt := time.Date(2026, 9, 5, 11, 0, 0, 0, time.UTC)
 	createdAt := drawnAt.Add(-time.Minute)
-	mock.ExpectQuery(`(?s)FROM daily_lottery_entries.*user_id = \$1.*drawn_at IS NOT NULL.*reward_amount > 0`).
+	mock.ExpectQuery(`(?s)FROM incentive_lottery_balance_history.*user_id = \$1.*drawn_at IS NOT NULL.*reward_amount > 0`).
 		WithArgs(int64(42), 20, 20).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "checkin_date", "reward_amount", "prize_name", "drawn_at", "created_at"}).
 			AddRow(int64(9), "2026-09-05", 1.25, "一等奖", drawnAt, createdAt))
-	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\).*FROM daily_lottery_entries.*user_id = \$1.*drawn_at IS NOT NULL.*reward_amount > 0`).
+	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\).*FROM incentive_lottery_balance_history.*user_id = \$1.*drawn_at IS NOT NULL.*reward_amount > 0`).
 		WithArgs(int64(42)).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(3)))
 
@@ -168,7 +168,7 @@ func TestSumUserBalanceCreditsIncludesEveryPersistedPositiveSource(t *testing.T)
 	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 	t.Cleanup(func() { _ = client.Close() })
 
-	mock.ExpectQuery(`(?s)SELECT \(.*FROM redeem_codes.*value > 0.*type IN \('balance', 'admin_balance'\).*FROM user_affiliate_ledger.*action = 'transfer'.*amount > 0.*FROM promo_code_usages.*bonus_amount > 0.*FROM daily_lottery_entries.*drawn_at IS NOT NULL.*reward_amount > 0`).
+	mock.ExpectQuery(`(?s)SELECT \(.*FROM redeem_codes.*value > 0.*type IN \('balance', 'admin_balance'\).*FROM user_affiliate_ledger.*action = 'transfer'.*amount > 0.*FROM promo_code_usages.*bonus_amount > 0.*FROM incentive_lottery_balance_history.*drawn_at IS NOT NULL.*reward_amount > 0`).
 		WithArgs(int64(42)).
 		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow(15.75))
 

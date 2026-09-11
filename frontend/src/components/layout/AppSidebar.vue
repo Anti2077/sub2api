@@ -732,7 +732,7 @@ function buildSelfNavItems(withDashboard: boolean, dashboardLabel = t('nav.dashb
     { path: '/batch-image', label: t('nav.batchImage'), icon: BatchImageIcon, hideInSimpleMode: true, featureFlag: flagBatchImageAccess },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     { path: '/leaderboard', label: t('nav.tokenLeaderboard'), icon: TrophyIcon, hideInSimpleMode: true },
-    { path: '/daily-lottery', label: t('nav.dailyLottery'), icon: GiftIcon, hideInSimpleMode: true },
+    { path: '/incentives', label: t('incentives.title'), icon: GiftIcon, hideInSimpleMode: true },
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
     { path: '/monitor', label: t('nav.channelStatus'), icon: SignalIcon, featureFlag: flagChannelMonitor },
     { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },
@@ -816,7 +816,7 @@ const adminNavItems = computed((): NavItem[] => {
     },
     { path: '/admin/redeem', label: t('nav.redeemCodes'), icon: TicketIcon, hideInSimpleMode: true },
     { path: '/admin/promo-codes', label: t('nav.promoCodes'), icon: GiftIcon, hideInSimpleMode: true },
-    { path: '/admin/daily-lottery', label: t('nav.dailyLotterySettings'), icon: TrophyIcon, hideInSimpleMode: true },
+    { path: '/admin/incentives', label: t('incentives.settings'), icon: TrophyIcon, hideInSimpleMode: true },
     {
       path: '/admin/affiliates',
       label: t('nav.affiliateManagement'),

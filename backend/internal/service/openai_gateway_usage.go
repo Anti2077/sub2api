@@ -207,6 +207,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	// Resolve，以免污染 user:group 倍率缓存。
 	baseMultiplier := multiplier
 	pricingAt := openAIUsagePricingAt(input)
+	if s.settingService != nil && s.settingService.incentives != nil {
+		baseMultiplier = s.settingService.incentives.ApplyRate(ctx, user, apiKey.Group, result.Model, baseMultiplier, pricingAt)
+	}
 	multiplier, imageMultiplier := computePeakAwareMultipliers(apiKey, baseMultiplier, pricingAt)
 	videoMultiplier := resolveVideoRateMultiplier(apiKey, baseMultiplier)
 

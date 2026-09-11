@@ -923,7 +923,7 @@ SELECT id,
        COALESCE(prize_name, ''),
        drawn_at,
        created_at
-FROM daily_lottery_entries
+FROM incentive_lottery_balance_history
 WHERE user_id = $1
   AND drawn_at IS NOT NULL
   AND reward_amount > 0
@@ -972,7 +972,7 @@ WHERE user_id = $1
 func countLotteryBalanceHistory(ctx context.Context, client *dbent.Client, userID int64) (int64, error) {
 	return countBalanceHistoryRows(ctx, client, `
 SELECT COUNT(*)
-FROM daily_lottery_entries
+FROM incentive_lottery_balance_history
 WHERE user_id = $1
   AND drawn_at IS NOT NULL
   AND reward_amount > 0`, userID)
@@ -1071,7 +1071,7 @@ SELECT (
     ), 0)
     + COALESCE((
         SELECT SUM(reward_amount)
-        FROM daily_lottery_entries
+        FROM incentive_lottery_balance_history
         WHERE user_id = $1
           AND drawn_at IS NOT NULL
           AND reward_amount > 0
