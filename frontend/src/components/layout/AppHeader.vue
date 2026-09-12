@@ -246,9 +246,6 @@
         </div>
       </div>
     </div>
-    <div v-if="user && !authStore.isAdmin" class="border-t border-gray-200/50 px-2 py-1.5 dark:border-dark-700/50 sm:px-4 md:px-6">
-      <IncentiveRateProgress compact class="mx-auto w-full max-w-6xl" />
-    </div>
   </header>
 </template>
 
@@ -261,7 +258,6 @@ import { useAdminSettingsStore } from '@/stores/adminSettings'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import SubscriptionProgressMini from '@/components/common/SubscriptionProgressMini.vue'
 import AnnouncementBell from '@/components/common/AnnouncementBell.vue'
-import IncentiveRateProgress from '@/components/user/dashboard/IncentiveRateProgress.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'

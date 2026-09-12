@@ -171,6 +171,7 @@ export default {
     "error": "Unable to load incentives",
     "progress": "Milestone progress",
     "ineligible": "Your account is excluded from this activity.",
+    "excludedNotice": "Your usage is excluded from the community total, but you can still view the activity progress and current rates.",
     "rateNote": "Group rates apply to subsequent requests. Your existing personal rate and model exclusions take priority.",
     "expiry": "Unused chances expire at the end of the week.",
     "draw": "Draw now",

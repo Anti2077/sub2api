@@ -1,7 +1,7 @@
 <template>
   <section
-    v-if="status?.enabled && status.eligible"
-    :class="compact ? 'incentive-rate-progress incentive-rate-progress--compact' : 'incentive-rate-progress card p-5'"
+    v-if="status?.enabled"
+    class="incentive-rate-progress card p-5"
     :aria-labelledby="headingId"
   >
     <div class="flex min-w-0 items-center justify-between gap-3">
@@ -10,38 +10,38 @@
           <Icon name="chart" size="sm" />
         </span>
         <div class="min-w-0">
-          <h2 :id="headingId" :class="compact ? 'truncate text-xs font-semibold' : 'text-base font-semibold'">
+          <h2 :id="headingId" class="text-base font-semibold">
             {{ t('incentives.rateProgress') }}
           </h2>
-          <p v-if="!compact" class="mt-1 text-xs text-gray-500 dark:text-dark-400">
+          <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">
             {{ date(status.starts_at) }} — {{ date(status.ends_at) }} · {{ status.timezone }}
           </p>
         </div>
       </div>
       <RouterLink
-        v-if="!compact"
         to="/incentives#global_rate"
         class="shrink-0 text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-300 dark:hover:text-primary-200"
       >
         {{ t('incentives.viewDetails') }} →
       </RouterLink>
-      <RouterLink
-        v-else
-        to="/incentives#global_rate"
-        class="shrink-0 rounded-md p-1 text-gray-500 hover:bg-white/70 hover:text-primary-600 dark:text-dark-400 dark:hover:bg-dark-800/70"
-        :aria-label="t('incentives.viewDetails')"
-      >
-        <Icon name="chevronRight" size="sm" />
-      </RouterLink>
     </div>
 
-    <div :class="compact ? 'mt-2' : 'mt-5'">
+    <p
+      v-if="!status.eligible"
+      role="status"
+      aria-atomic="true"
+      class="incentive-rate-progress__notice mt-3 rounded-lg px-3 py-2 text-xs"
+    >
+      {{ t('incentives.excludedNotice') }}
+    </p>
+
+    <div class="mt-5">
       <div class="flex items-end justify-between gap-3">
         <div class="flex items-baseline gap-2">
-          <strong :class="compact ? 'text-sm' : 'text-3xl'" class="tabular-nums text-gray-900 dark:text-white">
+          <strong class="text-3xl tabular-nums text-gray-900 dark:text-white">
             {{ formatRate(currentRate) }}x
           </strong>
-          <span v-if="!compact" class="text-xs text-gray-500 dark:text-dark-400">
+          <span class="text-xs text-gray-500 dark:text-dark-400">
             {{ t('incentives.currentRate') }}
           </span>
         </div>
@@ -72,7 +72,7 @@
       </div>
     </div>
 
-    <div v-if="!compact && status.groups.length" class="mt-5 grid gap-2 sm:grid-cols-2">
+    <div v-if="status.groups.length" class="mt-5 grid gap-2 sm:grid-cols-2">
       <div
         v-for="group in status.groups"
         :key="group.group_id"
@@ -94,7 +94,6 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import { incentivesAPI, type IncentiveStatus } from '@/api/incentives'
 
-const { compact = false } = defineProps<{ compact?: boolean }>()
 const { t } = useI18n()
 const status = ref<IncentiveStatus | null>(null)
 const headingId = `incentive-rate-progress-${Math.random().toString(36).slice(2, 8)}`
@@ -140,12 +139,10 @@ onBeforeUnmount(() => {
   background: linear-gradient(135deg, rgb(239 246 255 / 0.95), rgb(250 245 255 / 0.95));
 }
 
-.incentive-rate-progress--compact {
-  min-width: 190px;
-  max-width: 290px;
-  border-radius: 0.75rem;
-  background: rgb(248 250 252 / 0.75);
-  padding: 0.45rem 0.65rem;
+.incentive-rate-progress__notice {
+  border: 1px solid rgb(245 158 11 / 0.35);
+  background: rgb(255 251 235 / 0.9);
+  color: rgb(146 64 14);
 }
 
 .incentive-rate-progress__icon {
@@ -187,13 +184,15 @@ onBeforeUnmount(() => {
   transition: left 300ms ease;
 }
 
+.dark .incentive-rate-progress__notice {
+  border-color: rgb(245 158 11 / 0.35);
+  background: rgb(120 53 15 / 0.22);
+  color: rgb(253 230 138);
+}
+
 .dark .incentive-rate-progress {
   border-color: rgb(51 65 85 / 0.9);
   background: linear-gradient(135deg, rgb(23 37 84 / 0.6), rgb(58 35 83 / 0.45));
-}
-
-.dark .incentive-rate-progress--compact {
-  background: rgb(30 41 59 / 0.7);
 }
 
 .dark .incentive-rate-progress__track {
