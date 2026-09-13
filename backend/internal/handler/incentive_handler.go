@@ -85,6 +85,18 @@ func (h *IncentiveHandler) Reset(c *gin.Context) {
 	}
 	response.Success(c, gin.H{"reset": true})
 }
+func (h *IncentiveHandler) CheckIn(c *gin.Context) {
+	id, ok := dailyLotteryUserID(c)
+	if !ok {
+		return
+	}
+	v, e := h.service.CheckIn(c.Request.Context(), id)
+	if e != nil {
+		response.ErrorFrom(c, e)
+		return
+	}
+	response.Success(c, v)
+}
 func (h *IncentiveHandler) Draw(c *gin.Context) {
 	id, ok := dailyLotteryUserID(c)
 	if !ok {

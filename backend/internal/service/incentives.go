@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"math"
 	"slices"
@@ -37,22 +38,25 @@ type IncentiveGroupRate struct {
 	CurrentRate float64 `json:"current_rate"`
 }
 type IncentiveStatus struct {
-	Kind          string                  `json:"kind"`
-	Enabled       bool                    `json:"enabled"`
-	Eligible      bool                    `json:"eligible"`
-	PeriodID      int64                   `json:"period_id"`
-	StartsAt      time.Time               `json:"starts_at"`
-	EndsAt        time.Time               `json:"ends_at"`
-	Timezone      string                  `json:"timezone"`
-	Spend         float64                 `json:"spend"`
-	PersonalSpend float64                 `json:"personal_spend"`
-	NextThreshold float64                 `json:"next_threshold"`
-	Threshold     float64                 `json:"threshold"`
-	Earned        int64                   `json:"earned"`
-	Used          int64                   `json:"used"`
-	Available     int64                   `json:"available"`
-	Groups        []IncentiveGroupRate    `json:"groups"`
-	Prizes        []DailyLotteryPrizeView `json:"prizes"`
+	Kind                 string                  `json:"kind"`
+	Enabled              bool                    `json:"enabled"`
+	Eligible             bool                    `json:"eligible"`
+	CheckInEnabled       bool                    `json:"check_in_enabled"`
+	CheckedInToday       bool                    `json:"checked_in_today"`
+	CheckInChanceAwarded bool                    `json:"check_in_chance_awarded"`
+	PeriodID             int64                   `json:"period_id"`
+	StartsAt             time.Time               `json:"starts_at"`
+	EndsAt               time.Time               `json:"ends_at"`
+	Timezone             string                  `json:"timezone"`
+	Spend                float64                 `json:"spend"`
+	PersonalSpend        float64                 `json:"personal_spend"`
+	NextThreshold        float64                 `json:"next_threshold"`
+	Threshold            float64                 `json:"threshold"`
+	Earned               int64                   `json:"earned"`
+	Used                 int64                   `json:"used"`
+	Available            int64                   `json:"available"`
+	Groups               []IncentiveGroupRate    `json:"groups"`
+	Prizes               []DailyLotteryPrizeView `json:"prizes"`
 }
 type IncentiveService struct {
 	client      *dbent.Client
@@ -227,6 +231,13 @@ func (s *IncentiveService) Status(ctx context.Context, userID int64) ([]Incentiv
 		v := IncentiveStatus{Kind: c.Kind, Enabled: c.Enabled, Eligible: user == nil || (!slices.Contains(c.ExcludedUserIDs, userID) && (!c.ExcludeAdmins || user.Role != "admin")), StartsAt: start, EndsAt: start.AddDate(0, 0, 7), Timezone: timezone.Name(), Groups: []IncentiveGroupRate{}, Prizes: []DailyLotteryPrizeView{}, Threshold: c.SpendThreshold, NextThreshold: c.SpendThreshold}
 		if c.Kind == "lottery" {
 			v.Prizes = dailyLotteryPrizeViews(c.Prizes)
+			dailyStatus, dailyErr := s.lottery.GetStatus(ctx, userID)
+			if dailyErr != nil {
+				return nil, dailyErr
+			}
+			v.CheckInEnabled = dailyStatus.Enabled
+			v.CheckedInToday = dailyStatus.CheckedIn
+			v.CheckInChanceAwarded = dailyStatus.Entry != nil
 		}
 		if c.Version == 0 {
 			out = append(out, v)
@@ -338,6 +349,109 @@ func (s *IncentiveService) ApplyRate(ctx context.Context, user *User, group *Gro
 	}
 	return math.Min(base, math.Max(c.MinimumRate, snapshot-decrease))
 }
+
+// CheckIn records the legacy daily check-in and grants one chance in the
+// current incentive lottery period. The daily entry remains the compatibility
+// record while the chance ledger is the source used by the unified draw flow.
+func (s *IncentiveService) CheckIn(ctx context.Context, userID int64) (*DailyLotteryStatus, error) {
+	status, err := s.lottery.CheckIn(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if status.Entry == nil {
+		return status, nil
+	}
+	if err := s.recordCheckInChance(ctx, userID, status.Entry); err != nil {
+		return nil, err
+	}
+	return s.lottery.GetStatus(ctx, userID)
+}
+
+func (s *IncentiveService) recordCheckInChance(ctx context.Context, userID int64, entry *DailyLotteryEntry) error {
+	legacy, err := s.lottery.GetConfig(ctx)
+	if err != nil {
+		return err
+	}
+
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(783219)"); err != nil {
+		return err
+	}
+
+	rows, err := tx.QueryContext(ctx, `SELECT config FROM incentive_campaigns WHERE kind='lottery' FOR UPDATE`)
+	if err != nil {
+		return err
+	}
+	var raw []byte
+	if rows.Next() {
+		err = rows.Scan(&raw)
+	}
+	_ = rows.Close()
+	if err != nil {
+		return err
+	}
+
+	var config IncentiveConfig
+	if len(raw) == 0 {
+		config = DefaultIncentiveConfig("lottery")
+		config.Prizes = legacy.Prizes
+		raw, err = json.Marshal(config)
+		if err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO incentive_campaigns(kind,version,config) VALUES('lottery',1,$1::jsonb)`, string(raw)); err != nil {
+			return err
+		}
+		config.Version = 1
+	} else if err = json.Unmarshal(raw, &config); err != nil {
+		return err
+	}
+
+	rows, err = tx.QueryContext(ctx, `SELECT incentive_ensure_period('lottery',clock_timestamp())`)
+	if err != nil {
+		return err
+	}
+	var period int64
+	if rows.Next() {
+		err = rows.Scan(&period)
+	}
+	_ = rows.Close()
+	if err != nil {
+		return err
+	}
+	if period == 0 {
+		return infraerrors.Conflict("INCENTIVE_LOTTERY_NOT_CONFIGURED", "lottery activity is not configured")
+	}
+
+	if _, err = tx.ExecContext(ctx, `INSERT INTO incentive_user_progress(period_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, period, userID); err != nil {
+		return err
+	}
+	rows, err = tx.QueryContext(ctx, `
+		INSERT INTO incentive_lottery_chance_ledger(period_id,user_id,usage_id,chances,source,source_key)
+		SELECT $1,$2,-$3,1,'checkin',$4
+		WHERE $5=0 OR EXISTS(
+			SELECT 1 FROM incentive_user_progress
+			WHERE period_id=$1 AND user_id=$2 AND earned < $5
+		)
+		ON CONFLICT DO NOTHING
+		RETURNING id`, period, userID, entry.ID, entry.CheckinDate, config.MaxChances)
+	if err != nil {
+		return err
+	}
+	inserted := rows.Next()
+	_ = rows.Close()
+	if inserted {
+		if _, err = tx.ExecContext(ctx, `UPDATE incentive_user_progress SET earned=earned+1 WHERE period_id=$1 AND user_id=$2`, period, userID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func (s *IncentiveService) History(ctx context.Context, userID int64) (map[string]any, error) {
 	queries := map[string]string{"rewards": `SELECT COALESCE(jsonb_agg(to_jsonb(x)),'[]') FROM (SELECT id,period_id,user_id,prize,reward_amount,created_at FROM incentive_reward_ledger WHERE ($1::bigint=0 OR user_id=$1) ORDER BY id DESC LIMIT 100) x`, "chances": `SELECT COALESCE(jsonb_agg(to_jsonb(x)),'[]') FROM (SELECT * FROM incentive_lottery_chance_ledger WHERE ($1::bigint=0 OR user_id=$1) ORDER BY id DESC LIMIT 100) x`}
 	if userID == 0 {
@@ -448,14 +562,22 @@ func (s *IncentiveService) Draw(ctx context.Context, userID int64, key string) (
 		return map[string]any{"prize": prizeRaw, "reward_amount": amount}, nil
 	}
 	_ = rows.Close()
-	user, err := s.users.GetByID(dbent.NewTxContext(ctx, tx), userID)
-	if err != nil {
-		return nil, err
+
+	legacy := DailyLotteryConfig{}
+	if !c.Enabled || len(c.Prizes) == 0 {
+		legacy, err = s.lottery.GetConfig(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !c.Enabled && !legacy.Enabled {
+			return nil, ErrDailyLotteryDisabled
+		}
+		if len(c.Prizes) == 0 {
+			c.Prizes = legacy.Prizes
+		}
 	}
-	if !c.Enabled || slices.Contains(c.ExcludedUserIDs, userID) || (c.ExcludeAdmins && user.Role == "admin") {
-		return nil, ErrDailyLotteryDisabled
-	}
-	rows, err = tx.QueryContext(ctx, `UPDATE incentive_user_progress SET used=used+1 WHERE user_id=$1 AND period_id=incentive_ensure_period('lottery',clock_timestamp()) AND used<earned RETURNING period_id`, userID)
+
+	rows, err = tx.QueryContext(ctx, `SELECT incentive_ensure_period('lottery',clock_timestamp())`)
 	if err != nil {
 		return nil, err
 	}
@@ -470,6 +592,40 @@ func (s *IncentiveService) Draw(ctx context.Context, userID int64, key string) (
 	if period == 0 {
 		return nil, infraerrors.Conflict("INCENTIVE_NO_CHANCES", "no available draw chances")
 	}
+
+	rows, err = tx.QueryContext(ctx, `
+		SELECT id,usage_id,source,source_key
+		FROM incentive_lottery_chance_ledger
+		WHERE period_id=$1 AND user_id=$2 AND used < chances
+		ORDER BY id
+		LIMIT 1 FOR UPDATE`, period, userID)
+	if err != nil {
+		return nil, err
+	}
+	var chanceID, usageID int64
+	var source string
+	var sourceKey sql.NullString
+	if rows.Next() {
+		err = rows.Scan(&chanceID, &usageID, &source, &sourceKey)
+	}
+	_ = rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	if chanceID == 0 {
+		return nil, infraerrors.Conflict("INCENTIVE_NO_CHANCES", "no available draw chances")
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE incentive_lottery_chance_ledger SET used=used+1 WHERE id=$1 AND used < chances`, chanceID); err != nil {
+		return nil, err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE incentive_user_progress SET used=used+1 WHERE period_id=$1 AND user_id=$2 AND used < earned`, period, userID)
+	if err != nil {
+		return nil, err
+	}
+	if affected, affectedErr := result.RowsAffected(); affectedErr != nil || affected != 1 {
+		return nil, infraerrors.Conflict("INCENTIVE_NO_CHANCES", "no available draw chances")
+	}
+
 	prize, err := s.lottery.selectPrize(c.Prizes)
 	if err != nil {
 		return nil, err
@@ -480,6 +636,11 @@ func (s *IncentiveService) Draw(ctx context.Context, userID int64, key string) (
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO incentive_reward_ledger(period_id,user_id,request_key,prize,reward_amount) VALUES($1,$2,$3,$4::jsonb,$5)`, period, userID, key, string(encoded), prize.RewardAmount); err != nil {
 		return nil, err
+	}
+	if source == "checkin" {
+		if _, err = tx.ExecContext(ctx, `UPDATE daily_lottery_entries SET drawn_at=clock_timestamp(),prize_id=$1,prize_name=$2,reward_amount=$3,updated_at=clock_timestamp() WHERE id=$4 AND user_id=$5 AND drawn_at IS NULL`, prize.ID, prize.Name, prize.RewardAmount, -usageID, userID); err != nil {
+			return nil, err
+		}
 	}
 	if prize.RewardAmount > 0 {
 		if _, err = s.users.AdjustBalance(dbent.NewTxContext(ctx, tx), userID, prize.RewardAmount); err != nil {
@@ -492,7 +653,7 @@ func (s *IncentiveService) Draw(ctx context.Context, userID int64, key string) (
 	if s.invalidator != nil {
 		s.invalidator.InvalidateAuthCacheByUserID(ctx, userID)
 	}
-	return map[string]any{"prize": prize, "reward_amount": prize.RewardAmount}, nil
+	return map[string]any{"prize": prize, "reward_amount": prize.RewardAmount, "source": source, "source_key": sourceKey.String}, nil
 }
 
 func (s *SettingService) SetIncentiveService(i *IncentiveService) { s.incentives = i }

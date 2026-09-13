@@ -133,14 +133,13 @@ func RegisterUserRoutes(
 			incentives := authenticated.Group("/incentives")
 			incentives.GET("/status", h.Incentives.Status)
 			incentives.GET("/history", h.Incentives.History)
+			incentives.POST("/check-in", h.Incentives.CheckIn)
 			incentives.POST("/draw", h.Incentives.Draw)
 		}
 		dailyLottery := authenticated.Group("/daily-lottery")
 		{
 			dailyLottery.GET("/status", h.DailyLottery.Status)
-			dailyLottery.POST("/check-in", func(c *gin.Context) {
-				c.JSON(410, gin.H{"code": "CHECK_IN_RETIRED", "message": "Use consumption rewards at /incentives"})
-			})
+			dailyLottery.POST("/check-in", h.Incentives.CheckIn)
 			dailyLottery.POST("/draw", func(c *gin.Context) {
 				c.JSON(410, gin.H{"code": "DAILY_DRAW_RETIRED", "message": "Use consumption rewards at /incentives"})
 			})

@@ -7,7 +7,9 @@ export interface IncentiveConfig {
   minimum_rate: number; max_chances: number; prizes: DailyLotteryPrize[]
 }
 export interface IncentiveStatus {
-  kind: IncentiveConfig['kind']; enabled: boolean; eligible: boolean; period_id: number
+  kind: IncentiveConfig['kind']; enabled: boolean; eligible: boolean
+  check_in_enabled: boolean; checked_in_today: boolean; check_in_chance_awarded: boolean
+  period_id: number
   starts_at: string; ends_at: string; timezone: string; spend: number; personal_spend: number
   next_threshold: number; threshold: number; earned: number; used: number; available: number
   groups: { group_id: number; name: string; base_rate: number; current_rate: number }[]
@@ -21,5 +23,6 @@ export const incentivesAPI = {
   configs: async () => (await apiClient.get<IncentiveConfig[]>('/admin/incentives/config')).data,
   save: async (config: IncentiveConfig) => (await apiClient.put<IncentiveConfig>('/admin/incentives/config', config)).data,
   reset: async (id: number) => apiClient.post(`/admin/incentives/periods/${id}/reset`),
+  checkIn: async () => (await apiClient.post('/incentives/check-in')).data,
   draw: async (requestKey: string) => (await apiClient.post<{ prize: DailyLotteryPrize; reward_amount: number }>('/incentives/draw', { request_key: requestKey })).data
 }
