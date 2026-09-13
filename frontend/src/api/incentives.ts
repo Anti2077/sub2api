@@ -24,5 +24,5 @@ export const incentivesAPI = {
   save: async (config: IncentiveConfig) => (await apiClient.put<IncentiveConfig>('/admin/incentives/config', config)).data,
   reset: async (id: number) => apiClient.post(`/admin/incentives/periods/${id}/reset`),
   checkIn: async () => (await apiClient.post('/incentives/check-in')).data,
-  draw: async (requestKey: string) => (await apiClient.post<{ prize: DailyLotteryPrize; reward_amount: number }>('/incentives/draw', { request_key: requestKey })).data
+  draw: async (requestKey: string) => (await apiClient.post<{ prize: DailyLotteryPrize; reward_amount: number; source?: 'checkin' | 'consumption' }>('/incentives/draw', { request_key: requestKey })).data
 }

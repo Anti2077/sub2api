@@ -8,7 +8,7 @@
 
       <p v-if="error" role="alert" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
         {{ error }}
-        <button type="button" class="btn btn-secondary ml-2" @click="load">{{ t('incentives.refresh') }}</button>
+        <button type="button" class="btn btn-secondary ml-2" @click="load()">{{ t('incentives.refresh') }}</button>
       </p>
       <p v-if="loading" class="text-gray-500 dark:text-dark-300">{{ t('incentives.loading') }}</p>
 
@@ -126,6 +126,27 @@
               </button>
             </div>
 
+            <div
+              v-if="drawing"
+              data-testid="incentive-draw-animation"
+              class="incentive-draw-stage"
+              role="status"
+              aria-live="polite"
+            >
+              <div class="incentive-draw-stage__pulse" aria-hidden="true"><span /></div>
+              <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-300">{{ t('incentives.drawing') }}</p>
+                <p class="mt-1 truncate text-lg font-semibold text-gray-900 dark:text-white">{{ activePrize?.name || t('incentives.drawing') }}</p>
+              </div>
+              <div class="incentive-draw-stage__dots" aria-hidden="true">
+                <span
+                  v-for="prize in enabledPrizes"
+                  :key="prize.id"
+                  :class="{ 'is-active': activePrize?.id === prize.id }"
+                />
+              </div>
+            </div>
+
             <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-gray-600 dark:text-dark-300">
               <p>
                 {{ t('incentives.available') }}: <strong class="text-gray-900 dark:text-white">{{ item.available }}</strong>
@@ -150,7 +171,15 @@
             <div v-if="item.prizes.filter((prize) => prize.enabled).length" class="space-y-2">
               <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('incentives.prizes') }}</p>
               <ul class="space-y-2">
-                <li v-for="prize in item.prizes.filter((entry) => entry.enabled)" :key="prize.id" class="flex justify-between gap-3 text-sm text-gray-600 dark:text-dark-300">
+                <li
+                  v-for="prize in item.prizes.filter((entry) => entry.enabled)"
+                  :key="prize.id"
+                  class="incentive-prize-row flex justify-between gap-3 text-sm text-gray-600 dark:text-dark-300"
+                  :class="{
+                    'incentive-prize-row--active': drawing && activePrize?.id === prize.id,
+                    'incentive-prize-row--winning': !drawing && result?.prize.id === prize.id
+                  }"
+                >
                   <span>{{ prize.name }}</span>
                   <span>${{ prize.reward_amount.toFixed(2) }} · {{ (prize.probability * 100).toFixed(2) }}%</span>
                 </li>
@@ -175,7 +204,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import { incentivesAPI, type IncentiveHistory, type IncentiveStatus } from '@/api/incentives'
@@ -188,10 +217,16 @@ const loading = ref(false)
 const drawing = ref(false)
 const checkInPending = ref(false)
 const error = ref('')
-const result = ref<{ prize: DailyLotteryPrize; reward_amount: number }>()
+const result = ref<IncentiveDrawResult>()
+const activePrizeIndex = ref(-1)
 let requestKey: string | null = null
+let prizeAnimationTimer: number | undefined
+
+const drawAnimationDuration = 1350
 
 const lottery = computed(() => items.value.find((item) => item.kind === 'lottery'))
+const enabledPrizes = computed(() => lottery.value?.prizes.filter((prize) => prize.enabled) ?? [])
+const activePrize = computed(() => enabledPrizes.value[activePrizeIndex.value] ?? null)
 
 const date = (value: string) => new Date(value).toLocaleString()
 const formatRate = (value: number) => (Number.isFinite(value) ? value.toFixed(4) : '0.0000')
@@ -202,16 +237,47 @@ const progressPercent = (item: IncentiveStatus) => {
 }
 const isItemActive = (item: IncentiveStatus) => item.enabled || (item.kind === 'lottery' && item.check_in_enabled)
 
-async function load() {
-  loading.value = true
-  error.value = ''
-  try {
-    const [status, activityHistory] = await Promise.all([incentivesAPI.status(), incentivesAPI.history()])
-    items.value = status
-    history.value = activityHistory
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : t('incentives.error')
-  } finally {
+type IncentiveDrawResult = {
+  prize: DailyLotteryPrize
+  reward_amount: number
+  source?: 'checkin' | 'consumption'
+}
+
+type LoadOptions = {
+  silent?: boolean
+}
+
+function errorMessage(value: unknown): string {
+  if (value instanceof Error && value.message) return value.message
+  if (typeof value === 'object' && value !== null && 'message' in value) {
+    const message = String((value as { message?: unknown }).message || '')
+    if (message) return message
+  }
+  return t('incentives.error')
+}
+
+async function load(options: LoadOptions = {}) {
+  const { silent = false } = options
+  if (!silent) {
+    loading.value = true
+    error.value = ''
+  }
+
+  const [statusResult, historyResult] = await Promise.allSettled([
+    incentivesAPI.status(),
+    incentivesAPI.history()
+  ])
+
+  if (statusResult.status === 'fulfilled') {
+    items.value = statusResult.value
+  }
+  if (historyResult.status === 'fulfilled') {
+    history.value = historyResult.value
+  }
+
+  if (!silent) {
+    const failed = statusResult.status === 'rejected' ? statusResult.reason : historyResult.status === 'rejected' ? historyResult.reason : null
+    if (failed) error.value = errorMessage(failed)
     loading.value = false
   }
 }
@@ -222,29 +288,207 @@ async function checkIn() {
   error.value = ''
   try {
     await incentivesAPI.checkIn()
-    await load()
+    if (lottery.value) {
+      lottery.value.checked_in_today = true
+      lottery.value.check_in_chance_awarded = true
+    }
+    await load({ silent: true })
   } catch (e) {
-    error.value = e instanceof Error ? e.message : t('incentives.error')
+    error.value = errorMessage(e)
   } finally {
     checkInPending.value = false
   }
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+function stopPrizeAnimation() {
+  if (prizeAnimationTimer !== undefined) {
+    window.clearTimeout(prizeAnimationTimer)
+    prizeAnimationTimer = undefined
+  }
+}
+
+function startPrizeAnimation() {
+  stopPrizeAnimation()
+  activePrizeIndex.value = enabledPrizes.value.length > 0 ? Math.floor(Math.random() * enabledPrizes.value.length) : -1
+  if (prefersReducedMotion() || enabledPrizes.value.length <= 1) return
+
+  const tick = () => {
+    if (!drawing.value || enabledPrizes.value.length <= 1) return
+    const current = activePrizeIndex.value
+    let next = Math.floor(Math.random() * enabledPrizes.value.length)
+    while (next === current) next = Math.floor(Math.random() * enabledPrizes.value.length)
+    activePrizeIndex.value = next
+    prizeAnimationTimer = window.setTimeout(tick, 75 + Math.floor(Math.random() * 70))
+  }
+
+  prizeAnimationTimer = window.setTimeout(tick, 90)
+}
+
+function applyDrawResult(drawResult: IncentiveDrawResult) {
+  const current = lottery.value
+  if (!current) return
+  current.available = Math.max(0, current.available - 1)
+  current.used += 1
+  if (drawResult.source === 'checkin') {
+    current.checked_in_today = true
+    current.check_in_chance_awarded = true
+  }
+}
+
+function waitForAnimation(startedAt: number) {
+  if (prefersReducedMotion()) return Promise.resolve()
+  const remaining = Math.max(0, drawAnimationDuration - (Date.now() - startedAt))
+  return remaining > 0 ? new Promise<void>((resolve) => window.setTimeout(resolve, remaining)) : Promise.resolve()
 }
 
 async function draw() {
   if (drawing.value || !lottery.value || lottery.value.available < 1) return
   drawing.value = true
   error.value = ''
+  result.value = undefined
+  const startedAt = Date.now()
+  startPrizeAnimation()
   requestKey ??= crypto.randomUUID()
+
   try {
-    result.value = await incentivesAPI.draw(requestKey)
+    const drawResult = await incentivesAPI.draw(requestKey)
+    await waitForAnimation(startedAt)
+    stopPrizeAnimation()
+    activePrizeIndex.value = enabledPrizes.value.findIndex((prize) => prize.id === drawResult.prize.id)
+    result.value = drawResult
+    applyDrawResult(drawResult)
     requestKey = null
-    await load()
+    // The draw is already committed. A refresh failure must not turn a successful draw into a blocking page error.
+    await load({ silent: true })
   } catch (e) {
-    error.value = e instanceof Error ? e.message : t('incentives.error')
+    stopPrizeAnimation()
+    error.value = errorMessage(e)
   } finally {
     drawing.value = false
   }
 }
 
 onMounted(load)
+onBeforeUnmount(stopPrizeAnimation)
 </script>
+
+<style scoped>
+.incentive-draw-stage {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 74px;
+  padding: 14px 16px;
+  border: 1px solid rgb(129 140 248 / 0.35);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgb(238 242 255 / 0.9), rgb(240 253 250 / 0.9));
+}
+
+.incentive-draw-stage__pulse {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgb(99 102 241 / 0.14);
+  animation: incentive-draw-pulse 900ms ease-in-out infinite;
+}
+
+.incentive-draw-stage__pulse span {
+  width: 11px;
+  height: 11px;
+  border-radius: 9999px;
+  background: rgb(79 70 229);
+  box-shadow: 0 0 0 7px rgb(99 102 241 / 0.12);
+}
+
+.incentive-draw-stage__dots {
+  display: flex;
+  flex-shrink: 0;
+  gap: 5px;
+  margin-left: auto;
+}
+
+.incentive-draw-stage__dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: rgb(148 163 184 / 0.5);
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+.incentive-draw-stage__dots span.is-active {
+  transform: scale(1.45);
+  background: rgb(79 70 229);
+}
+
+.incentive-prize-row {
+  padding: 8px 10px;
+  margin: 0 -10px;
+  border-radius: 9px;
+  transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.incentive-prize-row--active {
+  color: rgb(67 56 202);
+  background: rgb(224 231 255 / 0.78);
+  transform: translateX(3px);
+}
+
+.incentive-prize-row--winning {
+  color: rgb(4 120 87);
+  background: rgb(209 250 229 / 0.75);
+}
+
+@keyframes incentive-draw-pulse {
+  0%, 100% { transform: scale(0.92); opacity: 0.7; }
+  50% { transform: scale(1.08); opacity: 1; }
+}
+
+:global(.dark .incentive-draw-stage) {
+  border-color: rgb(129 140 248 / 0.38);
+  background: linear-gradient(135deg, rgb(30 41 99 / 0.45), rgb(6 78 59 / 0.3));
+}
+
+:global(.dark .incentive-draw-stage__pulse) {
+  background: rgb(129 140 248 / 0.2);
+}
+
+:global(.dark .incentive-draw-stage__pulse span) {
+  background: rgb(165 180 252);
+  box-shadow: 0 0 0 7px rgb(129 140 248 / 0.15);
+}
+
+:global(.dark .incentive-draw-stage__dots span) {
+  background: rgb(148 163 184 / 0.4);
+}
+
+:global(.dark .incentive-draw-stage__dots span.is-active) {
+  background: rgb(165 180 252);
+}
+
+:global(.dark .incentive-prize-row--active) {
+  color: rgb(199 210 254);
+  background: rgb(49 46 129 / 0.35);
+}
+
+:global(.dark .incentive-prize-row--winning) {
+  color: rgb(167 243 208);
+  background: rgb(6 78 59 / 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .incentive-draw-stage__pulse,
+  .incentive-draw-stage__dots span,
+  .incentive-prize-row {
+    animation: none;
+    transition: none;
+  }
+}
+</style>
