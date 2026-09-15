@@ -28,6 +28,7 @@ export interface DailyLotteryEntry {
 export interface DailyLotteryStatus {
   enabled: boolean
   checked_in: boolean
+  chance_awarded?: boolean
   can_draw: boolean
   already_drawn: boolean
   today: string

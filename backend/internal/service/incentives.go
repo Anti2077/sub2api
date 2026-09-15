@@ -361,30 +361,36 @@ func (s *IncentiveService) CheckIn(ctx context.Context, userID int64) (*DailyLot
 	if status.Entry == nil {
 		return status, nil
 	}
-	if err := s.recordCheckInChance(ctx, userID, status.Entry); err != nil {
+	awarded, err := s.recordCheckInChance(ctx, userID, status.Entry)
+	if err != nil {
 		return nil, err
 	}
-	return s.lottery.GetStatus(ctx, userID)
+	status, err = s.lottery.GetStatus(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	status.ChanceAwarded = awarded
+	return status, nil
 }
 
-func (s *IncentiveService) recordCheckInChance(ctx context.Context, userID int64, entry *DailyLotteryEntry) error {
+func (s *IncentiveService) recordCheckInChance(ctx context.Context, userID int64, entry *DailyLotteryEntry) (bool, error) {
 	legacy, err := s.lottery.GetConfig(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	if _, err = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(783219)"); err != nil {
-		return err
+		return false, err
 	}
 
 	rows, err := tx.QueryContext(ctx, `SELECT config FROM incentive_campaigns WHERE kind='lottery' FOR UPDATE`)
 	if err != nil {
-		return err
+		return false, err
 	}
 	var raw []byte
 	if rows.Next() {
@@ -392,7 +398,7 @@ func (s *IncentiveService) recordCheckInChance(ctx context.Context, userID int64
 	}
 	_ = rows.Close()
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	var config IncentiveConfig
@@ -401,19 +407,19 @@ func (s *IncentiveService) recordCheckInChance(ctx context.Context, userID int64
 		config.Prizes = legacy.Prizes
 		raw, err = json.Marshal(config)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO incentive_campaigns(kind,version,config) VALUES('lottery',1,$1::jsonb)`, string(raw)); err != nil {
-			return err
+			return false, err
 		}
 		config.Version = 1
 	} else if err = json.Unmarshal(raw, &config); err != nil {
-		return err
+		return false, err
 	}
 
 	rows, err = tx.QueryContext(ctx, `SELECT incentive_ensure_period('lottery',clock_timestamp())`)
 	if err != nil {
-		return err
+		return false, err
 	}
 	var period int64
 	if rows.Next() {
@@ -421,14 +427,14 @@ func (s *IncentiveService) recordCheckInChance(ctx context.Context, userID int64
 	}
 	_ = rows.Close()
 	if err != nil {
-		return err
+		return false, err
 	}
 	if period == 0 {
-		return infraerrors.Conflict("INCENTIVE_LOTTERY_NOT_CONFIGURED", "lottery activity is not configured")
+		return false, infraerrors.Conflict("INCENTIVE_LOTTERY_NOT_CONFIGURED", "lottery activity is not configured")
 	}
 
 	if _, err = tx.ExecContext(ctx, `INSERT INTO incentive_user_progress(period_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, period, userID); err != nil {
-		return err
+		return false, err
 	}
 	rows, err = tx.QueryContext(ctx, `
 		INSERT INTO incentive_lottery_chance_ledger(period_id,user_id,usage_id,chances,source,source_key)
@@ -440,16 +446,19 @@ func (s *IncentiveService) recordCheckInChance(ctx context.Context, userID int64
 		ON CONFLICT DO NOTHING
 		RETURNING id`, period, userID, entry.ID, entry.CheckinDate, config.MaxChances)
 	if err != nil {
-		return err
+		return false, err
 	}
 	inserted := rows.Next()
 	_ = rows.Close()
 	if inserted {
 		if _, err = tx.ExecContext(ctx, `UPDATE incentive_user_progress SET earned=earned+1 WHERE period_id=$1 AND user_id=$2`, period, userID); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return false, err
+	}
+	return inserted, nil
 }
 
 func (s *IncentiveService) History(ctx context.Context, userID int64) (map[string]any, error) {

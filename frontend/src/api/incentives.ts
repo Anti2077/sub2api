@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { DailyLotteryPrize, DailyLotteryPrizeView } from './dailyLottery'
+import type { DailyLotteryPrize, DailyLotteryPrizeView, DailyLotteryStatus } from './dailyLottery'
 export interface IncentiveConfig {
   kind: 'global_rate' | 'lottery'; version: number; enabled: boolean; timezone: string
   period: 'weekly'; reset_chances: boolean; group_ids: number[]; excluded_user_ids: number[]
@@ -23,6 +23,6 @@ export const incentivesAPI = {
   configs: async () => (await apiClient.get<IncentiveConfig[]>('/admin/incentives/config')).data,
   save: async (config: IncentiveConfig) => (await apiClient.put<IncentiveConfig>('/admin/incentives/config', config)).data,
   reset: async (id: number) => apiClient.post(`/admin/incentives/periods/${id}/reset`),
-  checkIn: async () => (await apiClient.post('/incentives/check-in')).data,
+  checkIn: async () => (await apiClient.post<DailyLotteryStatus>('/incentives/check-in')).data,
   draw: async (requestKey: string) => (await apiClient.post<{ prize: DailyLotteryPrize; reward_amount: number; source?: 'checkin' | 'consumption' }>('/incentives/draw', { request_key: requestKey })).data
 }

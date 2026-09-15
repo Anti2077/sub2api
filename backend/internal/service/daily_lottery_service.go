@@ -79,15 +79,16 @@ type DailyLotteryAdminEntry struct {
 }
 
 type DailyLotteryStatus struct {
-	Enabled      bool                    `json:"enabled"`
-	CheckedIn    bool                    `json:"checked_in"`
-	CanDraw      bool                    `json:"can_draw"`
-	AlreadyDrawn bool                    `json:"already_drawn"`
-	Today        string                  `json:"today"`
-	Timezone     string                  `json:"timezone"`
-	NextResetAt  time.Time               `json:"next_reset_at"`
-	Prizes       []DailyLotteryPrizeView `json:"prizes"`
-	Entry        *DailyLotteryEntry      `json:"entry,omitempty"`
+	Enabled       bool                    `json:"enabled"`
+	CheckedIn     bool                    `json:"checked_in"`
+	ChanceAwarded bool                    `json:"chance_awarded,omitempty"`
+	CanDraw       bool                    `json:"can_draw"`
+	AlreadyDrawn  bool                    `json:"already_drawn"`
+	Today         string                  `json:"today"`
+	Timezone      string                  `json:"timezone"`
+	NextResetAt   time.Time               `json:"next_reset_at"`
+	Prizes        []DailyLotteryPrizeView `json:"prizes"`
+	Entry         *DailyLotteryEntry      `json:"entry,omitempty"`
 }
 
 type DailyLotteryDrawResult struct {

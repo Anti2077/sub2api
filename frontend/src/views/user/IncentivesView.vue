@@ -132,6 +132,7 @@
               class="incentive-draw-stage"
               role="status"
               aria-live="polite"
+              aria-busy="true"
             >
               <div class="incentive-draw-stage__pulse" aria-hidden="true"><span /></div>
               <div class="min-w-0">
@@ -253,6 +254,11 @@ function errorMessage(value: unknown): string {
     const message = String((value as { message?: unknown }).message || '')
     if (message) return message
   }
+  if (typeof value === 'object' && value !== null && 'response' in value) {
+    const response = (value as { response?: { data?: { message?: unknown } } }).response
+    const message = String(response?.data?.message || '')
+    if (message) return message
+  }
   return t('incentives.error')
 }
 
@@ -287,10 +293,15 @@ async function checkIn() {
   checkInPending.value = true
   error.value = ''
   try {
-    await incentivesAPI.checkIn()
-    if (lottery.value) {
-      lottery.value.checked_in_today = true
-      lottery.value.check_in_chance_awarded = true
+    const checkInResult = await incentivesAPI.checkIn()
+    const current = lottery.value
+    if (current) {
+      current.checked_in_today = true
+      if (checkInResult.chance_awarded) {
+        current.check_in_chance_awarded = true
+        current.earned += 1
+        current.available += 1
+      }
     }
     await load({ silent: true })
   } catch (e) {

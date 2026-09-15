@@ -51,7 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   api.status.mockResolvedValue(status())
   api.history.mockResolvedValue({ rewards: [], chances: [] })
-  api.checkIn.mockResolvedValue({})
+  api.checkIn.mockResolvedValue({ chance_awarded: true })
   api.draw.mockResolvedValue({ prize: prizes[1], reward_amount: 1, source: 'checkin' })
 })
 
@@ -67,6 +67,22 @@ describe('IncentivesView', () => {
 
     expect(api.checkIn).toHaveBeenCalledTimes(1)
     expect(page.text()).toContain('incentives.checkedInToday')
+    expect(page.text()).toContain('incentives.available')
+    expect(page.get('[data-testid="incentive-draw"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('keeps the awarded check-in chance available when the follow-up refresh fails', async () => {
+    api.status.mockResolvedValueOnce(status(true, 0, true, false))
+    api.history.mockResolvedValueOnce({ rewards: [], chances: [] }).mockRejectedValueOnce(new Error('temporary refresh failure'))
+    const page = render()
+    await flushPromises()
+
+    await page.get('[data-testid="incentive-check-in"]').trigger('click')
+    await flushPromises()
+
+    expect(api.checkIn).toHaveBeenCalledTimes(1)
+    expect(page.text()).toContain('1')
+    expect(page.get('[data-testid="incentive-draw"]').attributes('disabled')).toBeUndefined()
   })
 
   it('shows the draw transition and final prize before refreshing', async () => {
