@@ -382,6 +382,8 @@ export default {
     github: 'GitHub',
     mySubscriptions: '我的订阅',
     buySubscription: '充值/订阅',
+    recharge: '充值',
+    subscribe: '订阅',
     docs: '文档',
     wiki: '使用文档',
     myOrders: '我的订单',

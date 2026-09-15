@@ -347,6 +347,9 @@ type UpdateSettingsRequest struct {
 	UsageEquivalencePlus7DLimitUSD  *float64 `json:"usage_equivalence_plus_7d_limit_usd"`
 	UsageEquivalencePlus30DLimitUSD *float64 `json:"usage_equivalence_plus_30d_limit_usd"`
 
+	// Subscription feature switch (user-facing subscription surface; see SettingKeySubscriptionEnabled)
+	SubscriptionEnabled *bool `json:"subscription_enabled"`
+
 	// Model Plaza feature switches + description
 	ModelPlazaEnabled     *bool   `json:"model_plaza_enabled"`
 	ModelPlazaRequireAuth *bool   `json:"model_plaza_require_auth"`
@@ -1964,6 +1967,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		}(),
 		UsageEquivalencePlus7DLimitUSD:  usageEquivalencePlus7DLimitUSD,
 		UsageEquivalencePlus30DLimitUSD: usageEquivalencePlus30DLimitUSD,
+		SubscriptionEnabled: func() bool {
+			if req.SubscriptionEnabled != nil {
+				return *req.SubscriptionEnabled
+			}
+			return previousSettings.SubscriptionEnabled
+		}(),
 		ModelPlazaEnabled: func() bool {
 			if req.ModelPlazaEnabled != nil {
 				return *req.ModelPlazaEnabled
@@ -2411,6 +2420,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		UsageEquivalenceEnabled:         updatedSettings.UsageEquivalenceEnabled,
 		UsageEquivalencePlus7DLimitUSD:  updatedSettings.UsageEquivalencePlus7DLimitUSD,
 		UsageEquivalencePlus30DLimitUSD: updatedSettings.UsageEquivalencePlus30DLimitUSD,
+		SubscriptionEnabled:              updatedSettings.SubscriptionEnabled,
 
 		ModelPlazaEnabled:       updatedSettings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:   updatedSettings.ModelPlazaRequireAuth,

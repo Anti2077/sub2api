@@ -435,6 +435,9 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyUsageEquivalencePlus7DLimitUSD] = strconv.FormatFloat(settings.UsageEquivalencePlus7DLimitUSD, 'f', -1, 64)
 	updates[SettingKeyUsageEquivalencePlus30DLimitUSD] = strconv.FormatFloat(settings.UsageEquivalencePlus30DLimitUSD, 'f', -1, 64)
 
+	// Subscription feature switch
+	updates[SettingKeySubscriptionEnabled] = strconv.FormatBool(settings.SubscriptionEnabled)
+
 	// Model plaza feature switches + description
 	updates[SettingKeyModelPlazaEnabled] = strconv.FormatBool(settings.ModelPlazaEnabled)
 	updates[SettingKeyModelPlazaRequireAuth] = strconv.FormatBool(settings.ModelPlazaRequireAuth)

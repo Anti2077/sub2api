@@ -588,6 +588,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.UsageEquivalencePlus30DLimitUSD != after.UsageEquivalencePlus30DLimitUSD {
 		changed = append(changed, "usage_equivalence_plus_30d_limit_usd")
 	}
+	if before.SubscriptionEnabled != after.SubscriptionEnabled {
+		changed = append(changed, "subscription_enabled")
+	}
 	if before.ModelPlazaEnabled != after.ModelPlazaEnabled {
 		changed = append(changed, "model_plaza_enabled")
 	}

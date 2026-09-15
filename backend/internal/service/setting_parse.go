@@ -205,6 +205,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyUsageEquivalencePlus7DLimitUSD:  "0",
 		SettingKeyUsageEquivalencePlus30DLimitUSD: "0",
 
+		// Subscription feature (default enabled; opt-out)
+		SettingKeySubscriptionEnabled: "true",
+
 		// Model plaza feature (default disabled; opt-in, public unless require_auth)
 		SettingKeyModelPlazaEnabled:       "false",
 		SettingKeyModelPlazaRequireAuth:   "false",
@@ -825,6 +828,9 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.UsageEquivalenceEnabled = settings[SettingKeyUsageEquivalenceEnabled] == "true"
 	result.UsageEquivalencePlus7DLimitUSD = parseUsageEquivalenceLimitUSD(settings[SettingKeyUsageEquivalencePlus7DLimitUSD])
 	result.UsageEquivalencePlus30DLimitUSD = parseUsageEquivalenceLimitUSD(settings[SettingKeyUsageEquivalencePlus30DLimitUSD])
+
+	// Subscription feature (default: enabled; only an explicit false disables)
+	result.SubscriptionEnabled = !isFalseSettingValue(settings[SettingKeySubscriptionEnabled])
 
 	// Model plaza feature (default: disabled; strict true)
 	result.ModelPlazaEnabled = settings[SettingKeyModelPlazaEnabled] == "true"
