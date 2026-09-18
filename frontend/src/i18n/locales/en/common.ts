@@ -186,6 +186,7 @@ export default {
     "history": "Activity history",
     "empty": "No rewards yet",
     "settingsNote": "Save each activity independently. Changes apply prospectively; existing rewards and history are preserved.",
+    "logicNote": "Rate logic: personal group rates have priority. Otherwise, the effective rate is the lower of the current daily group rate and the welfare activity target. The activity keeps decreasing as shared eligible spend reaches each threshold; excluded users and admins do not add spend but still receive the effective rate. Peak multipliers are applied afterward.",
     "groups": "Participating group IDs",
     "excludedUsers": "Excluded user IDs",
     "excludedModels": "Excluded requested model names",

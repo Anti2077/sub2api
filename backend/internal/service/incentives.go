@@ -299,7 +299,9 @@ func (s *IncentiveService) Status(ctx context.Context, userID int64) ([]Incentiv
 				continue
 			}
 			g.CurrentRate = current
-			if c.Enabled && c.Kind == "global_rate" && current == g.BaseRate {
+			if c.Enabled && c.Kind == "global_rate" {
+				// The effective group rate is the lower of the administrator's
+				// daily rate and the activity's accumulated benefit target.
 				g.CurrentRate = math.Min(current, math.Max(c.MinimumRate, g.BaseRate-decrease))
 			}
 			v.Groups = append(v.Groups, g)
@@ -318,6 +320,8 @@ func (s *IncentiveService) Status(ctx context.Context, userID int64) ([]Incentiv
 
 // ApplyRate deliberately leaves explicit user rates and separately priced image/video rates alone.
 // User/admin exclusions control contribution accounting, not receipt of the group benefit.
+// The effective rate is the lower of the current daily group rate and the
+// activity target, so changing the daily rate never disables the activity.
 // Query historical decrease at PricingAt so an in-flight request cannot receive a later tier.
 func (s *IncentiveService) ApplyRate(ctx context.Context, user *User, group *Group, model string, base float64, at time.Time) float64 {
 	if s == nil || user == nil || group == nil || base != group.RateMultiplier {
@@ -345,7 +349,7 @@ func (s *IncentiveService) ApplyRate(ctx context.Context, user *User, group *Gro
 	if json.Unmarshal(raw, &c) != nil {
 		return base
 	}
-	if !c.Enabled || snapshot != group.RateMultiplier || !slices.Contains(c.GroupIDs, group.ID) || slices.Contains(c.ExcludedModels, model) {
+	if !c.Enabled || !slices.Contains(c.GroupIDs, group.ID) || slices.Contains(c.ExcludedModels, model) {
 		return base
 	}
 	return math.Min(base, math.Max(c.MinimumRate, snapshot-decrease))
