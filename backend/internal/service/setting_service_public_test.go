@@ -309,3 +309,13 @@ func TestSettingService_GetPublicSettings_PaymentBalanceDisabledStrictTrue(t *te
 		})
 	}
 }
+
+func TestSettingService_GetPublicSettings_ExposesSiteStartedOn(t *testing.T) {
+	for _, date := range []string{"2024-02-29", ""} {
+		repo := &settingPublicRepoStub{values: map[string]string{SettingKeySiteStartedOn: date}}
+		svc := NewSettingService(repo, &config.Config{})
+		settings, err := svc.GetPublicSettings(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, date, settings.SiteStartedOn)
+	}
+}

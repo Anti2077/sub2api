@@ -19,6 +19,7 @@ export default {
 
   // Version Badge
   version: {
+    operatingDays: 'Operating for {days} days',
     currentVersion: 'Current Version',
     latestVersion: 'Latest Version',
     upToDate: "You're running the latest version.",

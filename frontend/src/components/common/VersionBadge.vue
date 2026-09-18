@@ -12,7 +12,8 @@
         ]"
         :title="hasUpdate ? t('version.updateAvailable') : t('version.upToDate')"
       >
-        <span v-if="currentVersion" class="font-medium">{{ formatVersion(currentVersion) }}</span>
+        <span class="sr-only">{{ t('version.currentVersion') }}</span>
+        <span v-if="currentVersion" class="whitespace-nowrap font-medium">{{ formatVersion(currentVersion) }}</span>
         <span
           v-else
           class="h-3 w-12 animate-pulse rounded bg-gray-200 font-medium dark:bg-dark-600"
@@ -722,9 +723,9 @@
       </transition>
     </template>
 
-    <!-- Non-admin: Simple static version text -->
-    <span v-else-if="version" class="text-xs text-gray-500 dark:text-dark-400">
-      v{{ version }}
+    <!-- User-facing site age is independent of server restarts and user signup. -->
+    <span v-else-if="operatingDays !== null" class="whitespace-nowrap text-xs text-gray-600 dark:text-dark-300">
+      {{ t('version.operatingDays', { days: operatingDays }) }}
     </span>
   </div>
 </template>
@@ -732,6 +733,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useNow } from '@vueuse/core'
+import { siteOperatingDays } from '@/utils/siteOperatingDays'
 import { useAuthStore, useAppStore } from '@/stores'
 import {
   performUpdate,
@@ -757,6 +760,8 @@ const authStore = useAuthStore()
 const appStore = useAppStore()
 
 const isAdmin = computed(() => authStore.isAdmin)
+const now = useNow({ interval: 60_000 })
+const operatingDays = computed(() => siteOperatingDays(appStore.siteStartedOn, now.value))
 
 const dropdownOpen = ref(false)
 const dropdownRef = ref<HTMLElement | null>(null)

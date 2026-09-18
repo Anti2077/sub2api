@@ -630,6 +630,8 @@ export default {
           'Disables user registration, public site, and self-service features. Only admin can log in and manage the platform.',
         siteName: 'Site Name',
         siteNamePlaceholder: 'Sub2API',
+        startedOn: 'Site opening date',
+        startedOnHint: 'Counts completed UTC calendar days, starting at 0. Defaults to the earliest account date; correct it to the actual opening date. Leave blank to hide.',
         siteNameHint: 'Displayed in emails and page titles',
         siteSubtitle: 'Site Subtitle',
         siteSubtitlePlaceholder: 'Subscription to API Conversion Platform',

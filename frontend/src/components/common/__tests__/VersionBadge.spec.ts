@@ -75,3 +75,32 @@ describe('VersionBadge custom container updates', () => {
     expect(wrapper.text()).not.toContain('版本回退')
   })
 })
+
+describe('VersionBadge site operating days', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('shows ordinary users site age without requesting admin version information', () => {
+    const app = useAppStore()
+    app.siteStartedOn = '2024-01-01'
+    app.fetchVersion = vi.fn()
+    const i18n = createI18n({
+      legacy: false, locale: 'en',
+      messages: { en: { version: { operatingDays: ({ named }: { named: (key: string) => unknown }) => `Operating for ${named('days')} days` } } },
+    })
+    const wrapper = mount(VersionBadge, { props: { version: 'custom-secret' }, global: { plugins: [i18n] } })
+    expect(wrapper.text()).toMatch(/Operating for \d+ days/)
+    expect(wrapper.text()).not.toContain('custom-secret')
+    expect(wrapper.find('button').exists()).toBe(false)
+    expect(app.fetchVersion).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('does not invent an operating age when no opening date is configured', () => {
+    const i18n = createI18n({ legacy: false, locale: 'en', messages: { en: {} } })
+    const wrapper = mount(VersionBadge, { props: { version: '1.2.3' }, global: { plugins: [i18n] } })
+    expect(wrapper.text()).toBe('')
+    wrapper.unmount()
+  })
+})

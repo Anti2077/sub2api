@@ -230,3 +230,23 @@ func TestUpdateSettingsSubscriptionEnabledIsWritableAndKeptWhenOmitted(t *testin
 	require.Equal(t, "false", repo.values[service.SettingKeySubscriptionEnabled],
 		"a payload without subscription_enabled must not flip the stored value back to true")
 }
+
+func TestUpdateSettingsSiteStartedOn(t *testing.T) {
+	h, repo := newStepUpSwitchTestHandler(t, map[string]string{
+		service.SettingKeySiteStartedOn: "2024-01-01",
+	})
+	rec := doUpdateSettings(t, h, map[string]any{"site_name": "Gateway"}, nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "2024-01-01", repo.values[service.SettingKeySiteStartedOn])
+
+	for _, date := range []string{"2024-02-29", ""} {
+		rec = doUpdateSettings(t, h, map[string]any{"site_started_on": date}, nil)
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, date, repo.values[service.SettingKeySiteStartedOn])
+	}
+	for _, date := range []string{"2024-02-30", "tomorrow", "9999-12-31"} {
+		rec = doUpdateSettings(t, h, map[string]any{"site_started_on": date}, nil)
+		require.Equal(t, http.StatusBadRequest, rec.Code)
+		require.Empty(t, repo.values[service.SettingKeySiteStartedOn])
+	}
+}

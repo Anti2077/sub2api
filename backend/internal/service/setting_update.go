@@ -99,6 +99,12 @@ func (s *SettingService) refreshCachedSettingsAfterWrite(ctx context.Context, se
 }
 
 func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, settings *SystemSettings) (map[string]string, error) {
+	if settings.SiteStartedOn != "" {
+		date, err := time.Parse("2006-01-02", settings.SiteStartedOn)
+		if err != nil || date.After(time.Now().UTC()) {
+			return nil, infraerrors.BadRequest("INVALID_SITE_STARTED_ON", "site_started_on must be a valid YYYY-MM-DD date no later than today (UTC)")
+		}
+	}
 	if err := s.validateDefaultSubscriptionGroups(ctx, settings.DefaultSubscriptions); err != nil {
 		return nil, err
 	}
@@ -337,6 +343,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	// OEM设置
 	updates[SettingKeySiteName] = settings.SiteName
+	updates[SettingKeySiteStartedOn] = settings.SiteStartedOn
 	updates[SettingKeySiteLogo] = settings.SiteLogo
 	updates[SettingKeySiteSubtitle] = settings.SiteSubtitle
 	updates[SettingKeyAPIBaseURL] = settings.APIBaseURL

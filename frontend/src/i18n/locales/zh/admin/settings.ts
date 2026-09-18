@@ -622,6 +622,8 @@ export default {
         backendModeDescription:
           '禁用用户注册、公开页面和自助服务功能。仅管理员可以登录和管理平台。',
         siteName: '站点名称',
+        startedOn: '运营起始日期',
+        startedOnHint: '按 UTC 日期计算已运营天数，当天为 0 天。默认取最早账号的创建日期，可改为实际开站日期；留空则不显示。',
         siteNameHint: '显示在邮件和页面标题中',
         siteNamePlaceholder: 'Sub2API',
         siteSubtitle: '站点副标题',

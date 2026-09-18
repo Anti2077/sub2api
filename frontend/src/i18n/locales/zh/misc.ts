@@ -19,6 +19,7 @@ export default {
 
   // Version Badge
   version: {
+    operatingDays: '已运营 {days} 天',
     currentVersion: '当前版本',
     latestVersion: '最新版本',
     upToDate: '已是最新版本',

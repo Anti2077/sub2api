@@ -6279,6 +6279,15 @@
 
 	              <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div>
+                  <label for="site-started-on" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t("admin.settings.site.startedOn") }}
+                  </label>
+                  <input id="site-started-on" v-model="form.site_started_on" type="date" class="input" :max="new Date().toISOString().slice(0, 10)" />
+                  <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.site.startedOnHint") }}
+                  </p>
+                </div>
+                <div>
                   <label
                     class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
                   >
@@ -9680,6 +9689,7 @@ const form = reactive<SettingsForm>({
   force_email_on_third_party_signup: false,
   default_user_rpm_limit: 0,
   site_name: "Sub2API",
+  site_started_on: "",
   site_logo: "",
   site_subtitle: "Subscription to API Conversion Platform",
   api_base_url: "",
@@ -11340,6 +11350,7 @@ async function saveSettings() {
       force_email_on_third_party_signup: form.force_email_on_third_party_signup,
       default_user_rpm_limit: form.default_user_rpm_limit,
       site_name: form.site_name,
+      site_started_on: form.site_started_on,
       site_logo: form.site_logo,
       site_subtitle: form.site_subtitle,
       api_base_url: form.api_base_url,
