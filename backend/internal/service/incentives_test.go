@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
+	"fmt"
 	"github.com/DATA-DOG/go-sqlmock"
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,7 @@ func TestIncentiveConfigValidation(t *testing.T) {
 		require.Error(t, validateIncentiveConfig(v))
 	}
 }
-func TestIncentiveRatePreservesExclusionsAndFloor(t *testing.T) {
+func TestIncentiveRatePreservesContributionExclusionsAndFloor(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		drop    float64
@@ -30,7 +31,7 @@ func TestIncentiveRatePreservesExclusionsAndFloor(t *testing.T) {
 		exclude bool
 		enabled bool
 		want    float64
-	}{{"tier", .02, false, false, true, .43}, {"floor", .5, false, false, true, .35}, {"admin", .02, true, false, true, .45}, {"excluded", .02, false, true, true, .45}, {"disabled", .02, false, false, false, .45}} {
+	}{{"tier", .02, false, false, true, .43}, {"floor", .5, false, false, true, .35}, {"admin", .02, true, false, true, .43}, {"excluded", .02, false, true, true, .43}, {"disabled", .02, false, false, false, .45}} {
 		t.Run(tt.name, func(t *testing.T) {
 			db, mock, err := sqlmock.New()
 			require.NoError(t, err)
@@ -72,4 +73,48 @@ func TestIncentiveDrawRetryReturnsReceiptWithoutDebit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, float64(1), v["reward_amount"])
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+// The real PostgreSQL reproduction covers parameter type resolution. This test
+// covers crediting exactly once and retaining the independent daily-check-in
+// switch when consumption rewards are disabled.
+func TestIncentiveCheckInChanceCredit(t *testing.T) {
+	for _, inserted := range []bool{true, false} {
+		t.Run(fmt.Sprint("inserted=", inserted), func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			defer db.Close()
+			client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
+			settings := newDailyLotterySettingRepoStub()
+			lottery := NewDailyLotteryService(newDailyLotteryRepoStub(), settings, nil, client)
+			legacy := DefaultDailyLotteryConfig()
+			legacy.Enabled = true
+			_, err = lottery.UpdateConfig(context.Background(), legacy)
+			require.NoError(t, err)
+			config := DefaultIncentiveConfig("lottery") // Consumption rewards disabled.
+			raw, err := json.Marshal(config)
+			require.NoError(t, err)
+			mock.ExpectBegin()
+			mock.ExpectExec("SELECT pg_advisory_xact_lock").WillReturnResult(sqlmock.NewResult(0, 1))
+			mock.ExpectQuery("SELECT config FROM incentive_campaigns").WillReturnRows(sqlmock.NewRows([]string{"config"}).AddRow(raw))
+			mock.ExpectQuery("SELECT incentive_ensure_period").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+			mock.ExpectExec("INSERT INTO incentive_user_progress").WithArgs(int64(1), int64(7)).WillReturnResult(sqlmock.NewResult(0, 1))
+			rows := sqlmock.NewRows([]string{"id"})
+			if inserted {
+				rows.AddRow(1)
+			}
+			mock.ExpectQuery("INSERT INTO incentive_lottery_chance_ledger").WithArgs(int64(1), int64(7), sqlmock.AnyArg(), sqlmock.AnyArg(), int64(0)).WillReturnRows(rows)
+			if inserted {
+				mock.ExpectExec("UPDATE incentive_user_progress SET earned=earned\\+1").WithArgs(int64(1), int64(7)).WillReturnResult(sqlmock.NewResult(0, 1))
+			}
+			mock.ExpectCommit()
+			svc := &IncentiveService{client: client, lottery: lottery}
+			status, err := svc.CheckIn(context.Background(), 7)
+			require.NoError(t, err)
+			require.True(t, status.Enabled)
+			require.True(t, status.CheckedIn)
+			require.Equal(t, inserted, status.ChanceAwarded)
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
 }

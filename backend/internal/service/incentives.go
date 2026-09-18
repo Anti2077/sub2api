@@ -317,6 +317,7 @@ func (s *IncentiveService) Status(ctx context.Context, userID int64) ([]Incentiv
 }
 
 // ApplyRate deliberately leaves explicit user rates and separately priced image/video rates alone.
+// User/admin exclusions control contribution accounting, not receipt of the group benefit.
 // Query historical decrease at PricingAt so an in-flight request cannot receive a later tier.
 func (s *IncentiveService) ApplyRate(ctx context.Context, user *User, group *Group, model string, base float64, at time.Time) float64 {
 	if s == nil || user == nil || group == nil || base != group.RateMultiplier {
@@ -344,7 +345,7 @@ func (s *IncentiveService) ApplyRate(ctx context.Context, user *User, group *Gro
 	if json.Unmarshal(raw, &c) != nil {
 		return base
 	}
-	if !c.Enabled || snapshot != group.RateMultiplier || !slices.Contains(c.GroupIDs, group.ID) || slices.Contains(c.ExcludedUserIDs, user.ID) || slices.Contains(c.ExcludedModels, model) || (c.ExcludeAdmins && user.Role == "admin") {
+	if !c.Enabled || snapshot != group.RateMultiplier || !slices.Contains(c.GroupIDs, group.ID) || slices.Contains(c.ExcludedModels, model) {
 		return base
 	}
 	return math.Min(base, math.Max(c.MinimumRate, snapshot-decrease))
@@ -438,7 +439,7 @@ func (s *IncentiveService) recordCheckInChance(ctx context.Context, userID int64
 	}
 	rows, err = tx.QueryContext(ctx, `
 		INSERT INTO incentive_lottery_chance_ledger(period_id,user_id,usage_id,chances,source,source_key)
-		SELECT $1,$2,-$3,1,'checkin',$4
+		SELECT $1,$2,-$3::bigint,1,'checkin',$4
 		WHERE $5=0 OR EXISTS(
 			SELECT 1 FROM incentive_user_progress
 			WHERE period_id=$1 AND user_id=$2 AND earned < $5
