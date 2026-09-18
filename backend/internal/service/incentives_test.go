@@ -83,7 +83,7 @@ func TestIncentiveCheckInChanceCredit(t *testing.T) {
 		t.Run(fmt.Sprint("inserted=", inserted), func(t *testing.T) {
 			db, mock, err := sqlmock.New()
 			require.NoError(t, err)
-			defer db.Close()
+			defer func() { _ = db.Close() }()
 			client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 			settings := newDailyLotterySettingRepoStub()
 			lottery := NewDailyLotteryService(newDailyLotteryRepoStub(), settings, nil, client)

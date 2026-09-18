@@ -2420,7 +2420,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		UsageEquivalenceEnabled:         updatedSettings.UsageEquivalenceEnabled,
 		UsageEquivalencePlus7DLimitUSD:  updatedSettings.UsageEquivalencePlus7DLimitUSD,
 		UsageEquivalencePlus30DLimitUSD: updatedSettings.UsageEquivalencePlus30DLimitUSD,
-		SubscriptionEnabled:              updatedSettings.SubscriptionEnabled,
+		SubscriptionEnabled:             updatedSettings.SubscriptionEnabled,
 
 		ModelPlazaEnabled:       updatedSettings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:   updatedSettings.ModelPlazaRequireAuth,

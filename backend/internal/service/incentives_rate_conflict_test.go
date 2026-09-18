@@ -38,7 +38,7 @@ func TestIncentiveRateConflictRecordUsage(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			db, mock, err := sqlmock.New()
 			require.NoError(t, err)
-			defer db.Close()
+			defer func() { _ = db.Close() }()
 			client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 			cfg := DefaultIncentiveConfig("global_rate")
 			cfg.Enabled = !tc.disabled

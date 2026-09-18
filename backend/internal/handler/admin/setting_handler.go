@@ -386,7 +386,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		UsageEquivalenceEnabled:         settings.UsageEquivalenceEnabled,
 		UsageEquivalencePlus7DLimitUSD:  settings.UsageEquivalencePlus7DLimitUSD,
 		UsageEquivalencePlus30DLimitUSD: settings.UsageEquivalencePlus30DLimitUSD,
-		SubscriptionEnabled:              settings.SubscriptionEnabled,
+		SubscriptionEnabled:             settings.SubscriptionEnabled,
 
 		ModelPlazaEnabled:       settings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:   settings.ModelPlazaRequireAuth,
