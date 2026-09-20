@@ -86,8 +86,10 @@ describe('routing subscription lifecycle', () => {
     mock.source.getRoutingMonitorSnapshot=()=>new Promise(r=>{resolve=r})
     let state!: ReturnType<typeof useRoutingMonitor>
     const wrapper=mount(defineComponent({setup(){state=useRoutingMonitor(mock.source);return()=>h('div')}})); wrappers.push(wrapper)
-    mock.send(event({event_type:'completed',status:'OK'}))
-    resolve({generated_at:new Date().toISOString(),active:[event()],recent:[]}); await flushPromises()
+    const completedAt = Date.now()
+    const staleStarted = event({ occurred_at: new Date(completedAt - 1000).toISOString() })
+    mock.send(event({event_type:'completed',status:'OK',occurred_at:new Date(completedAt).toISOString()}))
+    resolve({generated_at:new Date(completedAt).toISOString(),active:[staleStarted],recent:[]}); await flushPromises()
     expect(state.events.value.get('request-1')?.event_type).toBe('completed')
   })
   it('reconciles orphaned active requests even when live traffic arrives during refresh', async () => {

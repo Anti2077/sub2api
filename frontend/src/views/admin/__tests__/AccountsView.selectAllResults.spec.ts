@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 
 import AccountsView from '../AccountsView.vue'
+
+enableAutoUnmount(afterEach)
 
 const {
   listAccounts,
@@ -142,6 +144,7 @@ const mountView = () => mount(AccountsView, {
 
 describe('admin AccountsView select all filtered results', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
     localStorage.clear()
     listAccounts.mockReset()
     listWithEtag.mockReset()
@@ -164,6 +167,8 @@ describe('admin AccountsView select all filtered results', () => {
   })
 
   afterEach(() => {
+    vi.clearAllTimers()
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
@@ -231,6 +236,8 @@ describe('admin AccountsView select all filtered results', () => {
     }))
 
     await wrapper.get('[data-test="change-filter"]').trigger('click')
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
 
     expect(wrapper.get('[data-test="selected-count"]').text()).toBe('0')
     expect(wrapper.get('[data-test="all-results-selected"]').text()).toBe('false')

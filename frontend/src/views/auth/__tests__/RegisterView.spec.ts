@@ -148,6 +148,7 @@ describe('RegisterView', () => {
     })
     const wrapper = mountRegister()
     await flushPromises()
+    await wrapper.get('#username').setValue('test-user')
     await wrapper.get('#email').setValue('user@example.com')
     await wrapper.get('#password').setValue('secret-123')
     await wrapper.get('#confirmPassword').setValue(confirmation)
@@ -169,6 +170,7 @@ describe('RegisterView', () => {
     expect(verifyActionMock).toHaveBeenCalledOnce()
     expect(registerMock).toHaveBeenCalledWith({
       email: 'user@example.com',
+      username: 'test-user',
       password: 'secret-123',
       turnstile_token: undefined,
       tencent_captcha_ticket: 'ticket',
@@ -187,6 +189,7 @@ describe('RegisterView', () => {
     })
     const wrapper = mountRegister()
     await flushPromises()
+    await wrapper.get('#username').setValue('test-user')
     await wrapper.get('#email').setValue('user@example.com')
     await wrapper.get('#password').setValue('secret-123')
     await wrapper.get('#confirmPassword').setValue('different-password')
@@ -202,6 +205,7 @@ describe('RegisterView', () => {
 
     expect(JSON.parse(sessionStorage.getItem('register_data')!)).toEqual({
       email: 'user@example.com',
+      username: 'test-user',
       password: 'secret-123'
     })
     expect(pushMock).toHaveBeenCalledWith('/email-verify')
