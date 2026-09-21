@@ -778,6 +778,20 @@ export default {
 
   // Redeem
   redeem: {
+    ticketInvalid: '兑换码无效，请修改后重试',
+    ticketTitle: '账户额度兑换券',
+    ticketDescription: '账户额度兑换凭据',
+    ticketInput: '在此输入兑换码',
+    ticketUsed: '已核销 · 权益已到账',
+    ticketWaiting: '等待兑换',
+    ticketStamp: '已兑换',
+    ticketSeam: '沿虚线撕开',
+    ticketStub: '兑换票根',
+    ticketGrip: '捏住这里',
+    ticketPull: '向右下方拉',
+    ticketAccessible: '拖动票根撕开兑换；键盘按住空格或回车后松开确认',
+    ticketHelp: '捏住右侧票根向右下方拉；未撕断就松手会回弹',
+    ticketAnother: '兑换另一张',
     title: '兑换码',
     description: '输入兑换码以充值余额或增加并发数',
     currentBalance: '当前余额',

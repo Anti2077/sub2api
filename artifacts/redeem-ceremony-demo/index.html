@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>兑换仪式 · Motion study</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><a class="brand" href="#"><span class="brand-icon">S</span> sub2api <span class="divider">/</span><span class="muted">兑换中心</span></a><span class="prototype">交互原型 · 模拟数据</span></header>
+<main>
+<section class="intro"><span class="eyebrow">A LITTLE MOMENT OF DELIGHT</span><h1>让每次兑换，都值得期待。</h1><p>一串兑换码，一束光，一份新的可能。</p></section>
+<section class="stage" aria-label="兑换动画演示">
+<div class="balance-card" id="balanceCard"><div class="balance-top"><span>账户余额</span><span class="wallet-icon">↗</span></div><div class="amount-wrap"><span class="currency">$</span><span id="balance">128.00</span><span id="gain">+$20.00</span></div><div class="balance-foot"><span><i></i> 可用于 API 调用</span><span>USD</span></div><div id="halo"></div></div>
+<div class="connection-space"><span id="transitText">让灵感继续发生</span></div>
+<form id="redeemForm" class="redeem-card"><div class="form-heading"><span class="gift-icon">✧</span><div><h2>兑换你的下一份灵感</h2><p>输入兑换码，将额度存入账户。</p></div></div><label for="code">兑换码</label><div class="code-wrap" id="codeWrap"><input id="code" value="GIFT-2026-LIGHT" autocomplete="off" spellcheck="false" required aria-label="兑换码"><div id="codeGhost" aria-hidden="true"></div><div id="rainbowBorder" aria-hidden="true"></div><div id="scan"></div><div id="scanRight"></div></div><button id="redeemButton" type="submit"><span id="buttonLabel">兑换 $20.00</span><span aria-hidden="true">↗</span></button><div class="result" id="status" role="status" aria-live="polite">演示兑换不会消耗真实兑换码</div></form>
+<canvas id="energy" aria-hidden="true"></canvas>
+</section>
+<section class="controls" aria-label="播放设置"><div class="control-heading"><span>动效实验台</span><span id="timeLabel">READY</span></div><div class="phases" id="phases"><span>01 向上扫光</span><span>02 珠光汇入</span><span>03 到账</span><span>04 庆祝</span></div><div class="control-bottom"><label class="slow"><input id="slow" type="checkbox"> 慢速观察</label><button id="reset" type="button">重置演示 ↺</button></div></section>
+<footer>流光入账 · School Pride 双侧礼花<span>概念预览 / 03</span></footer>
+<output id="perf" hidden></output></main><script>var module = { exports: {} };</script><script src="../redeem-ticket-demo/confetti.js"></script><script>window.confetti = module.exports;</script><script src="demo.js"></script></body></html>

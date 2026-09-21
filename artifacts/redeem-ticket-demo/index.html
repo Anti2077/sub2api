@@ -1,0 +1,12 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>兑换小票 · 撕票原型</title><link rel="stylesheet" href="style.css"><body>
+<header><span><b class="logo">S</b> sub2api <i>/</i> 兑换中心</span><small>交互原型 · 模拟数据</small></header>
+<main><div class="intro"><small>MAKE IT OFFICIAL</small><h1>兑换你的账户额度</h1><p>输入兑换码，沿虚线撕下右侧票根。</p></div>
+<div class="balance"><span>账户余额</span><div><small>$</small><strong id="balance">128.00</strong><em id="gain">+$20.00</em></div><footer><span>● 可用于 API 调用</span><span>USD</span></footer></div>
+<div class="ticket-scene" id="scene"><form id="form" class="ticket">
+<section class="paper body"><div class="ticket-top"><span>SUB2API / CREDIT VOUCHER</span><span>No. 002026</span></div><h2>账户额度兑换券</h2><p class="detail">账户额度兑换凭据 <span>ONE USE ONLY</span></p><div class="entry"><label for="code">在此输入兑换码 <span>↙</span></label><input id="code" required autocomplete="off" spellcheck="false" placeholder="点击输入兑换码" aria-describedby="hint" value="GIFT-2026-LIGHT"><small id="hint">可粘贴兑换码 · 区分大小写</small></div><div class="ticket-bottom"><div class="barcode" aria-hidden="true"></div><span id="receiptState">等待兑换</span></div><div class="stamp" id="stamp">已兑换<span>REDEEMED</span></div></section>
+<div class="seam" aria-hidden="true"><span>沿虚线撕开</span></div>
+<section class="paper stub" id="stub" tabindex="0" role="button" aria-label="拖动票根撕开兑换，键盘按住空格后松开确认" aria-describedby="status"><span class="stub-label">兑 换 票 根</span><span class="scissors" aria-hidden="true">✂</span><div id="redeem"><span>捏住这里</span><span class="arrow">↘</span><small>向右下方拉</small></div><span class="stub-foot">TEAR HERE<br>ONE-TIME CREDIT</span></section>
+</form></div>
+<div class="status" id="status" role="status" aria-live="polite">捏住右侧票根向右下方拉；未撕断就松手会回弹</div>
+<div class="controls"><label><input type="checkbox" id="slow"> 慢速看到账</label><button id="reset">重置演示 ↺</button></div><div class="note">纸面输入 / 沿虚线撕开 / 余额到账 / 彩色彩带</div>
+</main><script>var module={exports:{}};</script><script src="confetti.js"></script><script>window.confetti=module.exports;</script><script src="demo.js"></script></body></html>

@@ -1,0 +1,98 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mount } from '@vue/test-utils'
+import RedeemTicket from '../RedeemTicket.vue'
+vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
+function pointer(element: Element, type: string, x: number, y: number) {
+  const event = new Event(type, { bubbles: true })
+  Object.assign(event, { pointerId: 1, button: 0, clientX: x, clientY: y })
+  element.dispatchEvent(event)
+}
+const create = () =>
+  mount(RedeemTicket, { props: { modelValue: 'CODE', locked: false } })
+describe('manual ticket redemption', () => {
+  beforeEach(() => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true }))
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+  it('does not redeem on a click or a short drag; a full drag submits only once', async () => {
+    const wrapper = create()
+    const stub = wrapper.get('[role="button"]')
+    await stub.trigger('click')
+    pointer(stub.element, 'pointerdown', 100, 100)
+    pointer(stub.element, 'pointermove', 110, 120)
+    pointer(stub.element, 'pointerup', 110, 120)
+    expect(wrapper.emitted('redeem')).toBeUndefined()
+    pointer(stub.element, 'pointerdown', 100, 100)
+    pointer(stub.element, 'pointermove', 160, 240)
+    pointer(stub.element, 'pointermove', 170, 250)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('redeem')).toHaveLength(1)
+    expect(wrapper.get('input').element.disabled).toBe(true)
+    wrapper.unmount()
+  })
+  it('rejects blank codes and leftward movement', () => {
+    const wrapper = create()
+    const stub = wrapper.get('[role="button"]').element
+    pointer(stub, 'pointerdown', 200, 100)
+    pointer(stub, 'pointermove', 0, 100)
+    pointer(stub, 'pointerup', 0, 100)
+    expect(wrapper.emitted('redeem')).toBeUndefined()
+    wrapper.unmount()
+  })
+  it('restores the same input after API rejection, then accepts a retry', async () => {
+    const wrapper = create()
+    await wrapper.get('form').trigger('submit')
+    await wrapper.setProps({ locked: true })
+    await wrapper.setProps({ locked: false })
+    expect(wrapper.get('input').element.value).toBe('CODE')
+    expect(wrapper.get('input').element.disabled).toBe(false)
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('redeem')).toHaveLength(2)
+    await wrapper.vm.accept()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ticket-stamp').exists()).toBe(true)
+    expect(wrapper.get('[role="button"]').attributes('tabindex')).toBe('-1')
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.get('input').element.disabled).toBe(false)
+    wrapper.unmount()
+  })
+  it('blocks known invalid codes on press and restores dragging after editing', async () => {
+    const wrapper = create()
+    await wrapper.setProps({ invalid: true })
+    const stub = wrapper.get('[role="button"]').element
+    pointer(stub, 'pointerdown', 100, 100)
+    pointer(stub, 'pointermove', 170, 250)
+    expect(wrapper.emitted('redeem')).toBeUndefined()
+    expect(wrapper.text()).toContain('redeem.ticketInvalid')
+    await wrapper.setProps({ invalid: false, modelValue: 'OTHER' })
+    pointer(stub, 'pointerdown', 100, 100)
+    pointer(stub, 'pointermove', 170, 250)
+    expect(wrapper.emitted('redeem')).toHaveLength(1)
+    wrapper.unmount()
+  })
+  it('finishes detaching while the API is pending and never stamps success early', async () => {
+    const wrapper = create()
+    const stub = wrapper.get('[role="button"]').element as HTMLElement
+    pointer(stub, 'pointerdown', 100, 100)
+    pointer(stub, 'pointermove', 170, 250)
+    await wrapper.setProps({ locked: true })
+    expect(stub.style.opacity).toBe('0')
+    expect(wrapper.find('.ticket-stamp').exists()).toBe(false)
+    await wrapper.vm.accept()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.ticket-stamp').exists()).toBe(true)
+    wrapper.unmount()
+  })
+  it('requires a code and does not emit while the parent is locked', async () => {
+    const wrapper = create()
+    await wrapper.setProps({ modelValue: '' })
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('redeem')).toBeUndefined()
+    await wrapper.setProps({ modelValue: 'CODE', locked: true })
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('redeem')).toBeUndefined()
+    wrapper.unmount()
+  })
+})

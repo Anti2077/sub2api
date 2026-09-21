@@ -71,7 +71,9 @@ describe('RedeemView refresh after redemption', () => {
       expect(showSuccess).toHaveBeenCalledWith('redeem.codeRedeemSuccess')
       expect(wrapper.text()).toContain('Code applied')
       expect(wrapper.text()).not.toContain('redeem.failedToRedeem')
-      expect((wrapper.get('input#code').element as HTMLInputElement).value).toBe('')
+      expect((wrapper.get('input#code').element as HTMLInputElement).value).toBe(' REDEEM-CODE ')
+      expect((wrapper.get('input#code').element as HTMLInputElement).disabled).toBe(true)
+      await wrapper.findAll('button').find(b => b.text() === 'redeem.ticketAnother')!.trigger('click')
       expect((wrapper.get('input#code').element as HTMLInputElement).disabled).toBe(false)
       expect(getHistory).toHaveBeenCalledTimes(2)
       expect(wrapper.text()).toContain('REDEEM-C...')
@@ -207,7 +209,7 @@ describe('RedeemView refresh after redemption', () => {
     expect(showWarning).not.toHaveBeenCalled()
     expect(showError).not.toHaveBeenCalled()
     expect(showSuccess).toHaveBeenCalledWith('redeem.codeRedeemSuccess')
-    expect((wrapper.get('input#code').element as HTMLInputElement).value).toBe('')
+    expect((wrapper.get('input#code').element as HTMLInputElement).value).toBe(' REDEEM-CODE ')
     wrapper.unmount()
   })
 
@@ -221,6 +223,38 @@ describe('RedeemView refresh after redemption', () => {
     expect(showSuccess).toHaveBeenCalledWith('redeem.codeRedeemSuccess')
     expect(getHistory).toHaveBeenCalledTimes(2)
     wrapper.unmount()
+  })
+
+  it('uses the confirmed new balance even when profile refresh fails', async () => {
+    redeem.mockResolvedValue({ type: 'balance', value: 20, new_balance: 30, message: 'Code applied' })
+    refreshUser.mockRejectedValue(new Error('Offline'))
+    const wrapper = await submitCode()
+    expect(wrapper.find('.text-4xl').text()).toContain('$30.00')
+    expect(showSuccess).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+
+  it('ignores duplicate submissions while the redemption request is pending', async () => {
+    let resolve!: (value: unknown) => void
+    redeem.mockImplementation(() => new Promise(r => { resolve = r }))
+    const wrapper = await submitCode()
+    await wrapper.get('form').trigger('submit')
+    expect(redeem).toHaveBeenCalledOnce()
+    resolve({ type: 'balance', value: 20, new_balance: 30, message: 'Code applied' })
+    await flushPromises()
+    expect(showSuccess).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
+
+  it('does not start a ceremony or refresh after a pending request completes on another route', async () => {
+    let resolve!: (value: unknown) => void
+    redeem.mockImplementation(() => new Promise(r => { resolve = r }))
+    const wrapper = await submitCode()
+    wrapper.unmount()
+    resolve({ type: 'balance', value: 20, new_balance: 30, message: 'Code applied' })
+    await flushPromises()
+    expect(refreshUser).not.toHaveBeenCalled()
+    expect(showSuccess).not.toHaveBeenCalled()
   })
 
   it('keeps the code and reports failure when the redemption request itself fails', async () => {

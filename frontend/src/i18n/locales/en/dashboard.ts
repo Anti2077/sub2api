@@ -774,6 +774,20 @@ export default {
 
   // Redeem
   redeem: {
+    ticketInvalid: 'Invalid code. Edit the code to try again.',
+    ticketTitle: 'Account credit voucher',
+    ticketDescription: 'Redeem credit or account benefits',
+    ticketInput: 'Enter your code here',
+    ticketUsed: 'Redeemed · Benefits applied',
+    ticketWaiting: 'Awaiting redemption',
+    ticketStamp: 'REDEEMED',
+    ticketSeam: 'Tear along the line',
+    ticketStub: 'VOUCHER STUB',
+    ticketGrip: 'Grab here',
+    ticketPull: 'Pull down and right',
+    ticketAccessible: 'Drag the stub to redeem; or hold Space or Enter, then release to confirm',
+    ticketHelp: 'Pull the right stub down and out. Release early to cancel.',
+    ticketAnother: 'Redeem another voucher',
     title: 'Redeem Code',
     description: 'Enter your redeem code to add balance or increase concurrency',
     currentBalance: 'Current Balance',

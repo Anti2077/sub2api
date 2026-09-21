@@ -1,6 +1,7 @@
 <template>
   <AppLayout>
-    <div class="mx-auto max-w-2xl space-y-6">
+    <div class="relative mx-auto max-w-2xl space-y-6">
+      <RedeemCeremony ref="ceremony" @active="ceremonyActive = $event" @progress="updateCeremonyProgress" />
       <!-- Current Balance Card -->
       <div class="card overflow-hidden">
         <div class="bg-gradient-to-br from-primary-500 to-primary-600 px-6 py-8 text-center">
@@ -10,78 +11,26 @@
             <Icon name="creditCard" size="xl" class="text-white" />
           </div>
           <p class="text-sm font-medium text-primary-100">{{ t('redeem.currentBalance') }}</p>
-          <p class="mt-2 text-4xl font-bold text-white">
-            ${{ user?.balance?.toFixed(2) || '0.00' }}
+          <p class="relative mt-2 text-4xl font-bold tabular-nums text-white">
+            <span class="relative inline-block">
+            <span ref="balanceTarget" :class="{ 'redeem-arrived': ceremonyActive && ceremonyProgress >= 1 }">${{ displayedBalance.toFixed(2) }}</span>
+            <span v-if="ceremonyActive && ceremonyProgress > 0 && animationResult?.type === 'balance'" class="redeem-gain text-primary-100" aria-hidden="true">+${{ animationResult.value.toFixed(2) }}</span>
+            </span>
           </p>
           <p class="mt-2 text-sm text-primary-100">
-            {{ t('redeem.concurrency') }}: {{ user?.concurrency || 0 }} {{ t('redeem.requests') }}
+            {{ t('redeem.concurrency') }}: <span ref="concurrencyTarget">{{ displayedConcurrency }} {{ t('redeem.requests') }}</span>
           </p>
         </div>
       </div>
 
-      <!-- Redeem Form -->
-      <div class="card">
-        <div class="p-6">
-          <form @submit.prevent="handleRedeem" class="space-y-5">
-            <div>
-              <label for="code" class="input-label">
-                {{ t('redeem.redeemCodeLabel') }}
-              </label>
-              <div class="relative mt-1">
-                <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
-                  <Icon name="gift" size="md" class="text-gray-400 dark:text-dark-500" />
-                </div>
-                <input
-                  id="code"
-                  v-model="redeemCode"
-                  type="text"
-                  required
-                  :placeholder="t('redeem.redeemCodePlaceholder')"
-                  :disabled="submitting"
-                  class="input py-3 pl-12 text-lg"
-                />
-              </div>
-              <p class="input-hint">
-                {{ t('redeem.redeemCodeHint') }}
-              </p>
-            </div>
-
-            <button
-              type="submit"
-              :disabled="!redeemCode || submitting"
-              class="btn btn-primary w-full py-3"
-            >
-              <svg
-                v-if="submitting"
-                class="-ml-1 mr-2 h-5 w-5 animate-spin"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  class="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  stroke-width="4"
-                ></circle>
-                <path
-                  class="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                ></path>
-              </svg>
-              <Icon v-else name="checkCircle" size="md" class="mr-2" />
-              {{ submitting ? t('redeem.redeeming') : t('redeem.redeemButton') }}
-            </button>
-          </form>
-        </div>
-      </div>
+      <RedeemTicket ref="ticket" v-model="redeemCode" :locked="submitting" :invalid="invalidCode === redeemCode.trim()" @redeem="handleRedeem" />
 
       <!-- Success Message -->
       <transition name="fade">
         <div
           v-if="redeemResult"
+          ref="resultTarget"
+          role="status"
           class="card border-emerald-200 bg-emerald-50 dark:border-emerald-800/50 dark:bg-emerald-900/20"
         >
           <div class="p-6">
@@ -366,7 +315,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
@@ -374,6 +323,8 @@ import { useSubscriptionStore } from '@/stores/subscriptions'
 import { redeemAPI, authAPI, type RedeemHistoryItem } from '@/api'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
+import RedeemCeremony from '@/components/redeem/RedeemCeremony.vue'
+import RedeemTicket from '@/components/redeem/RedeemTicket.vue'
 import { formatDateTime } from '@/utils/format'
 
 const { t } = useI18n()
@@ -385,7 +336,7 @@ const user = computed(() => authStore.user)
 
 const redeemCode = ref('')
 const submitting = ref(false)
-const redeemResult = ref<{
+type RedeemResult = {
   message: string
   type: string
   value: number
@@ -393,8 +344,37 @@ const redeemResult = ref<{
   new_concurrency?: number
   group_name?: string
   validity_days?: number
-} | null>(null)
+}
+const redeemResult = ref<RedeemResult | null>(null)
 const errorMessage = ref('')
+const invalidCode = ref<string | null>(null)
+watch(redeemCode, () => { invalidCode.value = null; errorMessage.value = '' })
+
+const ceremony = ref<InstanceType<typeof RedeemCeremony>>()
+const ticket = ref<InstanceType<typeof RedeemTicket>>()
+const balanceTarget = ref<HTMLElement | null>(null)
+const concurrencyTarget = ref<HTMLElement | null>(null)
+const resultTarget = ref<HTMLElement | null>(null)
+const ceremonyActive = ref(false)
+const ceremonyProgress = ref(0)
+const balanceOverride = ref<number | null>(null)
+const concurrencyOverride = ref<number | null>(null)
+const displayedBalance = computed(() => balanceOverride.value ?? user.value?.balance ?? 0)
+const displayedConcurrency = computed(() => concurrencyOverride.value ?? user.value?.concurrency ?? 0)
+const animationResult = ref<typeof redeemResult.value>(null)
+let animationFrom = 0
+let animationTo = 0
+let disposed = false
+// Release the confirmed fallback when a later profile update arrives.
+watch(() => user.value?.balance, () => { if (!submitting.value) balanceOverride.value = null })
+watch(() => user.value?.concurrency, () => { if (!submitting.value) concurrencyOverride.value = null })
+const updateCeremonyProgress = (progress: number) => {
+  ceremonyProgress.value = progress
+  const value = animationFrom + (animationTo - animationFrom) * (1 - (1 - progress) ** 3)
+  if (animationResult.value?.type === 'balance') balanceOverride.value = value
+  if (animationResult.value?.type === 'concurrency') concurrencyOverride.value = Math.round(value)
+}
+onBeforeUnmount(() => { disposed = true; ceremony.value?.stop(); historyRequest++ })
 
 // History data
 const history = ref<RedeemHistoryItem[]>([])
@@ -472,52 +452,82 @@ const fetchHistory = async (page = 1) => {
 }
 
 const handleRedeem = async () => {
-  if (!redeemCode.value.trim()) {
+  if (submitting.value) return
+  const code = redeemCode.value.trim()
+  if (!code) {
     appStore.showError(t('redeem.pleaseEnterCode'))
     return
   }
-
   submitting.value = true
   errorMessage.value = ''
   redeemResult.value = null
-
+  ceremonyProgress.value = 0
+  const beforeBalance = displayedBalance.value
+  const beforeConcurrency = displayedConcurrency.value
+  // The request is the only operation that can fail redemption itself.
+  let result: RedeemResult
   try {
-    const result = await redeemAPI.redeem(redeemCode.value.trim())
-
-    redeemResult.value = result
-
-    // Refresh user data to get updated balance/concurrency
-    try {
-      await authStore.refreshUser()
-    } catch (error) {
-      console.error('Failed to refresh user after redeem:', error)
-      appStore.showWarning(t('redeem.userRefreshFailed'))
+    result = await redeemAPI.redeem(code)
+  } catch (error: any) {
+    if (!disposed) {
+      const reason = error.reason || error.response?.data?.reason
+      if (['REDEEM_CODE_NOT_FOUND', 'REDEEM_CODE_USED', 'REDEEM_CODE_EXPIRED', 'REDEEM_CODE_INVALID'].includes(reason)) invalidCode.value = code
+      errorMessage.value = error.response?.data?.detail || error.message || t('redeem.failedToRedeem')
+      appStore.showError(t('redeem.redeemFailed'))
+      submitting.value = false
+      ticket.value?.rollback()
     }
-
-    // If subscription type, immediately refresh subscription status
+    return
+  }
+  if (disposed) return
+  balanceOverride.value = beforeBalance
+  concurrencyOverride.value = beforeConcurrency
+  animationResult.value = result
+  // Start visual delivery promptly from authoritative response values while refreshing in parallel.
+  const refresh = (async () => {
+    try { await authStore.refreshUser() }
+    catch (error) {
+      console.error('Failed to refresh user after redeem:', error)
+      if (!disposed) appStore.showWarning(t('redeem.userRefreshFailed'))
+    }
     if (result.type === 'subscription') {
-      try {
-        await subscriptionStore.fetchActiveSubscriptions(true) // force refresh
-      } catch (error) {
+      try { await subscriptionStore.fetchActiveSubscriptions(true) }
+      catch (error) {
         console.error('Failed to refresh subscriptions after redeem:', error)
-        appStore.showWarning(t('redeem.subscriptionRefreshFailed'))
+        if (!disposed) appStore.showWarning(t('redeem.subscriptionRefreshFailed'))
       }
     }
-
-    // Clear the input
+  })()
+  try {
+    // Older servers may omit the new totals: wait for profile refresh rather than inventing a balance.
+    if ((result.type === 'balance' && result.new_balance === undefined) ||
+        (result.type === 'concurrency' && result.new_concurrency === undefined)) await refresh
+    if (disposed) return
+    animationFrom = result.type === 'concurrency' ? beforeConcurrency : beforeBalance
+    animationTo = result.type === 'concurrency'
+      ? result.new_concurrency ?? user.value?.concurrency ?? beforeConcurrency
+      : result.new_balance ?? user.value?.balance ?? beforeBalance
+    // Subscription delivery targets its own result, never the monetary balance.
+    if (result.type === 'subscription') redeemResult.value = result
+    await nextTick()
+    try {
+      await Promise.all([ticket.value?.accept(), result.value > 0 ? ceremony.value?.play() : Promise.resolve()])
+    } catch { /* Visual feedback cannot invalidate an already successful redemption. */ }
+    if (disposed) return
+    updateCeremonyProgress(1)
+    redeemResult.value = result
     redeemCode.value = ''
-
-    // Refresh history
-    await fetchHistory()
-
-    // Show success toast
     appStore.showSuccess(t('redeem.codeRedeemSuccess'))
-  } catch (error: any) {
-    errorMessage.value = error.response?.data?.detail || t('redeem.failedToRedeem')
-
-    appStore.showError(t('redeem.redeemFailed'))
+    await Promise.all([refresh, fetchHistory()])
   } finally {
-    submitting.value = false
+    if (!disposed) {
+      // Preserve authoritative totals even if a profile refresh failed or returned stale data.
+      balanceOverride.value = result.type === 'balance'
+        ? result.new_balance ?? user.value?.balance ?? beforeBalance : null
+      concurrencyOverride.value = result.type === 'concurrency'
+        ? result.new_concurrency ?? user.value?.concurrency ?? beforeConcurrency : null
+      submitting.value = false
+    }
   }
 }
 
@@ -533,6 +543,12 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.redeem-arrived { display: inline-block; animation: redeem-arrival .5s ease-out both; }
+.redeem-gain { position: absolute; left: 100%; top: 50%; font-size: .875rem; white-space: nowrap; animation: redeem-gain .4s ease-out both; }
+@keyframes redeem-arrival { 50% { transform: scale(1.045); } }
+@keyframes redeem-gain { from { opacity: 0; transform: translate(8px, calc(-50% + 6px)); } to { opacity: 1; transform: translate(8px, -50%); } }
+@media (prefers-reduced-motion: reduce) { .redeem-arrived, .redeem-gain { animation: none; } }
+
 .fade-enter-active,
 .fade-leave-active {
   transition: all 0.3s ease;
