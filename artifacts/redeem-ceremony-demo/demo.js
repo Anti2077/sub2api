@@ -44,7 +44,7 @@ function draw(t){
  const travel=clamp((t-1.30)/.90);
  // Brief anticipation, fast sweep, soft landing; the tail follows speed.
  const head=1-Math.pow(1-travel,2);
- 
+
  if(t>=1.30&&t<2.32){
   const h=point(head),fade=clamp((2.32-t)/.12),appear=clamp(travel/.10);
   // One small luminous pearl with a thin iridescent rim; only a short translucent wake.
