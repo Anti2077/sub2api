@@ -85,6 +85,16 @@ describe('manual ticket redemption', () => {
     expect(wrapper.find('.ticket-stamp').exists()).toBe(true)
     wrapper.unmount()
   })
+  it('uses a shorter gesture for touch input without changing mouse thresholds', async () => {
+    const wrapper = create()
+    const stub = wrapper.get('[role="button"]').element
+    const start = new Event('pointerdown', { bubbles: true })
+    Object.assign(start, { pointerId: 1, button: 0, pointerType: 'touch', clientX: 100, clientY: 100 })
+    stub.dispatchEvent(start)
+    pointer(stub, 'pointermove', 100, 185)
+    expect(wrapper.emitted('redeem')).toHaveLength(1)
+    wrapper.unmount()
+  })
   it('requires a code and does not emit while the parent is locked', async () => {
     const wrapper = create()
     await wrapper.setProps({ modelValue: '' })

@@ -1,6 +1,6 @@
 <template>
   <AppLayout>
-    <div class="relative mx-auto max-w-2xl space-y-6">
+    <div class="relative mx-auto max-w-3xl space-y-6">
       <RedeemCeremony ref="ceremony" @active="ceremonyActive = $event" @progress="updateCeremonyProgress" />
       <!-- Current Balance Card -->
       <div class="card overflow-hidden">
@@ -17,7 +17,7 @@
             <span v-if="ceremonyActive && ceremonyProgress > 0 && animationResult?.type === 'balance'" class="redeem-gain text-primary-100" aria-hidden="true">+${{ animationResult.value.toFixed(2) }}</span>
             </span>
           </p>
-          <p class="mt-2 text-sm text-primary-100">
+          <p class="mt-6 text-sm text-primary-100 sm:mt-2">
             {{ t('redeem.concurrency') }}: <span ref="concurrencyTarget">{{ displayedConcurrency }} {{ t('redeem.requests') }}</span>
           </p>
         </div>
@@ -558,5 +558,12 @@ onMounted(async () => {
 .fade-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+}
+@media (max-width: 550px) {
+  .redeem-gain { left: 50%; top: 100%; animation-name: redeem-gain-mobile; }
+  @keyframes redeem-gain-mobile {
+    from { opacity: 0; transform: translate(-50%, 6px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+  }
 }
 </style>

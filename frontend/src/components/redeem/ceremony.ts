@@ -38,12 +38,12 @@ export function startCeremony({
       if (t > 0.55 && t < 2.3 && now - lastBurst >= 32) {
         lastBurst = now
         const options = {
-          particleCount: 2,
+          particleCount: 3,
           spread: 55,
           startVelocity: 46,
           ticks: 180,
           gravity: 0.9,
-          colors: ['#38bdf8', '#a78bfa', '#f472b6', '#fbbf24', '#34d399'],
+          colors: ['#ff5252', '#ff8a34', '#ffd43b', '#a3e635', '#2dd4bf', '#22d3ee', '#4385ff', '#9b6dff', '#ed64dd', '#ff80ab'],
           disableForReducedMotion: true,
         }
         fire({ ...options, angle: 60, origin: { x: 0, y: 0.65 } })

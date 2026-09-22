@@ -6,9 +6,7 @@
           <span>CREDIT VOUCHER</span><span>ONE USE ONLY</span>
         </div>
         <h2>{{ t('redeem.ticketTitle') }}</h2>
-        <p class="ticket-description">{{ t('redeem.ticketDescription') }}</p>
         <div class="ticket-entry">
-          <label for="code">{{ t('redeem.ticketInput') }}</label>
           <input
             id="code"
             ref="input"
@@ -18,7 +16,7 @@
             spellcheck="false"
             :disabled="locked || pending || dragging || complete"
             :placeholder="t('redeem.redeemCodePlaceholder')"
-            aria-describedby="ticket-hint"
+            :aria-label="t('redeem.redeemCodeLabel')"
             @input="
               emit(
                 'update:modelValue',
@@ -26,7 +24,6 @@
               )
             "
           />
-          <small id="ticket-hint">{{ t('redeem.redeemCodeHint') }}</small>
         </div>
         <div class="ticket-bottom">
           <div class="barcode" aria-hidden="true" />
@@ -122,6 +119,7 @@ const redeemedCode = ref('')
 const pending = ref(false),
   complete = ref(false),
   dragging = ref(false)
+let touchThreshold = 120
 let pointer: number | null = null,
   origin = { x: 0, y: 0 },
   progress = 0,
@@ -230,6 +228,9 @@ function requestRedeem() {
 function pointerDown(e: PointerEvent) {
   if (e.button !== 0 || pointer !== null || !allowed()) return
   cancelAnimationFrame(raf)
+  const viewport = window.visualViewport
+  const available = (viewport?.height ?? window.innerHeight) + (viewport?.offsetTop ?? 0) - e.clientY
+  touchThreshold = e.pointerType === 'touch' ? Math.max(44, Math.min(80, available * .65)) : 120
   pointer = e.pointerId
   origin = { x: e.clientX, y: e.clientY }
   progress = 0
@@ -241,7 +242,7 @@ function pointerMove(e: PointerEvent) {
   progress = clamp(
     (Math.max(0, e.clientX - origin.x) * 0.65 +
       Math.max(0, e.clientY - origin.y)) /
-      120,
+      touchThreshold,
   )
   render(progress)
   if (progress >= 1) requestRedeem()
@@ -395,7 +396,7 @@ defineExpose({ accept, rollback, reset })
   color: var(--muted);
 }
 .ticket-entry {
-  margin-top: 24px;
+  margin-top: 28px;
 }
 .ticket-entry label {
   display: block;
@@ -409,12 +410,13 @@ defineExpose({ accept, rollback, reset })
   border: 0;
   border-bottom: 1px dashed var(--rule);
   border-radius: 0;
-  padding: 8px 0 6px;
+  padding: 14px 0 12px;
+  min-height: 52px;
   color: var(--ink);
   font:
-    17px ui-monospace,
+    20px ui-monospace,
     monospace;
-  letter-spacing: 0.4px;
+  letter-spacing: 0;
   outline: none;
 }
 .ticket-entry input:focus {
@@ -588,7 +590,8 @@ defineExpose({ accept, rollback, reset })
     display: none;
   }
   .ticket-entry input {
-    font-size: 14px;
+    font-size: 16px;
+    min-height: 44px;
     letter-spacing: 0;
   }
   .ticket-stub {
@@ -688,5 +691,23 @@ defineExpose({ accept, rollback, reset })
 }
 @media (prefers-reduced-motion: reduce) {
   .ticket-stamp, .ticket-used-reveal { animation: none; }
+}
+
+@media (max-width: 550px) {
+  .ticket-entry input::placeholder { font-size: 16px; }
+  .ticket-bottom { flex-wrap: wrap; }
+  .ticket-body.ticket-torn { padding-bottom: 78px; }
+  .ticket-stamp { top: auto; bottom: 12px; right: 16px; }
+  .ticket-help { font-size: 12px; line-height: 1.6; }
+}
+@media (max-width: 360px) {
+  .ticket { grid-template-columns: minmax(0, 1fr) 76px; }
+  .ticket-seam { right: 75px; }
+  .ticket-body { padding-inline: 12px; }
+  .ticket-body h2 { overflow-wrap: anywhere; }
+}
+
+@media (max-width: 550px) {
+  .ticket-entry { margin-top: 22px; }
 }
 </style>
