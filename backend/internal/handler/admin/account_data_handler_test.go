@@ -45,6 +45,7 @@ type dataAccount struct {
 	ProxyKey    *string        `json:"proxy_key"`
 	Concurrency int            `json:"concurrency"`
 	Priority    int            `json:"priority"`
+	GroupIDs    []int64        `json:"group_ids"`
 }
 
 func setupAccountDataRouter() (*gin.Engine, *stubAdminService) {
@@ -300,6 +301,7 @@ func TestImportDataReusesProxyAndSkipsDefaultGroup(t *testing.T) {
 					"proxy_key":   "socks5|1.2.3.4|1080|u|p",
 					"concurrency": 3,
 					"priority":    50,
+					"group_ids":   []int64{7, 9},
 				},
 			},
 		},
@@ -315,5 +317,29 @@ func TestImportDataReusesProxyAndSkipsDefaultGroup(t *testing.T) {
 
 	require.Len(t, adminSvc.createdProxies, 0)
 	require.Len(t, adminSvc.createdAccounts, 1)
+	require.True(t, adminSvc.createdAccounts[0].SkipDefaultGroupBind)
+	require.Equal(t, []int64{7, 9}, adminSvc.createdAccounts[0].GroupIDs)
+}
+
+func TestImportDataExplicitEmptyGroupIDsSkipsDefaultGroup(t *testing.T) {
+	router, adminSvc := setupAccountDataRouter()
+	dataPayload := map[string]any{
+		"data": map[string]any{
+			"type": "sub2api-data", "version": 1, "proxies": []any{},
+			"accounts": []map[string]any{{
+				"name": "ungrouped", "platform": service.PlatformOpenAI, "type": service.AccountTypeOAuth,
+				"credentials": map[string]any{"token": "x"}, "group_ids": []int64{},
+			}},
+		},
+		"skip_default_group_bind": false,
+	}
+	body, _ := json.Marshal(dataPayload)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/data", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, adminSvc.createdAccounts, 1)
+	require.Empty(t, adminSvc.createdAccounts[0].GroupIDs)
 	require.True(t, adminSvc.createdAccounts[0].SkipDefaultGroupBind)
 }

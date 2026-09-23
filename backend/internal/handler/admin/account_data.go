@@ -70,6 +70,9 @@ type DataAccount struct {
 	RateMultiplier     *float64       `json:"rate_multiplier,omitempty"`
 	ExpiresAt          *int64         `json:"expires_at,omitempty"`
 	AutoPauseOnExpired *bool          `json:"auto_pause_on_expired,omitempty"`
+	// GroupIDs is a pointer so an explicitly empty array can mean "leave ungrouped"
+	// while an omitted field keeps the importer's legacy default-group behavior.
+	GroupIDs *[]int64 `json:"group_ids,omitempty"`
 }
 
 type DataImportRequest struct {
@@ -199,6 +202,7 @@ func (h *AccountHandler) ExportData(c *gin.Context) {
 			v := acc.ExpiresAt.Unix()
 			expiresAt = &v
 		}
+		groupIDs := append([]int64(nil), acc.GroupIDs...)
 		dataAccounts = append(dataAccounts, DataAccount{
 			Name:               acc.Name,
 			Notes:              acc.Notes,
@@ -212,6 +216,7 @@ func (h *AccountHandler) ExportData(c *gin.Context) {
 			RateMultiplier:     acc.RateMultiplier,
 			ExpiresAt:          expiresAt,
 			AutoPauseOnExpired: &acc.AutoPauseOnExpired,
+			GroupIDs:           &groupIDs,
 		})
 	}
 
@@ -433,6 +438,10 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 
 		enrichCredentialsFromIDToken(&item)
 
+		groupIDs := []int64(nil)
+		if item.GroupIDs != nil {
+			groupIDs = append(groupIDs, (*item.GroupIDs)...)
+		}
 		accountInput := &service.CreateAccountInput{
 			Name:                 item.Name,
 			Notes:                item.Notes,
@@ -444,10 +453,10 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 			Concurrency:          item.Concurrency,
 			Priority:             item.Priority,
 			RateMultiplier:       item.RateMultiplier,
-			GroupIDs:             nil,
+			GroupIDs:             groupIDs,
 			ExpiresAt:            item.ExpiresAt,
 			AutoPauseOnExpired:   item.AutoPauseOnExpired,
-			SkipDefaultGroupBind: skipDefaultGroupBind,
+			SkipDefaultGroupBind: skipDefaultGroupBind || item.GroupIDs != nil,
 		}
 
 		created, err := h.adminService.CreateAccount(ctx, accountInput)
@@ -705,6 +714,18 @@ func validateDataAccount(item DataAccount) error {
 	}
 	if item.Priority < 0 {
 		return errors.New("priority must be >= 0")
+	}
+	if item.GroupIDs != nil {
+		seen := make(map[int64]struct{}, len(*item.GroupIDs))
+		for _, id := range *item.GroupIDs {
+			if id <= 0 {
+				return errors.New("group_ids must contain positive IDs")
+			}
+			if _, ok := seen[id]; ok {
+				return errors.New("group_ids must not contain duplicates")
+			}
+			seen[id] = struct{}{}
+		}
 	}
 	return nil
 }
