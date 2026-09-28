@@ -183,6 +183,8 @@ type AICredit struct {
 type UsageInfo struct {
 	Source             string         `json:"source,omitempty"`               // "passive" or "active"
 	UpdatedAt          *time.Time     `json:"updated_at,omitempty"`           // 更新时间
+	Balance            *float64       `json:"balance,omitempty"`              // 上游 Sub2API 钱包余额
+	BalanceSource      string         `json:"balance_source,omitempty"`       // "sub2api"
 	FiveHour           *UsageProgress `json:"five_hour"`                      // 5小时窗口
 	SevenDay           *UsageProgress `json:"seven_day,omitempty"`            // 7天窗口
 	SevenDaySonnet     *UsageProgress `json:"seven_day_sonnet,omitempty"`     // 7天Sonnet窗口
@@ -246,6 +248,12 @@ type UsageInfo struct {
 	Error string `json:"error,omitempty"`
 }
 
+// Sub2APIBalanceFetcher retrieves the wallet balance exposed by an upstream
+// Sub2API instance through GET /v1/usage.
+type Sub2APIBalanceFetcher interface {
+	FetchBalance(ctx context.Context, account *Account) (float64, error)
+}
+
 // ClaudeUsageWindow Anthropic /api/oauth/usage 返回的单个用量窗口
 type ClaudeUsageWindow struct {
 	Utilization float64 `json:"utilization"`
@@ -301,8 +309,17 @@ type AccountUsageService struct {
 	cache                   *UsageCache
 	identityCache           IdentityCache
 	tlsFPProfileService     *TLSFingerprintProfileService
+	sub2apiBalanceFetcher   Sub2APIBalanceFetcher
 	agentIdentityTaskMu     sync.Mutex
 	agentIdentityWS         agentIdentityWSConnectionInvalidator
+}
+
+// SetSub2APIBalanceFetcher wires the optional pool-mode balance source without
+// changing the constructor used by focused service tests.
+func (s *AccountUsageService) SetSub2APIBalanceFetcher(fetcher Sub2APIBalanceFetcher) {
+	if s != nil {
+		s.sub2apiBalanceFetcher = fetcher
+	}
 }
 
 // NewAccountUsageService 创建AccountUsageService实例
@@ -350,6 +367,23 @@ func (s *AccountUsageService) getUsageForAccount(ctx context.Context, account *A
 		return nil, fmt.Errorf("account is required")
 	}
 	accountID := account.ID
+
+	if account.IsPoolMode() {
+		if s.sub2apiBalanceFetcher == nil {
+			return nil, fmt.Errorf("sub2api balance fetcher is not configured")
+		}
+		balance, err := s.sub2apiBalanceFetcher.FetchBalance(ctx, account)
+		if err != nil {
+			return nil, err
+		}
+		now := time.Now().UTC()
+		return &UsageInfo{
+			Source:        "active",
+			UpdatedAt:     &now,
+			Balance:       &balance,
+			BalanceSource: "sub2api",
+		}, nil
+	}
 
 	// Dedicated UI load-test accounts must remain fully interactive without ever
 	// contacting Anthropic with synthetic credentials. Reuse the same persisted

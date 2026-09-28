@@ -495,6 +495,7 @@ export default {
         }
       },
       usageWindow: {
+        upstreamBalance: '上游余额 ${value}',
         statsTitle: '5小时窗口用量统计',
         statsTitleDaily: '每日用量统计',
         geminiProDaily: 'Pro',

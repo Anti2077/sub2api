@@ -130,6 +130,44 @@ describe('AccountUsageCell', () => {
     })
   })
 
+  it('renders the upstream Sub2API balance for pool mode accounts', async () => {
+    getUsage.mockResolvedValue({
+      source: 'active',
+      updated_at: '2026-09-28T00:00:00Z',
+      balance: 12.34,
+      balance_source: 'sub2api',
+      five_hour: null,
+      seven_day: null,
+      seven_day_sonnet: null
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({
+          platform: 'openai',
+          type: 'apikey',
+          credentials: {
+            pool_mode: true,
+            base_url: 'https://pool.example.test',
+            api_key: 'pool-key'
+          }
+        })
+      },
+      global: {
+        stubs: { UsageProgressBar: true, AccountQuotaInfo: true }
+      }
+    })
+
+    await flushPromises()
+
+    expect(getUsage).toHaveBeenCalledWith(1)
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.upstreamBalance')
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.activeQuery')
+
+    await wrapper.get('button').trigger('click')
+    expect(getUsage).toHaveBeenLastCalledWith(1, 'active', true)
+  })
+
   it('renders eligible Ollama Cloud state and forwards query updates', async () => {
     const wrapper = mount(AccountUsageCell, {
       props: {

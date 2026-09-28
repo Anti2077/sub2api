@@ -1,8 +1,46 @@
 <template>
   <div ref="rootRef" v-if="showUsageWindows">
+    <!-- Pool mode API-key accounts: read the upstream Sub2API wallet balance. -->
+    <template v-if="isPoolModeAccount">
+      <div v-if="loading" class="space-y-1.5">
+        <div class="h-3 w-24 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+      </div>
+      <div v-else-if="error" class="space-y-1">
+        <div class="text-xs text-red-500">{{ error }}</div>
+        <button
+          type="button"
+          class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+          :disabled="activeQueryLoading"
+          @click="loadActiveUsage"
+        >
+          <svg class="h-2.5 w-2.5" :class="{ 'animate-spin': activeQueryLoading }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {{ t('admin.accounts.usageWindow.activeQuery') }}
+        </button>
+      </div>
+      <div v-else-if="usageInfo?.balance != null" class="space-y-1">
+        <div class="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+          {{ t('admin.accounts.usageWindow.upstreamBalance', { value: formatPoolBalance(usageInfo.balance) }) }}
+        </div>
+        <button
+          type="button"
+          class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+          :disabled="activeQueryLoading"
+          @click="loadActiveUsage"
+        >
+          <svg class="h-2.5 w-2.5" :class="{ 'animate-spin': activeQueryLoading }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {{ t('admin.accounts.usageWindow.activeQuery') }}
+        </button>
+      </div>
+      <div v-else class="text-xs text-gray-400">-</div>
+    </template>
     <!-- Anthropic OAuth and Setup Token accounts: fetch real usage data -->
     <template
-      v-if="
+      v-else-if="
+        !isPoolModeAccount &&
         account.platform === 'anthropic' &&
         (account.type === 'oauth' || account.type === 'setup-token')
       "
@@ -743,6 +781,7 @@ let visibilityObserver: IntersectionObserver | null = null
 
 // Show usage windows for OAuth and Setup Token accounts
 const showUsageWindows = computed(() => {
+  if (isPoolModeAccount.value) return true
   // Gemini: we can always compute local usage windows from DB logs (simulated quotas).
   if (props.account.platform === 'gemini') return true
   // CN providers: apikey 账号也有滚动用量窗口（coding plan）或余额（payg），
@@ -760,6 +799,7 @@ const showUsageWindows = computed(() => {
 })
 
 const shouldFetchUsage = computed(() => {
+  if (isPoolModeAccount.value) return true
   if (props.account.platform === 'anthropic') {
     return props.account.type === 'oauth' || props.account.type === 'setup-token'
   }
@@ -776,6 +816,11 @@ const shouldFetchUsage = computed(() => {
     return props.account.type === 'oauth'
   }
   return false
+})
+
+const isPoolModeAccount = computed(() => {
+  const credentials = props.account.credentials
+  return (props.account.type === 'apikey' || props.account.type === 'bedrock') && credentials?.pool_mode === true
 })
 
 // CN 供应商子单元格可见性（与 CNProviderQuotaCell / CNProviderBalanceCell 共用
@@ -1495,13 +1540,20 @@ const attachVisibilityObserver = () => {
 
 const loadActiveUsage = async () => {
   activeQueryLoading.value = true
+  error.value = null
   try {
     usageInfo.value = await adminAPI.accounts.getUsage(props.account.id, 'active', true)
   } catch (e: any) {
+    error.value = t('common.error')
     console.error('Failed to load active usage:', e)
   } finally {
     activeQueryLoading.value = false
   }
+}
+
+const formatPoolBalance = (value: number) => {
+  if (!Number.isFinite(value)) return '-'
+  return value.toFixed(2)
 }
 
 // The probe persists upstream quota state; refresh this cell so its compact
