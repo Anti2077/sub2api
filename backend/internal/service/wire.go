@@ -238,6 +238,8 @@ func ProvideAccountUsageService(
 	identityCache IdentityCache,
 	tlsFPProfileService *TLSFingerprintProfileService,
 	openAIGatewayService *OpenAIGatewayService,
+	httpUpstream HTTPUpstream,
+	cfg *config.Config,
 ) *AccountUsageService {
 	service := NewAccountUsageService(
 		accountRepo,
@@ -252,6 +254,7 @@ func ProvideAccountUsageService(
 		identityCache,
 		tlsFPProfileService,
 	)
+	service.SetSub2APIBalanceFetcher(NewSub2APIBalanceFetcherService(httpUpstream, cfg))
 	service.agentIdentityWS = openAIGatewayService
 	return service
 }

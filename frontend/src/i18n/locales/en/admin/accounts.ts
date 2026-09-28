@@ -1577,6 +1577,7 @@ export default {
         noData: 'No usage data available for this account'
       },
       usageWindow: {
+        upstreamBalance: 'Upstream balance ${value}',
         statsTitle: '5-Hour Window Usage Statistics',
         statsTitleDaily: 'Daily Usage Statistics',
         geminiProDaily: 'Pro',

@@ -732,6 +732,7 @@ const buildDefaultTodayStats = (): WindowStats => ({
 })
 
 const accountSupportsBatchUsage = (account: Account) => {
+  if ((account.type === 'apikey' || account.type === 'bedrock') && account.credentials?.pool_mode === true) return true
   if (account.platform === 'anthropic') {
     return account.type === 'oauth' || account.type === 'setup-token'
   }
