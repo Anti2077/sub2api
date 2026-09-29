@@ -24,7 +24,8 @@ function headingSlug(text: string): string {
 export function renderWikiMarkdown(source: string): RenderedWikiMarkdown {
   const parsed = marked.parse(source, { breaks: false, gfm: true }) as string
   const sanitized = DOMPurify.sanitize(parsed, {
-    FORBID_TAGS: ['iframe', 'object', 'embed', 'style'],
+    FORBID_TAGS: ['iframe', 'object', 'embed', 'style', 'picture', 'source'],
+    FORBID_ATTR: ['style', 'srcset'],
   }) as string
   const template = document.createElement('template')
   template.innerHTML = sanitized
@@ -51,6 +52,37 @@ export function renderWikiMarkdown(source: string): RenderedWikiMarkdown {
       link.target = '_blank'
       link.rel = 'noopener noreferrer'
     }
+  })
+
+  template.content.querySelectorAll<HTMLImageElement>('img').forEach((img) => {
+    const src = img.getAttribute('src') || ''
+    const alt = img.getAttribute('alt')?.trim() || ''
+    if (!/^\/wiki\/images\/(?:[a-z0-9_-]+\/)*[a-z0-9_-]+\.(?:png|jpe?g|webp|avif)$/i.test(src) || !alt) {
+      img.remove()
+      return
+    }
+    img.setAttribute('loading', 'lazy')
+    img.setAttribute('decoding', 'async')
+    if (img.closest('a')) return
+    const link = document.createElement('a')
+    link.href = src
+    link.target = '_blank'
+    link.rel = 'noopener noreferrer'
+    link.setAttribute('aria-label', `查看原图：${alt}`)
+    link.dataset.wikiImageLink = ''
+    img.replaceWith(link)
+    link.append(img)
+  })
+
+  template.content.querySelectorAll('pre').forEach((pre) => {
+    if (!pre.querySelector('code')) return
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = '复制'
+    button.setAttribute('aria-label', '复制代码')
+    button.setAttribute('aria-live', 'polite')
+    button.dataset.wikiCopy = ''
+    pre.append(button)
   })
 
   const wrapper = document.createElement('div')

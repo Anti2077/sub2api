@@ -113,11 +113,25 @@ watchEffect(() => {
   }
 })
 
-function handleContentClick(event: MouseEvent) {
+async function handleContentClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
+  const copyButton = target?.closest<HTMLButtonElement>('button[data-wiki-copy]')
+  if (copyButton) {
+    const code = copyButton.closest('pre')?.querySelector('code')?.textContent?.trim()
+    if (!code) return
+    try {
+      await navigator.clipboard.writeText(code)
+      copyButton.textContent = '已复制'
+      copyButton.setAttribute('aria-label', '已复制代码')
+    } catch {
+      copyButton.textContent = '请手动复制'
+      copyButton.setAttribute('aria-label', '复制失败，请手动复制代码')
+    }
+    return
+  }
   const link = target?.closest<HTMLAnchorElement>('a[href]')
   const href = link?.getAttribute('href') || ''
-  if (!href.startsWith('/wiki/')) return
+  if (!href.startsWith('/wiki/') || href.startsWith('/wiki/images/')) return
   event.preventDefault()
   router.push(href)
 }
@@ -175,11 +189,34 @@ function handleContentClick(event: MouseEvent) {
 }
 
 .wiki-article-content :deep(pre) {
-  @apply my-6 max-w-full overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-4 font-mono text-sm leading-6 text-gray-900 shadow-sm dark:border-dark-700 dark:bg-dark-900 dark:text-dark-50;
+  @apply relative my-6 max-w-full overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 px-4 pb-4 pt-14 font-mono text-sm leading-6 text-gray-900 shadow-sm dark:border-dark-700 dark:bg-dark-900 dark:text-dark-50;
+}
+
+.wiki-article-content :deep(pre button[data-wiki-copy]) {
+  @apply absolute right-2 top-2 min-h-11 rounded border border-gray-300 bg-white px-3 font-sans text-xs font-semibold text-gray-700 hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:border-dark-600 dark:bg-dark-800 dark:text-dark-100 dark:hover:bg-dark-700;
 }
 
 .wiki-article-content :deep(pre code) {
   @apply bg-transparent p-0 text-inherit;
+}
+
+.wiki-article-content :deep(figure) {
+  @apply my-7;
+}
+
+.wiki-article-content :deep(img) {
+  @apply block max-w-full rounded-md border border-gray-200 bg-white dark:border-dark-700;
+  width: auto;
+  height: auto;
+}
+
+.wiki-article-content :deep(a[data-wiki-image-link]) {
+  @apply inline-block max-w-full focus-visible:rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600;
+  cursor: zoom-in;
+}
+
+.wiki-article-content :deep(figcaption) {
+  @apply mt-2 text-sm leading-6 text-gray-600 dark:text-dark-300;
 }
 
 .wiki-article-content :deep(table) {
