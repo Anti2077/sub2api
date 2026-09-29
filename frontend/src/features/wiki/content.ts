@@ -7,6 +7,7 @@ import grokBuildSource from '@/content/wiki/zh/clients/grok-build.md?raw'
 import openMinisSource from '@/content/wiki/zh/clients/open-minis.md?raw'
 import proxyDirectRoutingSource from '@/content/wiki/zh/troubleshooting/proxy-direct-routing.md?raw'
 import requestErrorsSource from '@/content/wiki/zh/troubleshooting/request-errors.md?raw'
+import rustdeskSource from '@/content/wiki/zh/clients/rustdesk.md?raw'
 
 export type WikiSectionId = 'getting-started' | 'clients' | 'troubleshooting'
 export type WikiArticleStatus = 'verified' | 'draft'
@@ -136,6 +137,18 @@ export const wikiArticles: readonly WikiArticle[] = [
     lastVerified: '2026-09-05',
     verifiedWith: 'Grok Build 官方仓库与文档、CC Switch v3.18.0、Sub2API 导入实现',
     source: grokBuildSource,
+  },
+  {
+    slug: 'rustdesk',
+    section: 'clients',
+    title: '使用本站服务器配置 RustDesk',
+    summary: '导入本站提供的 ID/中继服务器配置，再把本机 ID 发给远程维护人员。',
+    order: 60,
+    tags: ['RustDesk', '远程维护', 'ID 服务器', '中继服务器'],
+    status: 'verified',
+    lastVerified: '2026-09-29',
+    verifiedWith: 'RustDesk macOS 设置截图与官方客户端配置文档；截图版本未记录',
+    source: rustdeskSource,
   },
   {
     slug: 'request-errors',

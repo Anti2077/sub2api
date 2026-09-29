@@ -23,8 +23,9 @@ scope decision explicitly includes them.
 1. Use screenshots only as supporting evidence. Every procedure must remain
    understandable as text because client interfaces change.
 2. Use placeholders such as `https://your-sub2api.example/v1` and
-   `sk-your-key` in committed examples. Never commit a real host, API key,
-   account identifier, or private routing configuration.
+   `sk-your-key` in committed examples. Never commit an API key, account
+   identifier, or private routing configuration. Publish a real host only when
+   the site owner explicitly approves it as a public client endpoint.
 3. Explain what each field changes, not only what value to paste.
 4. Separate verified behavior from version-sensitive notes. Record the client
    version and verification date for screenshots and UI-specific instructions.
