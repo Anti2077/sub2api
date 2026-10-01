@@ -296,6 +296,110 @@ describe('user KeysView column settings', () => {
     isCurrentStep.mockReturnValue(false)
   })
 
+  describe('CC Switch default model selection', () => {
+    const setGroup = (platform: string, models: string[], enabled = true) => {
+      const key = { ...createApiKey(), group_id: 1, group: { id: 1, name: 'Test', platform, model_allowlist: { enabled, models } } }
+      listKeys.mockResolvedValue({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 })
+    }
+    const importButton = (wrapper: VueWrapper) => getButtonByText(wrapper, 'keys.importToCcSwitch')
+
+    it.each(['openai', 'grok', 'anthropic', 'gemini'])('imports the selected allowlisted model for %s only after confirmation', async (platform) => {
+      setGroup(platform, ['custom-first', 'custom-second'])
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+      const wrapper = await mountView()
+      await importButton(wrapper).trigger('click')
+      await flushPromises()
+      expect(open).not.toHaveBeenCalled()
+      expect(wrapper.get<HTMLSelectElement>('#ccs-default-model').element.value).toBe('custom-first')
+      await wrapper.get('#ccs-default-model').setValue('custom-second')
+      await getButtonByText(wrapper, 'common.confirm').trigger('click')
+      expect(new URL(open.mock.calls[0][0] as string).searchParams.get('model')).toBe('custom-second')
+      wrapper.unmount()
+      open.mockRestore()
+    })
+
+    it('cancels without launching CC Switch', async () => {
+      setGroup('openai', ['custom-model'])
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+      const wrapper = await mountView()
+      await importButton(wrapper).trigger('click')
+      await flushPromises()
+      await getButtonByText(wrapper, 'common.cancel').trigger('click')
+      expect(open).not.toHaveBeenCalled()
+      expect(wrapper.find('#ccs-default-model').exists()).toBe(false)
+      wrapper.unmount()
+      open.mockRestore()
+    })
+
+    it('blocks an empty enabled allowlist', async () => {
+      setGroup('openai', [])
+      const wrapper = await mountView()
+      await importButton(wrapper).trigger('click')
+      await flushPromises()
+      expect(wrapper.get('[role="alert"]').text()).toBe('keys.ccsModelSelect.empty')
+      expect(getButtonByText(wrapper, 'common.confirm').attributes('disabled')).toBeDefined()
+      wrapper.unmount()
+    })
+
+    it.each(['claudeCode', 'geminiCli'])('preserves the Antigravity client choice %s', async (client) => {
+      setGroup('antigravity', ['custom-model'])
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+      const wrapper = await mountView()
+      await importButton(wrapper).trigger('click')
+      await getButtonByText(wrapper, `keys.ccsClientSelect.${client}`).trigger('click')
+      await flushPromises()
+      await getButtonByText(wrapper, 'common.confirm').trigger('click')
+      const params = new URL(open.mock.calls[0][0] as string).searchParams
+      expect(params.get('app')).toBe(client === 'claudeCode' ? 'claude' : 'gemini')
+      expect(params.get('model')).toBe('custom-model')
+      wrapper.unmount()
+      open.mockRestore()
+    })
+
+    it('shows a failure and blocks importing if wildcard discovery fails', async () => {
+      setGroup('openai', ['gpt-*'])
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network')))
+      const wrapper = await mountView()
+      await importButton(wrapper).trigger('click')
+      await flushPromises()
+      expect(wrapper.get('[role="alert"]').text()).toBe('keys.ccsModelSelect.loadFailed')
+      expect(getButtonByText(wrapper, 'common.confirm').attributes('disabled')).toBeDefined()
+      wrapper.unmount()
+      vi.unstubAllGlobals()
+    })
+
+    it('ignores a wildcard response after cancelling and reopening another key', async () => {
+      setGroup('openai', ['gpt-*'])
+      let resolveResponse!: (value: unknown) => void
+      vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(resolve => { resolveResponse = resolve })))
+      const wrapper = await mountView()
+      await importButton(wrapper).trigger('click')
+      expect(getButtonByText(wrapper, 'common.confirm').attributes('disabled')).toBeDefined()
+      await getButtonByText(wrapper, 'common.cancel').trigger('click')
+      setGroup('openai', ['other-model'])
+      await wrapper.get('button[title="Refresh"]').trigger('click')
+      await flushPromises()
+      await importButton(wrapper).trigger('click')
+      await flushPromises()
+      resolveResponse({ ok: true, json: async () => ({ data: [{ id: 'gpt-old' }] }) })
+      await flushPromises()
+      expect(wrapper.get<HTMLSelectElement>('#ccs-default-model').element.value).toBe('other-model')
+      wrapper.unmount()
+      vi.unstubAllGlobals()
+    })
+
+    it('retains the existing default when allowlisting is disabled', async () => {
+      setGroup('openai', ['custom-model'], false)
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+      const wrapper = await mountView()
+      await importButton(wrapper).trigger('click')
+      expect(new URL(open.mock.calls[0][0] as string).searchParams.get('model')).toBe('gpt-5.5')
+      expect(wrapper.find('#ccs-default-model').exists()).toBe(false)
+      wrapper.unmount()
+      open.mockRestore()
+    })
+  })
+
   it.each([
     { initialStatus: 'quota_exhausted', status: 'active', formStatus: 'active' },
     { initialStatus: 'inactive', status: 'inactive', formStatus: 'inactive' },

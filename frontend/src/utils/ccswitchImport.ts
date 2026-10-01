@@ -18,6 +18,41 @@ export interface CcSwitchImportDeeplinkInput {
   providerName: string
   apiKey: string
   usageScript: string
+  model?: string
+}
+
+/** Expand wildcard entries through the key's already allowlist-filtered gateway list. */
+export async function loadCcSwitchModelOptions(
+  patterns: string[],
+  input: Pick<CcSwitchImportDeeplinkInput, 'baseUrl' | 'platform' | 'clientType' | 'apiKey'> & { signal?: AbortSignal }
+): Promise<string[]> {
+  const entries = patterns.map(model => model.trim()).filter(Boolean)
+  let discovered: string[] = []
+  if (entries.some(model => model.includes('*'))) {
+    const root = input.baseUrl.replace(/\/+$/, '').replace(/\/v1$/, '')
+    const prefix = input.platform === 'antigravity' ? '/antigravity' : ''
+    const response = await fetch(`${root}${prefix}/v1/models`, {
+      headers: { Authorization: `Bearer ${input.apiKey}` },
+      signal: input.signal ? AbortSignal.any([input.signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000),
+      credentials: 'omit',
+      redirect: 'error'
+    })
+    if (!response.ok) throw new Error('Could not load models')
+    const payload: { data: { id: string }[] } = await response.json()
+    discovered = payload.data.map(model => model.id.trim()).filter(model => model && !model.includes('*'))
+  }
+  const result: string[] = []
+  const seen = new Set<string>()
+  for (const entry of entries) {
+    const escaped = entry.split('*').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')
+    const models = entry.includes('*') ? discovered.filter(model => new RegExp(`^${escaped}$`, 'i').test(model)) : [entry]
+    for (const model of models) {
+      if (seen.has(model.toLowerCase())) continue
+      seen.add(model.toLowerCase())
+      result.push(model)
+    }
+  }
+  return result
 }
 
 /**
@@ -94,6 +129,7 @@ export function resolveCcSwitchImportConfig(
 
 export function buildCcSwitchImportDeeplink(input: CcSwitchImportDeeplinkInput): string {
   const config = resolveCcSwitchImportConfig(input.platform, input.clientType, input.baseUrl)
+  const model = input.model || config.model
   const entries: [string, string][] = [
     ['resource', 'provider'],
     ['app', config.app],
@@ -107,8 +143,8 @@ export function buildCcSwitchImportDeeplink(input: CcSwitchImportDeeplinkInput):
     ['usageAutoInterval', '30']
   ]
 
-  if (config.model) {
-    entries.splice(2, 0, ['model', config.model])
+  if (model) {
+    entries.splice(2, 0, ['model', model])
   }
 
   return `ccswitch://v1/import?${new URLSearchParams(entries).toString()}`

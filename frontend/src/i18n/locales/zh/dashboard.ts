@@ -313,6 +313,12 @@ export default {
       geminiCli: 'Gemini CLI',
       geminiCliDesc: '导入为 Gemini CLI 配置'
     },
+    ccsModelSelect: {
+      title: '选择默认模型',
+      description: '请从当前分组的模型白名单中选择导入到 CC-Switch 的默认模型。',
+      empty: '当前白名单没有可选择的具体模型，请联系管理员检查配置。',
+      loadFailed: '模型列表加载失败，请关闭后重试。'
+    },
     // 配额和有效期
     quotaLimit: '额度限制',
     quotaAmount: '额度金额 (USD)',

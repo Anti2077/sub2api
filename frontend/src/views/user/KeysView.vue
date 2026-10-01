@@ -1127,6 +1127,32 @@
       </template>
     </BaseDialog>
 
+    <!-- Default model selection for allowlisted imports -->
+    <BaseDialog
+      :show="showCcsModelSelect"
+      :title="t('keys.ccsModelSelect.title')"
+      width="narrow"
+      @close="closeCcsModelSelect"
+    >
+      <div class="space-y-4">
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+          {{ t('keys.ccsModelSelect.description') }}
+        </p>
+        <label for="ccs-default-model" class="block text-sm font-medium">{{ t('keys.ccsModelSelect.title') }}</label>
+        <p v-if="ccsModelsLoading" role="status" class="text-sm">{{ t('common.loading') }}</p>
+        <p v-if="ccsModelsError" role="alert" class="text-sm text-red-600 dark:text-red-400">{{ ccsModelsError }}</p>
+        <select id="ccs-default-model" v-model="selectedCcsModel" :disabled="ccsModelsLoading || !ccsModelOptions.length" class="form-input w-full">
+          <option v-for="model in ccsModelOptions" :key="model" :value="model">{{ model }}</option>
+        </select>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <button @click="closeCcsModelSelect" class="btn btn-secondary">{{ t('common.cancel') }}</button>
+          <button class="btn btn-primary" :disabled="ccsModelsLoading || !selectedCcsModel" @click="handleCcsModelSelect">{{ t('common.confirm') }}</button>
+        </div>
+      </template>
+    </BaseDialog>
+
     <!-- Group Selector Dropdown (Teleported to body to avoid overflow clipping) -->
     <Teleport to="body">
       <div
@@ -1234,6 +1260,7 @@ import { KEY_GROUP_PROVIDERS, KEY_GROUP_PROVIDER_ICONS, getKeyGroupProvider, typ
 import {
   CC_SWITCH_USAGE_SCRIPT,
   buildCcSwitchImportDeeplink,
+  loadCcSwitchModelOptions,
   type CcSwitchClientType
 } from '@/utils/ccswitchImport'
 
@@ -1403,8 +1430,15 @@ const showResetQuotaDialog = ref(false)
 const showResetRateLimitDialog = ref(false)
 const showUseKeyModal = ref(false)
 const showCcsClientSelect = ref(false)
+const showCcsModelSelect = ref(false)
 const showColumnDropdown = ref(false)
 const pendingCcsRow = ref<ApiKey | null>(null)
+const selectedCcsModel = ref('')
+const ccsModelOptions = ref<string[]>([])
+const ccsModelsLoading = ref(false)
+const ccsModelsError = ref('')
+let ccsModelsController: AbortController | null = null
+const pendingCcsClient = ref<CcSwitchClientType>('claude')
 const selectedKey = ref<ApiKey | null>(null)
 const copiedKeyId = ref<number | null>(null)
 const groupSelectorKeyId = ref<number | null>(null)
@@ -2010,20 +2044,43 @@ const resetRateLimitUsage = async () => {
 }
 
 const importToCcswitch = (row: ApiKey) => {
-  const platform = row.group?.platform || 'anthropic'
-
-  // For antigravity platform, show client selection dialog
-  if (platform === 'antigravity') {
+  if (row.group?.platform === 'antigravity') {
     pendingCcsRow.value = row
     showCcsClientSelect.value = true
     return
   }
-
-  // For other platforms, execute directly
-  executeCcsImport(row, platform === 'gemini' ? 'gemini' : 'claude')
+  prepareCcsImport(row, row.group?.platform === 'gemini' ? 'gemini' : 'claude')
 }
 
-const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType) => {
+const prepareCcsImport = async (row: ApiKey, clientType: CcSwitchClientType) => {
+  if (!row.group?.model_allowlist?.enabled) {
+    executeCcsImport(row, clientType)
+    return
+  }
+  closeCcsModelSelect()
+  pendingCcsRow.value = row
+  pendingCcsClient.value = clientType
+  showCcsModelSelect.value = true
+  ccsModelsLoading.value = true
+  const controller = new AbortController()
+  ccsModelsController = controller
+  try {
+    const baseUrl = publicSettings.value?.api_base_url || window.location.origin
+    const options = await loadCcSwitchModelOptions(row.group.model_allowlist.models || [], {
+      baseUrl, platform: row.group.platform, clientType, apiKey: row.key, signal: controller.signal
+    })
+    if (controller.signal.aborted) return
+    ccsModelOptions.value = options
+    selectedCcsModel.value = options[0] || ''
+    if (!options.length) ccsModelsError.value = t('keys.ccsModelSelect.empty')
+  } catch {
+    if (!controller.signal.aborted) ccsModelsError.value = t('keys.ccsModelSelect.loadFailed')
+  } finally {
+    if (!controller.signal.aborted) ccsModelsLoading.value = false
+  }
+}
+
+const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType, model?: string) => {
   const baseUrl = publicSettings.value?.api_base_url || window.location.origin
   const platform = row.group?.platform || 'anthropic'
 
@@ -2035,7 +2092,8 @@ const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType) => {
     clientType,
     providerName,
     apiKey: row.key,
-    usageScript
+    usageScript,
+    model
   })
 
   try {
@@ -2054,16 +2112,32 @@ const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType) => {
 }
 
 const handleCcsClientSelect = (clientType: CcSwitchClientType) => {
-  if (pendingCcsRow.value) {
-    executeCcsImport(pendingCcsRow.value, clientType)
-  }
-  showCcsClientSelect.value = false
-  pendingCcsRow.value = null
+  const row = pendingCcsRow.value
+  closeCcsClientSelect()
+  if (row) prepareCcsImport(row, clientType)
 }
 
 const closeCcsClientSelect = () => {
   showCcsClientSelect.value = false
   pendingCcsRow.value = null
+}
+
+const handleCcsModelSelect = () => {
+  if (!ccsModelsLoading.value && pendingCcsRow.value && ccsModelOptions.value.includes(selectedCcsModel.value)) {
+    executeCcsImport(pendingCcsRow.value, pendingCcsClient.value, selectedCcsModel.value)
+  }
+  closeCcsModelSelect()
+}
+
+const closeCcsModelSelect = () => {
+  ccsModelsController?.abort()
+  ccsModelsController = null
+  ccsModelsLoading.value = false
+  ccsModelsError.value = ''
+  showCcsModelSelect.value = false
+  pendingCcsRow.value = null
+  selectedCcsModel.value = ''
+  ccsModelOptions.value = []
 }
 
 function formatResetTime(resetAt: string | null): string {
@@ -2089,6 +2163,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  ccsModelsController?.abort()
   document.removeEventListener('click', closeGroupSelector)
   if (resetTimer) clearInterval(resetTimer)
 })

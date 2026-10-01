@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   CC_SWITCH_USAGE_SCRIPT,
   GROK_CC_SWITCH_MODEL,
   OPENAI_CC_SWITCH_CODEX_MODEL,
-  buildCcSwitchImportDeeplink
+  buildCcSwitchImportDeeplink,
+  loadCcSwitchModelOptions
 } from '@/utils/ccswitchImport'
 import type { GroupPlatform } from '@/types'
 
@@ -15,6 +16,17 @@ function paramsFromDeeplink(deeplink: string): URLSearchParams {
 describe('ccswitchImport utils', () => {
   it('defaults OpenAI CC Switch imports to the current Codex model', () => {
     expect(OPENAI_CC_SWITCH_CODEX_MODEL).toBe('gpt-5.5')
+  })
+
+  it('uses an explicitly selected model for OpenAI imports', () => {
+    const params = paramsFromDeeplink(buildCcSwitchImportDeeplink({
+      ...baseInput,
+      platform: 'openai',
+      clientType: 'claude',
+      model: 'gpt-5.6-sol'
+    }))
+
+    expect(params.get('model')).toBe('gpt-5.6-sol')
   })
 
   it('defaults Grok Build imports to the current Grok model', () => {
@@ -134,5 +146,41 @@ describe('CC Switch usage script', () => {
       ).get('endpoint') as string
       expect(usageUrlFor(endpoint)).toBe('https://api.example.com/v1/usage')
     }
+  })
+})
+
+
+describe('CC Switch allowlist model selection', () => {
+  const input = { baseUrl: 'https://example.com/v1/', platform: 'openai' as const, clientType: 'claude' as const, apiKey: 'test-key' }
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('keeps exact aliases in allowlist order, trims and deduplicates without a request', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await loadCcSwitchModelOptions([' alias ', '', 'ALIAS', 'gpt-5.6'], input)).toEqual(['alias', 'gpt-5.6'])
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('expands wildcards with concrete gateway models while keeping list order', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [
+      { id: 'gpt-5.5' }, { id: 'GPT-5.6' }, { id: 'gpt-*' }, { id: 'other' }
+    ] }) })
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await loadCcSwitchModelOptions(['alias', 'gpt-*', 'gpt-5.5'], input)).toEqual(['alias', 'gpt-5.5', 'GPT-5.6'])
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/v1/models', expect.objectContaining({
+      headers: { Authorization: 'Bearer test-key' }, credentials: 'omit', redirect: 'error'
+    }))
+  })
+
+  it('uses the Antigravity gateway prefix', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [] }) })
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await loadCcSwitchModelOptions(['*'], { ...input, platform: 'antigravity' })).toEqual([])
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/antigravity/v1/models', expect.anything())
+  })
+
+  it('does not fall back to a fixed model on discovery failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
+    await expect(loadCcSwitchModelOptions(['gpt-*'], input)).rejects.toThrow('Could not load models')
   })
 })

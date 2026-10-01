@@ -308,6 +308,12 @@ export default {
       geminiCli: 'Gemini CLI',
       geminiCliDesc: 'Import as Gemini CLI configuration',
     },
+    ccsModelSelect: {
+      title: 'Select default model',
+      description: 'Choose a model from this group’s allowlist for the imported CC-Switch provider.',
+      empty: 'No concrete models are available in this allowlist. Please contact your administrator.',
+      loadFailed: 'Could not load models. Close this dialog and try again.'
+    },
     // Quota and expiration
     quotaLimit: 'Quota Limit',
     quotaAmount: 'Quota Amount (USD)',
