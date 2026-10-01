@@ -1138,12 +1138,20 @@
         <p class="text-sm text-gray-600 dark:text-gray-400">
           {{ t('keys.ccsModelSelect.description') }}
         </p>
-        <label for="ccs-default-model" class="block text-sm font-medium">{{ t('keys.ccsModelSelect.title') }}</label>
         <p v-if="ccsModelsLoading" role="status" class="text-sm">{{ t('common.loading') }}</p>
-        <p v-if="ccsModelsError" role="alert" class="text-sm text-red-600 dark:text-red-400">{{ ccsModelsError }}</p>
-        <select id="ccs-default-model" v-model="selectedCcsModel" :disabled="ccsModelsLoading || !ccsModelOptions.length" class="form-input w-full">
-          <option v-for="model in ccsModelOptions" :key="model" :value="model">{{ model }}</option>
-        </select>
+        <div class="space-y-2">
+          <label for="ccs-default-model" class="input-label mb-0">{{ t('keys.ccsModelSelect.title') }}</label>
+          <select
+            id="ccs-default-model"
+            v-model="selectedCcsModel"
+            :disabled="ccsModelsLoading || !ccsModelOptions.length"
+            :aria-describedby="ccsModelsError ? 'ccs-model-error' : undefined"
+            class="input"
+          >
+            <option v-for="model in ccsModelOptions" :key="model" :value="model">{{ model }}</option>
+          </select>
+          <p v-if="ccsModelsError" id="ccs-model-error" role="alert" class="input-error-text">{{ ccsModelsError }}</p>
+        </div>
       </div>
       <template #footer>
         <div class="flex justify-end gap-2">
