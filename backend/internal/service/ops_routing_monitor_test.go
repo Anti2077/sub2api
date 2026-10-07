@@ -19,6 +19,16 @@ func routingInfo(requestID string, accountID int64) OpsRoutingRequestInfo {
 	}
 }
 
+func TestOpsRoutingMonitorInstanceIDsAreUnique(t *testing.T) {
+	instances := make(map[string]struct{}, 1000)
+	for i := 0; i < 1000; i++ {
+		monitor := NewOpsRoutingMonitorService(nil, nil)
+		require.NotEmpty(t, monitor.instance)
+		require.NotContains(t, instances, monitor.instance)
+		instances[monitor.instance] = struct{}{}
+	}
+}
+
 func TestOpsRoutingMonitorLifecycleAndFailover(t *testing.T) {
 	monitor := NewOpsRoutingMonitorService(nil, nil)
 	updates, cancel := monitor.Subscribe(context.Background())
@@ -99,7 +109,7 @@ func TestOpsRoutingMonitorRedisSnapshotAndPubSub(t *testing.T) {
 		require.NoError(t, json.Unmarshal(payload, &envelope))
 		require.Equal(t, "routing_event", envelope["type"])
 	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for cross-instance routing event")
+		t.Fatalf("timed out waiting for cross-instance routing event (instances: %s, %s; queued: %d)", monitorOne.instance, monitorTwo.instance, len(monitorOne.redisQueue))
 	}
 
 	snapshot, err := monitorTwo.Snapshot(context.Background())

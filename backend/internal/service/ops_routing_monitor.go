@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -114,7 +115,7 @@ type OpsRoutingMonitorService struct {
 func NewOpsRoutingMonitorService(_ UserRepository, redisClient *redis.Client) *OpsRoutingMonitorService {
 	return &OpsRoutingMonitorService{
 		redis:       redisClient,
-		instance:    fmt.Sprintf("%d", time.Now().UnixNano()),
+		instance:    uuid.NewString(),
 		active:      make(map[string]*OpsRoutingEvent),
 		subscribers: make(map[uint64]chan []byte),
 		redisQueue:  make(chan opsRoutingPersistJob, opsRoutingRedisQueue),
