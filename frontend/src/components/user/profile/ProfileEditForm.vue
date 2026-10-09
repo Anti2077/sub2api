@@ -71,10 +71,12 @@ const appStore = useAppStore()
 const username = ref(props.initialUsername)
 const leaderboardAnonymous = ref(props.initialLeaderboardAnonymous ?? false)
 const usernameConfirmed = props.usernameConfirmed ?? Boolean(props.initialUsername.trim())
+let savedUsername = props.initialUsername
 const loading = ref(false)
 
 watch(() => props.initialUsername, (val) => {
-  username.value = val
+  if (username.value === savedUsername) username.value = val
+  savedUsername = val
 })
 
 watch(() => props.initialLeaderboardAnonymous, (val) => {
@@ -88,11 +90,14 @@ const handleUpdateProfile = async () => {
   }
 
   loading.value = true
+  const submittedUsername = username.value
   try {
     const updatedUser = await userAPI.updateProfile({
-      username: username.value,
+      username: submittedUsername,
       leaderboard_anonymous: leaderboardAnonymous.value
     })
+    if (username.value === submittedUsername) username.value = updatedUser.username
+    savedUsername = updatedUser.username
     authStore.user = updatedUser
     appStore.showSuccess(t('profile.updateSuccess'))
   } catch (error: unknown) {
