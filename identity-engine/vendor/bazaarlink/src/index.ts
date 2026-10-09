@@ -1,0 +1,333 @@
+// src/index.ts — Public API for @bazaarlink/probe-engine (MIT)
+
+export { runProbes } from "./runner.js";
+export type { RunOptions, RunReport, ProbeResult, BaselineMap } from "./runner.js";
+
+export { PROBE_SUITE, autoScore, generateCanary } from "./probe-suite.js";
+export type { ProbeDefinition, ProbeGroup, ScoringMode } from "./probe-suite.js";
+
+export { computeProbeScore } from "./probe-score.js";
+export type { ProbeRunItemLike } from "./probe-score.js";
+
+export { classifyPreflightResult } from "./probe-preflight.js";
+export type { PreflightOutcome } from "./probe-preflight.js";
+
+export { detectTokenInflation, TOKEN_INFLATION_THRESHOLD } from "./token-inflation.js";
+export type { TokenInflationResult } from "./token-inflation.js";
+
+export { checkSSECompliance } from "./sse-compliance.js";
+export type { SSEComplianceResult } from "./sse-compliance.js";
+
+export { runContextCheck } from "./context-check.js";
+export type { ContextCheckResult } from "./context-check.js";
+
+export { extractFingerprint } from "./fingerprint-extractor.js";
+export type { FingerprintFeatureSet, IdentityAssessment, IdentityCandidate, IdentityStatus } from "./identity-report.js";
+export { matchCandidates, deriveVerdict, deriveVerdictFromClaimedModel } from "./candidate-matcher.js";
+export { FAMILY_BASELINES, claimedModelToFamily } from "./fingerprint-baseline.js";
+export type { FamilyBaseline } from "./fingerprint-baseline.js";
+
+// ── New v0.3.0 modules ────────────────────────────────────────────────────
+export { classifyChannelSignature } from "./channel-signature.js";
+export type { ChannelLabel, ChannelSignature, ChannelSignatureInput } from "./channel-signature.js";
+
+export { extractThinkingBlock, verifySignatureRoundtrip } from "./signature-probe.js";
+export type { AnthropicThinkingBlock, VerifyArgs, VerifyResult } from "./signature-probe.js";
+
+export { judgeFingerprint } from "./fingerprint-judge.js";
+export type { JudgeIdentityResult } from "./fingerprint-judge.js";
+
+export { cosineSimilarity, embedProbeResponses, pickTopVectorScores } from "./fingerprint-vectors.js";
+export type { ReferenceEmbedding } from "./fingerprint-vectors.js";
+
+export { fuseScores } from "./fingerprint-fusion.js";
+
+// ── New v0.4.0 modules ────────────────────────────────────────────────────
+export { CANARY_BENCH, scoreCanaryAnswer } from "./canary-bench.js";
+export type { CanaryItem, CanaryAnswerResult, CanaryCategory } from "./canary-bench.js";
+
+export { runCanary } from "./canary-runner.js";
+export type { CanaryInput, CanaryResult } from "./canary-runner.js";
+
+export { parseJudgeThreshold, resolveJudgeConfig } from "./probe-judge-config.js";
+export type { JudgeConfig } from "./probe-judge-config.js";
+
+export { flattenFeatures, flattenSubModelSignals, matchSubModels } from "./sub-model-matcher.js";
+export type { SubModelCandidate, StoredModelFingerprint } from "./sub-model-matcher.js";
+
+// ── v0.6.0: Three-way cross-check (surface / behavior / v3) ───────────────
+// Identity verdict: the "三向交叉" logic that cross-checks three independent
+// fingerprint signals against the claimed model family to flag spoofing.
+export {
+  computeVerdict,
+  resolveV3HVerdictPatch,
+  recomputeVerdictAfterV3HOverride,
+  V3_HIGH_CONFIDENCE,
+  AMBIGUOUS_DOWNGRADE_MIN_FAMILY_CONFIDENCE,
+  AMBIGUOUS_DOWNGRADE_MAX_BEHAVIOR_SCORE,
+} from "./identity-verdict.js";
+export type {
+  VerdictStatus,
+  VerdictInput,
+  VerdictResult,
+  ConfidenceBand,
+} from "./identity-verdict.js";
+
+// V3 deterministic sub-model classifier: uses submodel_cutoff / submodel_capability /
+// submodel_refusal probes to identify the exact sub-model (e.g. Claude Opus 4.6 vs 4.7).
+export {
+  classifySubmodelV3,
+  scoreExtractedFeatures,
+  extractV3Features,
+  extractCutoff as extractV3Cutoff,
+  extractCapability as extractV3Capability,
+  extractRefusal as extractV3Refusal,
+  implyFamily as implyFamilyV3,
+  implyFamilyV2A,
+  implyFamilyV2B,
+  implyFamilyV2BWithVotes,
+  lengthScoreLogGaussian,
+  verifyPairwiseUniqueness,
+  V3_BASELINES,
+  getAllFamilies,
+  TIE_BREAK_GAP,
+} from "./sub-model-classifier-v3.js";
+export type {
+  V3Features,
+  V3Match,
+  V3Output,
+  FamilyVoteResult,
+} from "./sub-model-classifier-v3.js";
+export {
+  getBaselinesForFamily,
+} from "./sub-model-baselines-v3.js";
+export type { SubmodelBaselineV3 } from "./sub-model-baselines-v3.js";
+
+export {
+  buildUniquenessMap,
+  uniquenessBoost,
+  UNIQUENESS_BOOST_PER_MATCH,
+  UNIQUENESS_BOOST_CAP,
+} from "./sub-model-v3-uniqueness.js";
+
+export { shouldAbstainSubModel } from "./submodel-abstain.js";
+export type { AbstainInput } from "./submodel-abstain.js";
+
+export { hasUsableLingData } from "./identity-phase-gate.js";
+
+// ── v0.7.0: Layer ④ — Behavioral-Vector Extension (V3E + V3F) ─────────────
+// Refusal-boundary ladder + formatting + uncertainty channels for same-family
+// sibling discrimination. See paper §3.6 in
+// docs/reports/2026-04-26-llm-resale-substitution-measurement-paper.md.
+
+export {
+  classifySubmodelV3E,
+  scoreV3EMatch,
+  extractRefusalLadder,
+  extractFormatting,
+  extractUncertainty,
+  DEFAULT_V3E_WEIGHTS,
+} from "./sub-model-classifier-v3e.js";
+export type {
+  V3EObserved,
+  V3EMatch,
+  V3EOutput,
+  V3EWeights,
+  RefusalLadderFeatures,
+  FormattingFeatures,
+  UncertaintyFeatures,
+} from "./sub-model-classifier-v3e.js";
+
+export { classifySubmodelV3F, scoreV3FMatch } from "./sub-model-classifier-v3f.js";
+export type { V3FMatch, V3FOutput } from "./sub-model-classifier-v3f.js";
+
+export type { SubmodelBaselineV3E, V3EBaselineSnapshot } from "./sub-model-baselines-v3e.js";
+
+export {
+  loadV3EBaselinesFromSnapshot,
+  setV3EBaselines,
+  getCachedV3EBaselines,
+  clearV3ECache,
+} from "./sub-model-baselines-v3e-store.js";
+
+// ── v0.8.0: V4 Ensemble Fuse + IKP knowledge probes ──────────────────────
+// V4 fuses V3 Scoped + V3 Global + IKP + V3F via 4-tier priority.
+// See docs/reports/2026-05-10-v4-attack-accuracy.md.
+
+export {
+  fuseToV4,
+  V4_GLOBAL_CONFIDENCE_THRESHOLD,
+  V3F_TIEBREAKER_THRESHOLD,
+  V3F_TIEBREAKER_GAP_MAX,
+} from "./sub-model-classifier-v4.js";
+export {
+  FAMILY_VETO_CONFIDENCE,
+} from "./sub-model-classifier-v4.js";
+export type {
+  V4Match,
+  V4Output,
+  V4FuseSource,
+  V3LikeAdapter,
+  EmptyRefusalSignal,
+  FamilySignal,
+} from "./sub-model-classifier-v4.js";
+
+// ── V3G/V3H border-probe bias-fingerprint layer ──────────────────────────
+export {
+  BIAS_PROBES,
+  normalizeBiasAnswer,
+} from "./sub-model-bias-probes.js";
+export type { BiasProbe } from "./sub-model-bias-probes.js";
+
+export {
+  scoreBiasFingerprint,
+  scoreV3HDistributionFingerprint,
+  shouldPromoteSubModelFromV3H,
+  isStrongPassByPolicy,
+  requiredStrongPassGap,
+  isFalseAbstain,
+  regateV3HResult,
+  hasV3HSeparator,
+  shouldFillSubModelFromV3G,
+  filterFreshBiasBaselines,
+  V3H_ACTIVE_PROMPT_POLICIES,
+  policyForCandidates,
+  selectBiasProbesForCandidates,
+  candidateSiblingsFor,
+  candidateSiblingsForFamily,
+  candidateSiblingsForConfirmedFamily,
+  biasDisplayName,
+  sampleBiasFingerprint,
+  sampleV3HDistributionFingerprint,
+} from "./sub-model-v3g-bias-fingerprint.js";
+export type {
+  BiasBaseline,
+  BaselineFreshnessOpts,
+  ExpiredBiasBaseline,
+  BiasObservation,
+  V3GResult,
+  V3HPolicy,
+  V3HResult,
+  V3HSampleResult,
+} from "./sub-model-v3g-bias-fingerprint.js";
+
+export { BIAS_BASELINES } from "./sub-model-bias-baselines.js";
+
+// Canonical identity comparison shared by family/V3H consumers.
+export {
+  normalizeModelCore,
+  canonicalFamily,
+  modelIdsMatch,
+  canonicalizeModelId,
+  baseModelId,
+} from "./model-id-normalize.js";
+
+// Deterministic adversarial transforms for downstream regression gates.
+export {
+  blankRefusals,
+  wrapResponses,
+  thinBiasSamples,
+  injectBlanks,
+} from "./testing/relay-noise.js";
+
+// ── Detection registry (reversible disable list) ─────────────────────────
+export {
+  DETECTION_DISABLED_MODEL_IDS,
+  isDetectionDisabled,
+  filterDetectable,
+} from "./sub-model-detection-config.js";
+
+// ── Native empty-refusal signal (Claude 5 / Mythos fingerprint) ──────────
+export { detectNativeEmptyRefusal } from "./sub-model-empty-refusal-signal.js";
+export type {
+  ProbeItemLite,
+  NativeEmptyRefusalSignal,
+} from "./sub-model-empty-refusal-signal.js";
+
+// ── Family fusion (V5 stage 1: confirmedFamily) ──────────────────────────
+export { fuseFamily } from "./identity-family-fusion.js";
+export type {
+  FamilyFusionInput,
+  FamilyFusionResult,
+  FamilyEvidenceSource,
+} from "./identity-family-fusion.js";
+
+export {
+  classifySubmodelIKP,
+  fuseV3WithIKP,
+  IKP_PROBE_IDS,
+} from "./sub-model-classifier-ikp.js";
+export type {
+  IkpOutput,
+  IkpMatch,
+  IkpBaselineRow,
+} from "./sub-model-classifier-ikp.js";
+
+export {
+  scoreSubModels,
+  CONFIDENCE_THRESHOLD as BAYESIAN_CONFIDENCE_THRESHOLD,
+} from "./sub-model-bayesian.js";
+export type {
+  SubModelPosterior,
+  SubModelResult,
+  SubModelBaselineRow,
+} from "./sub-model-bayesian.js";
+
+export { computeBaselineMatchVotes, responseSimilarity, baselineModelIdToFamily } from "./baseline-match-votes.js";
+export type { BaselineRow } from "./baseline-match-votes.js";
+
+export {
+  modelIdToFamily,
+  scoreLinguisticOnly,
+  scoreFullFeatureSet,
+  computeAccuracy,
+} from "./backtest-scorer.js";
+export type { AccuracyStats } from "./backtest-scorer.js";
+
+export {
+  categoryHitRate,
+  relativeCategoryFitness,
+} from "./fingerprint-category-hit-rate.js";
+
+export {
+  classifyIdentityV2,
+  classifyIdentityV2A,
+  classifyIdentityV2B,
+} from "./identity-classifier-v2.js";
+export type {
+  ClassifyV2Input,
+  ClassifyV2Output,
+} from "./identity-classifier-v2.js";
+
+export {
+  createBaselineStore,
+  defaultBaselineStore,
+  getCachedBaselines,
+  getCachedBaselinesForFamily,
+  getCachedFamilies,
+  invalidateBaselineCache,
+} from "./sub-model-baselines-v3-store.js";
+export type {
+  BaselineStore,
+  BaselineStoreOptions,
+} from "./sub-model-baselines-v3-store.js";
+
+export {
+  extractSubModelFeatures,
+  extractPiDistributionFeatures,
+} from "./submodel-features.js";
+export type { SubModelExtractorInput } from "./submodel-features.js";
+
+export {
+  flattenLinguisticFeatures,
+  matchSubModelsLinguistic,
+  identifySubModelBayesian,
+  baselinesFromDbRows,
+} from "./sub-model-matcher.js";
+
+export {
+  bayesianScoreDisplayCalibrated,
+} from "./fingerprint-bayesian.js";
+export type {
+  CalibratedScoreOptions,
+} from "./fingerprint-bayesian.js";

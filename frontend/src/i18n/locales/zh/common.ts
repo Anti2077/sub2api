@@ -73,6 +73,7 @@ export default {
     invalidEmail: '请输入有效的邮箱地址',
     optional: '可选',
     selectOption: '请选择',
+    select: '请选择',
     searchPlaceholder: '搜索...',
     noOptionsFound: '无匹配选项',
     noGroupsAvailable: '无可用分组',

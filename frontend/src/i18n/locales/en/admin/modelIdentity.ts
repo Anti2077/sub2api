@@ -1,0 +1,4 @@
+export default { modelIdentity: {
+  detectedModel:'Detected model',engineVersion:'Engine version',baselineVersion:'Baseline version',evidence:'Full evidence',targetAccount:'Target account',upstreamModel:'Upstream model',requestID:'Request ID',tokenUsage:'Token usage',
+  title:'Model identity',testUser:'Test user',searchUser:'Search username or email',billingGroup:'Billing group',requestModel:'Request model',expectedModel:'Expected identity',interval:'Interval (minutes)',scheduled:'Schedule enabled',paused:'Schedule disabled',minutes:'minutes',run:'Run now',history:'History',report:'View report',matched:'Identity matches',mismatched:'Identity mismatch',inconclusive:'Inconclusive',queued:'Queued',running:'Running',cancelling:'Cancelling',cancelled:'Cancelled',timed_out:'Timed out',configuration_error:'Configuration error',service_error:'Worker failure',completed:'Completed',request_error:'Request failed'
+} }

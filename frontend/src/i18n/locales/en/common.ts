@@ -73,6 +73,7 @@ export default {
     invalidEmail: 'Please enter a valid email address',
     optional: 'optional',
     selectOption: 'Select an option',
+    select: 'Select an option',
     searchPlaceholder: 'Search...',
     noOptionsFound: 'No options found',
     noGroupsAvailable: 'No groups available',

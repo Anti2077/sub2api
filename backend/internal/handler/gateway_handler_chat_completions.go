@@ -320,6 +320,10 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		if err != nil {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
+				if _, _, pinned := service.IdentityTargetFromContext(c.Request.Context()); pinned {
+					h.handleCCFailoverExhausted(c, failoverErr, streamStarted)
+					return
+				}
 				if c.Writer.Size() != writerSizeBeforeForward {
 					h.handleCCFailoverExhausted(c, failoverErr, true)
 					return
@@ -351,6 +355,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		}
 
 		// 6. Record usage
+		service.RecordIdentityEvidence(c.Request.Context(), account.ID, result.UpstreamModel, result.RequestID)
 		userAgent := c.GetHeader("User-Agent")
 		clientIP := ip.GetClientIP(c)
 		requestPayloadHash := service.HashUsageRequestPayload(body)

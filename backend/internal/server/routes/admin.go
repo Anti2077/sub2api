@@ -122,6 +122,7 @@ func RegisterAdminRoutes(
 
 		// 定时测试计划
 		registerScheduledTestRoutes(admin, h)
+		registerModelIdentityRoutes(admin, h)
 
 		// 渠道管理
 		registerChannelRoutes(admin, h)
@@ -142,6 +143,21 @@ func RegisterAdminRoutes(
 		// 操作审计日志
 		registerAuditLogRoutes(admin, h, stepUpAuth)
 	}
+}
+
+func registerModelIdentityRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	r := admin.Group("/model-identity")
+	r.GET("/models", h.Admin.ModelIdentity.Models)
+	r.GET("/accounts/:id", h.Admin.ModelIdentity.Config)
+	r.PUT("/accounts/:id", h.Admin.ModelIdentity.SaveConfig)
+	r.GET("/accounts/:id/plans", h.Admin.ModelIdentity.Plans)
+	r.POST("/plans", h.Admin.ModelIdentity.SavePlan)
+	r.PUT("/plans/:id", h.Admin.ModelIdentity.UpdatePlan)
+	r.DELETE("/plans/:id", h.Admin.ModelIdentity.DeletePlan)
+	r.POST("/plans/:id/run", h.Admin.ModelIdentity.Run)
+	r.GET("/runs/:id", h.Admin.ModelIdentity.RunStatus)
+	r.POST("/runs/:id/cancel", h.Admin.ModelIdentity.Cancel)
+	r.GET("/plans/:id/history", h.Admin.ModelIdentity.History)
 }
 
 func registerPromptAuditRoutes(admin *gin.RouterGroup, h *handler.Handlers) {

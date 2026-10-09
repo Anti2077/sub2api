@@ -1,0 +1,20 @@
+{
+  "name": "sub2api-model-identity",
+  "private": true,
+  "version": "1.0.0",
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@9.15.9",
+  "engines": { "node": "24.x" },
+  "scripts": {
+    "build": "tsc -p vendor/bazaarlink/tsconfig.json",
+    "start": "node server.cjs",
+    "test": "node --test identity.test.cjs",
+    "test:engine": "vitest run --root vendor/bazaarlink"
+  },
+  "devDependencies": {
+    "commander": "12.1.0",
+    "@types/node": "24.0.0",
+    "typescript": "5.8.3",
+    "vitest": "4.1.2"
+  }
+}
