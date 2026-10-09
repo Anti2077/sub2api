@@ -41,4 +41,4 @@ const server = http.createServer(async (req, res) => {
   finally { clearTimeout(timeout); }
 });
 server.requestTimeout = 20 * 60 * 1000;
-server.listen(Number(process.env.PORT || 8081), '0.0.0.0');
+server.listen(Number(process.env.PORT || 8081), process.env.MODEL_IDENTITY_HOST || '0.0.0.0');

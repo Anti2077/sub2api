@@ -1,21 +1,7 @@
+# Optional compatibility overlay. The custom image now includes the worker;
+# there is no second service or port to publish.
 services:
   sub2api:
     environment:
-      MODEL_IDENTITY_ENGINE_URL: http://model-identity:8081
-      MODEL_IDENTITY_CALLBACK_URL: http://sub2api:8080
-  model-identity:
-    build:
-      context: ../identity-engine
-    restart: unless-stopped
-    environment:
-      MODEL_IDENTITY_CALLBACK_ORIGIN: http://sub2api:8080
-    expose:
-      - "8081"
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    mem_limit: 512m
-    networks:
-      - sub2api-network
+      MODEL_IDENTITY_ENGINE_URL: http://127.0.0.1:8081
+      MODEL_IDENTITY_CALLBACK_URL: http://127.0.0.1:8080

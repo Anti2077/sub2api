@@ -9,7 +9,6 @@
 
 ARG NODE_IMAGE=node:24-alpine
 ARG GOLANG_IMAGE=golang:1.27.0-alpine
-ARG ALPINE_IMAGE=alpine:3.20
 ARG GOPROXY=https://goproxy.cn,direct
 ARG GOSUMDB=sum.golang.google.cn
 
@@ -38,6 +37,15 @@ RUN pnpm install --frozen-lockfile
 COPY frontend/ ./
 COPY docs/legal/ /app/docs/legal/
 RUN pnpm run build
+
+# Build the architecture-neutral identity worker on the native build platform.
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS identity-builder
+WORKDIR /app/identity-engine
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+COPY identity-engine/package.json identity-engine/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY identity-engine/ ./
+RUN pnpm build && pnpm test && pnpm test:engine && rm -rf node_modules vendor/bazaarlink/node_modules
 
 # -----------------------------------------------------------------------------
 # Stage 2: Backend Builder
@@ -92,7 +100,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 # -----------------------------------------------------------------------------
 # Stage 3: Final Runtime Image
 # -----------------------------------------------------------------------------
-FROM ${ALPINE_IMAGE}
+FROM ${NODE_IMAGE}
 
 # Labels
 LABEL maintainer="Wei-Shaw <github.com/Wei-Shaw>"
@@ -105,10 +113,12 @@ RUN apk add --no-cache \
     tzdata \
     curl \
     su-exec \
+    tini \
     && rm -rf /var/cache/apk/*
 
 # Create non-root user
-RUN addgroup -g 1000 sub2api && \
+RUN deluser node && (delgroup node 2>/dev/null || true) && \
+    addgroup -g 1000 sub2api && \
     adduser -u 1000 -G sub2api -s /bin/sh -D sub2api
 
 # Set working directory
@@ -117,12 +127,14 @@ WORKDIR /app
 # Copy binary and runtime fallback resources from builder
 COPY --from=backend-builder /app/sub2api /app/sub2api
 COPY --from=backend-builder --chown=sub2api:sub2api /app/backend/resources /app/resources
+COPY --from=identity-builder /app/identity-engine /app/identity-engine
 
 # Create data directory
 RUN mkdir -p /app/data && chown -R sub2api:sub2api /app
 
 # Copy entrypoint script (fixes volume permissions then drops to sub2api)
 COPY deploy/docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY deploy/container-supervisor.cjs /app/container-supervisor.cjs
 RUN chmod +x /app/docker-entrypoint.sh
 
 # Expose port (can be overridden by SERVER_PORT env var)

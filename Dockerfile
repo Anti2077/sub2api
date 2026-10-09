@@ -9,7 +9,6 @@
 
 ARG NODE_IMAGE=node:24-alpine
 ARG GOLANG_IMAGE=golang:1.27.0-alpine
-ARG ALPINE_IMAGE=alpine:3.21
 ARG POSTGRES_IMAGE=postgres:18-alpine
 ARG GOPROXY=https://goproxy.cn,direct
 ARG GOSUMDB=sum.golang.google.cn
@@ -42,6 +41,14 @@ RUN --mount=type=cache,id=sub2api-pnpm-store,target=/root/.local/share/pnpm/stor
 COPY frontend/ ./
 COPY docs/legal/ /app/docs/legal/
 RUN pnpm run build
+
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS identity-builder
+WORKDIR /app/identity-engine
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+COPY identity-engine/package.json identity-engine/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY identity-engine/ ./
+RUN pnpm build && pnpm test && pnpm test:engine && rm -rf node_modules vendor/bazaarlink/node_modules
 
 # -----------------------------------------------------------------------------
 # Stage 2: Backend Builder
@@ -105,7 +112,7 @@ FROM ${POSTGRES_IMAGE} AS pg-client
 # -----------------------------------------------------------------------------
 # Stage 4: Final Runtime Image
 # -----------------------------------------------------------------------------
-FROM ${ALPINE_IMAGE}
+FROM ${NODE_IMAGE}
 
 # Labels
 LABEL maintainer="Wei-Shaw <github.com/Wei-Shaw>"
@@ -117,6 +124,7 @@ RUN apk add --no-cache \
     ca-certificates \
     tzdata \
     su-exec \
+    tini \
     libpq \
     zstd-libs \
     lz4-libs \
@@ -132,7 +140,8 @@ COPY --from=pg-client /usr/local/bin/psql /usr/local/bin/psql
 COPY --from=pg-client /usr/local/lib/libpq.so.5* /usr/local/lib/
 
 # Create non-root user
-RUN addgroup -g 1000 sub2api && \
+RUN deluser node && (delgroup node 2>/dev/null || true) && \
+    addgroup -g 1000 sub2api && \
     adduser -u 1000 -G sub2api -s /bin/sh -D sub2api
 
 # Set working directory
@@ -141,12 +150,14 @@ WORKDIR /app
 # Copy binary/resources with ownership to avoid extra full-layer chown copy
 COPY --from=backend-builder --chown=sub2api:sub2api /app/sub2api /app/sub2api
 COPY --from=backend-builder --chown=sub2api:sub2api /app/backend/resources /app/resources
+COPY --from=identity-builder /app/identity-engine /app/identity-engine
 
 # Create data directory
 RUN mkdir -p /app/data && chown sub2api:sub2api /app/data
 
 # Copy entrypoint script (fixes volume permissions then drops to sub2api)
 COPY deploy/docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY deploy/container-supervisor.cjs /app/container-supervisor.cjs
 RUN chmod +x /app/docker-entrypoint.sh
 
 # Expose port (can be overridden by SERVER_PORT env var)

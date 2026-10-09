@@ -1,8 +1,9 @@
 # Account model identity
 
-Build both Sub2API and this worker from the task branch. Never replace the
-custom backend with an upstream image: the internal capability route and
-strict account selection are required.
+The custom Sub2API image includes this worker and Node 24. Updating the one
+Sub2API container starts both services automatically; no separate worker
+image, container or environment variables are required. Build from the custom
+source or use `ghcr.io/anti2077/sub2api:custom`, not an upstream image.
 
 The worker requires Node 24. Its locked dependencies use pnpm 9.15.9:
 
@@ -15,23 +16,32 @@ pnpm test
 pnpm exec vitest run --root vendor/bazaarlink
 ```
 
-The source-build Compose overlay is `deploy/docker-compose.model-identity.yml`.
-Review it alongside the chosen base Compose file before deployment. The
-overlay expects the existing `sub2api-network` and backend port 8080. Set
-`MODEL_IDENTITY_ENGINE_URL` and `MODEL_IDENTITY_CALLBACK_URL` on the Go backend;
-the worker's `MODEL_IDENTITY_CALLBACK_ORIGIN` must match the callback origin.
-No worker host port is published. Keep both services on a private network.
+The container supervisor starts the worker, waits for its supported-model
+catalog, and then starts Go. Both run as the existing non-root UID 1000.
+The worker listens only on `127.0.0.1:8081`; Go defaults to that engine URL
+and the callback defaults to `http://127.0.0.1:${SERVER_PORT:-8080}`. Do not
+publish 8081. Remove any old `http://model-identity:8081` override when updating.
+Normal CLI commands such as `--version`, `--help` and `--setup` bypass the
+supervisor. On SIGTERM both services receive a graceful shutdown; after ten
+seconds remaining children are killed. If either service unexpectedly exits,
+the container exits with a failure so its existing restart policy restarts
+both. Tini reaps child processes and forwards container signals.
+
+The old `deploy/docker-compose.model-identity.yml` is now an optional
+compatibility overlay with loopback addresses and no additional service.
+Use the existing Compose project, file and data paths when upgrading. Existing
+image auto-update scripts continue updating the same Sub2API image tag.
 Reverse proxies should deny `/internal/model-identity/` from public ingress;
 the route additionally requires a random, expiring run capability.
 
 ```sh
 docker compose --env-file deploy/.env \
-  -f deploy/docker-compose.dev.yml \
-  -f deploy/docker-compose.model-identity.yml build sub2api model-identity
+  -f deploy/docker-compose.dev.yml build sub2api
 ```
 
-This command builds source images only. Starting or updating the production
-deployment is a separate operation. The migration creates three new tables.
+This command builds the single source image only. Starting or updating the
+production deployment is a separate operation. The normal backend startup
+applies the database migration, which creates three new tables.
 No existing account is recovered or disabled by identity tests.
 
 In Accounts, open Model identity, select an existing test user and a compatible

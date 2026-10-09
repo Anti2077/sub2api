@@ -63,6 +63,8 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: pnpm install --frozen-lockfile
+      - name: Container process lifecycle tests
+        run: node --test deploy/tests/container-supervisor.test.cjs
       - name: Frontend typecheck and critical vitest
         run: make test-frontend
 

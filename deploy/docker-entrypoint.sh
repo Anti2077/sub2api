@@ -20,4 +20,9 @@ if [ "${1#-}" != "$1" ]; then
     set -- /app/sub2api "$@"
 fi
 
+# CLI commands and legacy release images keep the direct binary entrypoint.
+if [ "$#" -eq 1 ] && [ "$1" = "/app/sub2api" ] && [ -f /app/container-supervisor.cjs ]; then
+    exec /sbin/tini -g -- node /app/container-supervisor.cjs
+fi
+
 exec "$@"
