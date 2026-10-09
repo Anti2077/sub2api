@@ -25,7 +25,7 @@ func (r *identityRepository) Configure(ctx context.Context, c *service.IdentityC
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	// Serialize provisioning across replicas; Key and binding commit together.
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(244, $1::integer)`, c.AccountID); err != nil {
 		return err
@@ -77,7 +77,7 @@ func (r *identityRepository) Plans(ctx context.Context, id int64) ([]service.Ide
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []service.IdentityPlan{}
 	for rows.Next() {
 		p, e := scanIdentityPlan(rows)
@@ -130,7 +130,7 @@ func (r *identityRepository) ScanDue(ctx context.Context, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	_, err = tx.ExecContext(ctx, `UPDATE account_identity_runs SET status=CASE WHEN status='cancelling' THEN 'cancelled' ELSE 'timed_out' END,finished_at=$1,token_hash=NULL,worker_slot=NULL WHERE status IN ('running','cancelling') AND lease_until<=$1`, now)
 	if err != nil {
 		return err
@@ -151,15 +151,18 @@ func (r *identityRepository) ScanDue(ctx context.Context, now time.Time) error {
 	for rows.Next() {
 		var d due
 		if err = rows.Scan(&d.id, &d.at, &d.minutes); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		ds = append(ds, d)
 	}
 	err = rows.Err()
-	rows.Close()
+	closeErr := rows.Close()
 	if err != nil {
 		return err
+	}
+	if closeErr != nil {
+		return closeErr
 	}
 	for _, d := range ds {
 		var id int64
@@ -179,7 +182,7 @@ func (r *identityRepository) Claim(ctx context.Context, hash string, now time.Ti
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	// A single short DB lock makes the global two-slot claim atomic across instances.
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(244,0)`); err != nil {
 		return nil, err
@@ -249,7 +252,7 @@ func (r *identityRepository) History(ctx context.Context, id int64) ([]service.I
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []service.IdentityRun{}
 	for rows.Next() {
 		run := &service.IdentityRun{}

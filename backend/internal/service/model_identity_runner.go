@@ -126,7 +126,7 @@ func (r *ModelIdentityRunner) execute(run *IdentityRun, token string) {
 		finish(status, map[string]string{"error": "identity engine request interrupted"})
 		return
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	var report map[string]any
 	if res.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(res.Body, 8<<20)).Decode(&report) != nil || report["engine_commit"] != IdentityEngineCommit {
 		finish("service_error", map[string]string{"error": "invalid response or version from identity engine"})

@@ -40,7 +40,7 @@ func (s *ModelIdentityService) Models(ctx context.Context) ([]IdentityModel, err
 	if err != nil {
 		return nil, errors.New("identity engine unavailable")
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	var catalog struct {
 		Commit string          `json:"engine_commit"`
 		Models []IdentityModel `json:"models"`

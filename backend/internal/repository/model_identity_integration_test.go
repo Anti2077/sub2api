@@ -19,6 +19,22 @@ func TestIdentityRepositoryLifecycleAndAtomicClaims(t *testing.T) {
 	group := mustCreateGroup(t, integrationEntClient, &service.Group{Name: fmt.Sprintf("identity-%d", now.UnixNano()), Platform: service.PlatformOpenAI, Status: service.StatusActive, RateMultiplier: 1})
 	user := mustCreateUser(t, integrationEntClient, &service.User{Email: fmt.Sprintf("identity-%d@example.com", now.UnixNano()), Status: service.StatusActive, Concurrency: 10})
 	configs := []*service.IdentityConfig{}
+	// These fixtures use the shared DB rather than a rollback-only Ent transaction.
+	t.Cleanup(func() {
+		cleanupCtx := context.Background()
+		for _, c := range configs {
+			_, err := integrationDB.ExecContext(cleanupCtx, `DELETE FROM account_identity_configs WHERE account_id=$1`, c.AccountID)
+			require.NoError(t, err)
+			_, err = integrationDB.ExecContext(cleanupCtx, `DELETE FROM api_keys WHERE id=$1`, c.APIKeyID)
+			require.NoError(t, err)
+			_, err = integrationDB.ExecContext(cleanupCtx, `DELETE FROM accounts WHERE id=$1`, c.AccountID)
+			require.NoError(t, err)
+		}
+		_, err := integrationDB.ExecContext(cleanupCtx, `DELETE FROM users WHERE id=$1`, user.ID)
+		require.NoError(t, err)
+		_, err = integrationDB.ExecContext(cleanupCtx, `DELETE FROM groups WHERE id=$1`, group.ID)
+		require.NoError(t, err)
+	})
 	for i := 0; i < 3; i++ {
 		account := mustCreateAccount(t, integrationEntClient, &service.Account{Name: fmt.Sprintf("identity-account-%d", i), Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Status: service.StatusActive, Schedulable: true, Concurrency: 4})
 		c := &service.IdentityConfig{AccountID: account.ID, UserID: user.ID, GroupID: group.ID}

@@ -125,7 +125,7 @@ func registerIdentityProbe(r *gin.Engine, h *handler.Handlers, svc *service.Mode
 		c.Next()
 		probe := map[string]any{"probe_id": input.ProbeID, "prompt": input.Prompt, "request_model": run.RequestModel, "target_account_id": run.AccountID, "client_request_id": writer.Header().Get("X-Client-Request-ID"), "status": writer.Status(), "evidence": evidence, "response": json.RawMessage(writer.body.Bytes())}
 		if !json.Valid(writer.body.Bytes()) {
-			probe["response"] = string(writer.body.Bytes())
+			probe["response"] = writer.body.String()
 		}
 		if writer.Status() >= 400 {
 			probe["response"] = map[string]any{"error": "probe request failed", "status": writer.Status()}
