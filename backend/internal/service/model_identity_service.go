@@ -59,12 +59,12 @@ func normalizeIdentityPublicURL(value string) (string, error) {
 	value = strings.TrimRight(strings.TrimSpace(value), "/")
 	u, err := url.Parse(value)
 	if err != nil || len(value) > 2048 || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(value, "#") {
-		return "", errors.New("Base URL must be a public HTTPS URL without credentials, query parameters or fragments")
+		return "", errors.New("base URL must be a public HTTPS URL without credentials, query parameters or fragments")
 	}
 	host := strings.ToLower(u.Hostname())
 	ip := net.ParseIP(host)
 	if host == "localhost" || strings.HasSuffix(host, ".localhost") || (ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() || ip.IsMulticast())) {
-		return "", errors.New("Base URL must be publicly accessible")
+		return "", errors.New("base URL must be publicly accessible")
 	}
 	return value, nil
 }
