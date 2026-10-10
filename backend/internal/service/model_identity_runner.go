@@ -215,8 +215,9 @@ func (r *ModelIdentityRunner) executeRemote(ctx context.Context, run *IdentityRu
 	status := remoteRunStatus(report)
 	assessment, _ := report["identityAssessment"].(map[string]any)
 	verdict, _ := assessment["verdict"].(map[string]any)
-	report["detected_model"] = remoteDetectedModel(assessment, verdict)
-	report["verdict"] = remoteIdentityVerdict(verdict["status"], report["detected_model"].(string), run.ExpectedModel)
+	detected := remoteDetectedModel(assessment, verdict)
+	report["detected_model"] = detected
+	report["verdict"] = remoteIdentityVerdict(verdict["status"], detected, run.ExpectedModel)
 	report["expected_model"] = run.ExpectedModel
 	if items, ok := report["items"].([]any); ok {
 		for _, item := range items {

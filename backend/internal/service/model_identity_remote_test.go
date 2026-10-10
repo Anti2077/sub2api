@@ -54,8 +54,14 @@ func TestRedactRemoteSecrets(t *testing.T) {
 	}
 	redactRemoteSecrets(payload)
 	require.Equal(t, "[redacted]", payload["userKey"])
-	require.Equal(t, "[redacted]", payload["items"].([]any)[0].(map[string]any)["Authorization"])
-	require.Equal(t, 3, payload["items"].([]any)[0].(map[string]any)["usage"].(map[string]any)["totalTokens"])
+	items, ok := payload["items"].([]any)
+	require.True(t, ok)
+	item, ok := items[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "[redacted]", item["Authorization"])
+	usage, ok := item["usage"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, 3, usage["totalTokens"])
 }
 
 func TestRemoteIdentityRequiresConfirmedSpecificModel(t *testing.T) {
@@ -141,7 +147,7 @@ func TestIdentityRunDoesNotForwardCredentialThroughRedirect(t *testing.T) {
 	defer origin.Close()
 	res, err := identityRunHTTPClient().Post(origin.URL, "application/json", strings.NewReader(`{"apiKey":"test-only"}`))
 	require.NoError(t, err)
-	defer res.Body.Close()
+	defer func() { require.NoError(t, res.Body.Close()) }()
 	require.Equal(t, http.StatusTemporaryRedirect, res.StatusCode)
 	require.False(t, forwarded.Load())
 }
