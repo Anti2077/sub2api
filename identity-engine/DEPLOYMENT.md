@@ -14,14 +14,14 @@ Pass these variables to the application container (putting them in a Compose
 
 ```dotenv
 MODEL_IDENTITY_REMOTE_API_URL=https://bazaarlink.ai/api/probe/run
-MODEL_IDENTITY_PUBLIC_BASE_URL=https://your-public-host.example.com
 ```
 
-The remote API default is injected by the single-image supervisor. The public
-base URL is required and must be your public HTTPS site origin. A path prefix
+The remote API default is injected by the single-image supervisor. Set the public
+Base URL in **Model identity → Detection connection settings**. It is stored in the
+database, not read from an environment variable, and must be your public HTTPS site origin. A path prefix
 is supported when the reverse proxy preserves it. Do not include credentials,
 query parameters, or a fragment. BazaarLink rejects private destinations.
-For Compose, add these variables to `services.sub2api.environment`, or apply
+For Compose, add this variable to `services.sub2api.environment`, or apply
 `deploy/docker-compose.model-identity.yml` as an overlay to the existing
 Compose file and project. That overlay does not create a second service.
 Keep existing production data paths and image tags when upgrading.
@@ -47,14 +47,15 @@ sent to the remote API. Tests of real upstreams incur normal gateway charges.
 ## Administrator workflow
 
 Open **Model identity** in the admin sidebar, at `/admin/model-identity`.
-The matrix lists accounts, the latest expected/recognized model and status,
+The matrix lists only accounts with detection plans, the latest expected/recognized model and status,
 recent five result/time chips, next schedule and dedicated Key binding.
 Click a result chip to read its stored report. Expand history to see request
 models, expected models, recognized models, full timestamps and errors.
 The mobile view uses account cards. Summary counts cover the current page.
 API failures show errors and never substitute simulated accounts or results.
 
-Choose **Configuration & plans** for an account. Search for an existing test
+Choose **Add plan** in the upper-right corner, select an upstream account, then
+search for an existing test
 user, choose one compatible account group, and save. The user's existing
 permissions, balance, subscriptions and limits apply. No permission grant or
 balance top-up happens automatically. The dedicated Key is reused and named
@@ -63,12 +64,16 @@ Deleted/disabled/expired/exhausted/rebound Keys must be repaired; no silent
 replacement is created.
 
 Add one or more request-model / expected-model plans. Expected models come
-from the hosted `/api/probe/baselines` catalog, including GPT-6 only when it
-appears in that current catalog. Schedules start disabled with a default of
+from the hosted `/api/probe/baselines` catalog merged with fingerprint-supported
+entries in `/api/probe/suggested-models` (V3/V3H), including GPT-6-sol,
+GPT-6.1-sol and GPT-6-luna when supported by that current catalog. Schedules start disabled with a default of
 120 minutes; 15–10080 minutes is supported. Manual runs do not shift cadence.
 Go scans due plans every minute, with database leases/atomic claims for two
-global concurrent accounts. Each run permits four concurrent probe requests,
-180 seconds per request and 20 minutes in total. Restart skips missed slots
+global concurrent accounts. Each run permits ten concurrent probe requests,
+180 seconds per request and 20 minutes in total. Full probe pools wait up to
+30 seconds. Target accounts use the ordinary gateway wait queue without
+account failover; user and account concurrency limits still apply. Detection
+requests also appear in the normal routing monitor with their test user. Restart skips missed slots
 with at most one catch-up per plan. Each plan retains 50 terminal reports.
 
 Only a completed remote `clean_match` with a recognized model equal to the

@@ -11,8 +11,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -23,16 +26,82 @@ type ModelIdentityService struct {
 	accounts  AccountRepository
 	engineURL string
 	remoteURL string
-	publicURL string
+	settings  SettingRepository
 	client    *http.Client
 }
 
-func NewModelIdentityService(repo IdentityRepository, apiKeys *APIKeyService, accounts AccountRepository) *ModelIdentityService {
+func NewModelIdentityService(repo IdentityRepository, apiKeys *APIKeyService, accounts AccountRepository, settings SettingRepository) *ModelIdentityService {
 	return &ModelIdentityService{repo: repo, apiKeys: apiKeys, accounts: accounts,
 		engineURL: strings.TrimRight(os.Getenv("MODEL_IDENTITY_ENGINE_URL"), "/"),
 		remoteURL: strings.TrimRight(os.Getenv("MODEL_IDENTITY_REMOTE_API_URL"), "/"),
-		publicURL: strings.TrimRight(os.Getenv("MODEL_IDENTITY_PUBLIC_BASE_URL"), "/"),
+		settings:  settings,
 		client:    &http.Client{Timeout: 10 * time.Second}}
+}
+
+const identityPublicURLSetting = "model_identity_public_base_url"
+
+type IdentitySettings struct {
+	PublicBaseURL string `json:"public_base_url"`
+}
+
+func (s *ModelIdentityService) Settings(ctx context.Context) (*IdentitySettings, error) {
+	if s.settings == nil {
+		return nil, errors.New("identity settings storage unavailable")
+	}
+	value, err := s.settings.GetValue(ctx, identityPublicURLSetting)
+	if errors.Is(err, ErrSettingNotFound) {
+		err = nil
+	}
+	return &IdentitySettings{PublicBaseURL: value}, err
+}
+
+func normalizeIdentityPublicURL(value string) (string, error) {
+	value = strings.TrimRight(strings.TrimSpace(value), "/")
+	u, err := url.Parse(value)
+	if err != nil || len(value) > 2048 || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(value, "#") {
+		return "", errors.New("Base URL must be a public HTTPS URL without credentials, query parameters or fragments")
+	}
+	host := strings.ToLower(u.Hostname())
+	ip := net.ParseIP(host)
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") || (ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() || ip.IsMulticast())) {
+		return "", errors.New("Base URL must be publicly accessible")
+	}
+	return value, nil
+}
+
+func (s *ModelIdentityService) PlannedAccounts(ctx context.Context, page, size int, search string) (*IdentityAccountPage, error) {
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 100 {
+		size = 20
+	}
+	return s.repo.PlannedAccounts(ctx, page, size, strings.TrimSpace(search))
+}
+
+func (s *ModelIdentityService) SaveSettings(ctx context.Context, value string) (*IdentitySettings, error) {
+	value, err := normalizeIdentityPublicURL(value)
+	if err != nil {
+		return nil, err
+	}
+	if s.settings == nil {
+		return nil, errors.New("identity settings storage unavailable")
+	}
+	if err := s.settings.Set(ctx, identityPublicURLSetting, value); err != nil {
+		return nil, err
+	}
+	return &IdentitySettings{PublicBaseURL: value}, nil
+}
+
+func (s *ModelIdentityService) publicBaseURL(ctx context.Context) (string, error) {
+	settings, err := s.Settings(ctx)
+	if err != nil {
+		return "", err
+	}
+	if settings.PublicBaseURL == "" {
+		return "", errors.New("configure the public Base URL on the Model identity page before running a detection")
+	}
+	return normalizeIdentityPublicURL(settings.PublicBaseURL)
 }
 func (s *ModelIdentityService) EngineCommit() string {
 	if s.remoteURL != "" {
@@ -91,7 +160,49 @@ func (s *ModelIdentityService) remoteModels(ctx context.Context) ([]IdentityMode
 		}
 		models = append(models, IdentityModel{ID: id, Name: id, Family: family})
 	}
+	// The legacy baseline list omits newer V3H identities exposed by the website.
+	// Merge only entries with explicit fingerprint support, never popularity alone.
+	var suggested struct {
+		Models []struct {
+			ID             string `json:"modelId"`
+			Identification struct {
+				V3H bool `json:"v3h"`
+				V3  bool `json:"v3"`
+			} `json:"identification"`
+		} `json:"models"`
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(remoteBaselinesURL(s.remoteURL), "/baselines")+"/suggested-models", nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.readRemoteCatalog(req, &suggested); err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool, len(models))
+	for _, model := range models {
+		seen[model.ID] = true
+	}
+	for _, model := range suggested.Models {
+		if seen[model.ID] || (!model.Identification.V3H && !model.Identification.V3) || !strings.Contains(model.ID, "/") {
+			continue
+		}
+		seen[model.ID] = true
+		models = append(models, IdentityModel{ID: model.ID, Name: model.ID, Family: strings.SplitN(model.ID, "/", 2)[0]})
+	}
+	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
 	return models, nil
+}
+
+func (s *ModelIdentityService) readRemoteCatalog(req *http.Request, payload any) error {
+	res, err := s.client.Do(req)
+	if err != nil {
+		return errors.New("BazaarLink model catalog unavailable")
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(payload) != nil {
+		return errors.New("invalid BazaarLink supported model catalog")
+	}
+	return nil
 }
 
 func remoteBaselinesURL(remote string) string {
@@ -266,6 +377,11 @@ func (s *ModelIdentityService) Enqueue(ctx context.Context, id int64) (*Identity
 	if s.engineURL == "" && s.remoteURL == "" {
 		return nil, errors.New("identity engine is not configured")
 	}
+	if s.remoteURL != "" {
+		if _, err := s.publicBaseURL(ctx); err != nil {
+			return nil, err
+		}
+	}
 	p, e := s.repo.Plan(ctx, id)
 	if e != nil {
 		return nil, e
@@ -293,6 +409,27 @@ func (s *ModelIdentityService) AppendProbe(ctx context.Context, id int64, probe 
 }
 func (s *ModelIdentityService) ProbeSlot(ctx context.Context, id int64, acquire bool) error {
 	return s.repo.ProbeSlot(ctx, id, acquire)
+}
+
+// The database counter bounds active callbacks across all application replicas.
+// A full slot pool queues briefly instead of inducing remote adaptive throttling.
+func (s *ModelIdentityService) WaitProbeSlot(ctx context.Context, id int64) error {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := s.repo.ProbeSlot(ctx, id, true)
+		if !errors.Is(err, ErrIdentityProbeSlotsFull) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
 }
 func HashIdentityToken(token string) string {
 	h := sha256.Sum256([]byte(token))

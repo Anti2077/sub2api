@@ -56,7 +56,9 @@ func (s *GatewayService) selectIdentityTarget(ctx context.Context, groupID *int6
 		return nil, true, e
 	}
 	if !slot.Acquired {
-		return nil, true, fmt.Errorf("identity target account concurrency limit reached")
+		cfg := s.schedulingConfig()
+		result, err := s.newSelectionResult(ctx, a, false, nil, &AccountWaitPlan{AccountID: a.ID, MaxConcurrency: a.Concurrency, Timeout: cfg.FallbackWaitTimeout, MaxWaiting: cfg.FallbackMaxWaiting})
+		return result, true, err
 	}
 	result, e := s.newSelectionResult(ctx, a, true, slot.ReleaseFunc, nil)
 	if e != nil {
@@ -84,7 +86,8 @@ func (s *OpenAIGatewayService) selectOpenAIIdentityTarget(ctx context.Context, g
 		return nil, true, e
 	}
 	if !slot.Acquired {
-		return nil, true, fmt.Errorf("identity target account concurrency limit reached")
+		cfg := s.schedulingConfig()
+		return attachSelectionProfitGate(ctx, &AccountSelectionResult{Account: a, WaitPlan: &AccountWaitPlan{AccountID: a.ID, MaxConcurrency: a.Concurrency, Timeout: cfg.FallbackWaitTimeout, MaxWaiting: cfg.FallbackMaxWaiting}}), true, nil
 	}
 	return attachSelectionProfitGate(ctx, &AccountSelectionResult{Account: a, Acquired: true, ReleaseFunc: slot.ReleaseFunc}), true, nil
 }

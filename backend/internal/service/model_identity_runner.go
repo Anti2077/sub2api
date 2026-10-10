@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -171,12 +170,12 @@ func (r *ModelIdentityRunner) executeRemote(ctx context.Context, run *IdentityRu
 		finish("configuration_error", map[string]string{"error": err.Error()})
 		return
 	}
-	public, parseErr := url.Parse(r.svc.publicURL)
-	if parseErr != nil || public.Scheme != "https" || public.Host == "" || public.User != nil || public.RawQuery != "" || public.Fragment != "" {
-		finish("service_error", map[string]string{"error": "MODEL_IDENTITY_PUBLIC_BASE_URL must be a public HTTPS URL without credentials or query parameters"})
+	public, err := r.svc.publicBaseURL(ctx)
+	if err != nil {
+		finish("configuration_error", map[string]string{"error": err.Error()})
 		return
 	}
-	baseURL := r.svc.publicURL + "/internal/model-identity/" + fmtIdentityID(run.ID) + "/remote/v1"
+	baseURL := public + "/internal/model-identity/" + fmtIdentityID(run.ID) + "/remote/v1"
 	body, _ := json.Marshal(map[string]any{
 		"baseUrl": baseURL, "apiKey": key.Key, "modelId": run.RequestModel,
 		"claimedModel": run.ExpectedModel, "runContextCheck": false, "biasFingerprint": true, "sync": true,
@@ -217,7 +216,11 @@ func (r *ModelIdentityRunner) executeRemote(ctx context.Context, run *IdentityRu
 	verdict, _ := assessment["verdict"].(map[string]any)
 	detected := remoteDetectedModel(assessment, verdict)
 	report["detected_model"] = detected
-	report["verdict"] = remoteIdentityVerdict(verdict["status"], detected, run.ExpectedModel)
+	verdictStatus := verdict["status"]
+	if verdictStatus == nil {
+		verdictStatus = assessment["status"]
+	}
+	report["verdict"] = remoteIdentityVerdict(verdictStatus, detected, run.ExpectedModel)
 	report["expected_model"] = run.ExpectedModel
 	if items, ok := report["items"].([]any); ok {
 		for _, item := range items {
@@ -280,9 +283,9 @@ func remoteRunStatus(report map[string]any) string {
 
 func remoteVerdict(value any) string {
 	switch value {
-	case "clean_match":
+	case "match", "clean_match":
 		return "matched"
-	case "clean_match_submodel_mismatch", "plain_mismatch", "spoof_behavior_induced", "spoof_selfclaim_forged":
+	case "mismatch", "clean_match_submodel_mismatch", "plain_mismatch", "spoof_behavior_induced", "spoof_selfclaim_forged":
 		return "mismatched"
 	default:
 		return "inconclusive"
@@ -290,15 +293,65 @@ func remoteVerdict(value any) string {
 }
 
 func remoteDetectedModel(assessment, verdict map[string]any) string {
-	if model, ok := verdict["trueModel"].(string); ok && strings.TrimSpace(model) != "" {
-		return model
-	}
+	// BazaarLink's trueModel is a display label in some reports (for example,
+	// "GPT 6 Astra"), while resolvedIdentity.modelId is the canonical ID used
+	// by the catalog ("openai/gpt-6-astra"). Prefer the canonical field so the
+	// local exact-model comparison does not reject a valid matching report.
 	if resolved, ok := assessment["resolvedIdentity"].(map[string]any); ok {
 		if model, ok := resolved["modelId"].(string); ok && strings.TrimSpace(model) != "" {
 			return model
 		}
 	}
+	if model, ok := verdict["trueModel"].(string); ok && strings.TrimSpace(model) != "" {
+		return model
+	}
 	return ""
+}
+
+func normalizeRemoteModelID(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if i := strings.LastIndexByte(value, '/'); i >= 0 {
+		return normalizeRemoteModelToken(value[:i]) + "/" + normalizeRemoteModelToken(value[i+1:])
+	}
+	return normalizeRemoteModelToken(value)
+}
+
+func normalizeRemoteModelToken(value string) string {
+	var b strings.Builder
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func remoteModelIDsMatch(expected, detected string) bool {
+	expected = strings.TrimSpace(expected)
+	detected = strings.TrimSpace(detected)
+	if expected == "" || detected == "" {
+		return false
+	}
+	if strings.EqualFold(expected, detected) {
+		return true
+	}
+	// The API may return a human display name instead of a catalog ID. Compare
+	// only the model portion after removing punctuation and the provider prefix;
+	// this still keeps family-only values such as "openai" from matching.
+	normalizedExpected, normalizedDetected := normalizeRemoteModelID(expected), normalizeRemoteModelID(detected)
+	if normalizedExpected == "" || normalizedDetected == "" {
+		return false
+	}
+	if strings.Contains(normalizedExpected, "/") && strings.Contains(normalizedDetected, "/") {
+		return normalizedExpected == normalizedDetected
+	}
+	if strings.Contains(normalizedExpected, "/") {
+		return strings.TrimPrefix(normalizedExpected, normalizedExpected[:strings.LastIndexByte(normalizedExpected, '/')+1]) == normalizedDetected
+	}
+	if strings.Contains(normalizedDetected, "/") {
+		return strings.TrimPrefix(normalizedDetected, normalizedDetected[:strings.LastIndexByte(normalizedDetected, '/')+1]) == normalizedExpected
+	}
+	return normalizedExpected == normalizedDetected
 }
 
 func remoteIdentityVerdict(status any, detected, expected string) string {
@@ -307,12 +360,12 @@ func remoteIdentityVerdict(status any, detected, expected string) string {
 		return "inconclusive"
 	}
 	if remoteVerdict(status) == "matched" {
-		if detected == expected {
+		if remoteModelIDsMatch(expected, detected) {
 			return "matched"
 		}
 		return "inconclusive"
 	}
-	if remoteVerdict(status) == "mismatched" && detected != expected {
+	if remoteVerdict(status) == "mismatched" && !remoteModelIDsMatch(expected, detected) {
 		return "mismatched"
 	}
 	return "inconclusive"

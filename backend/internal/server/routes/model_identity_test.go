@@ -15,6 +15,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -46,8 +47,8 @@ func (r *identityRouteRepo) ProbeSlot(_ context.Context, _ int64, acquire bool) 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if acquire {
-		if r.inflight >= 4 {
-			return errors.New("slots full")
+		if r.inflight >= service.IdentityProbeConcurrency {
+			return service.ErrIdentityProbeSlotsFull
 		}
 		r.inflight++
 	} else {
@@ -105,7 +106,7 @@ func TestIdentityProbeCapabilityInjectsBillingKeyAndIgnoresClientTarget(t *testi
 	accounts := &identityRouteAccountRepo{a: &service.Account{ID: 42, Platform: service.PlatformOpenAI, GroupIDs: []int64{7}}}
 	groups := &identityRouteGroupRepo{}
 	apiKeySvc := service.NewAPIKeyService(keys, &identityRouteUserRepo{}, groups, nil, nil, nil, &config.Config{})
-	svc := service.NewModelIdentityService(repo, apiKeySvc, accounts)
+	svc := service.NewModelIdentityService(repo, apiKeySvc, accounts, nil)
 	forwarded := 0
 	auth := middleware.APIKeyAuthMiddleware(func(c *gin.Context) {
 		require.Equal(t, "Bearer private-site-key", c.GetHeader("Authorization"))
@@ -122,7 +123,7 @@ func TestIdentityProbeCapabilityInjectsBillingKeyAndIgnoresClientTarget(t *testi
 		c.AbortWithStatusJSON(200, gin.H{"model": "auxiliary", "choices": []gin.H{{"message": gin.H{"content": "simulated response"}}}, "usage": gin.H{"prompt_tokens": 10, "completion_tokens": 20}})
 	})
 	router := gin.New()
-	registerIdentityProbe(router, &handler.Handlers{}, svc, auth, func(*gin.Context) {})
+	registerIdentityProbe(router, &handler.Handlers{}, svc, auth, func(*gin.Context) {}, func(*gin.Context) {})
 	request := func(path, token, body string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
@@ -179,18 +180,66 @@ func TestIdentityAdminRoutesRejectUnauthenticatedAndOrdinaryUsers(t *testing.T) 
 			c.Set(string(middleware.ContextKeyUserRole), role)
 		}
 	}, middleware.AdminOnly())
-	svc := service.NewModelIdentityService(nil, nil, nil)
+	svc := service.NewModelIdentityService(nil, nil, nil, nil)
 	registerModelIdentityRoutes(group, &handler.Handlers{Admin: &handler.AdminHandlers{ModelIdentity: admin.NewModelIdentityHandler(svc)}})
+	for _, path := range []string{"/admin/model-identity/models", "/admin/model-identity/settings", "/admin/model-identity/accounts"} {
+		for _, role := range []string{"", service.RoleUser} {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.Header.Set("Test-Role", role)
+			router.ServeHTTP(w, req)
+			if role == "" {
+				require.Equal(t, http.StatusUnauthorized, w.Code)
+			} else {
+				require.Equal(t, http.StatusForbidden, w.Code)
+			}
+		}
+	}
 	for _, role := range []string{"", service.RoleUser} {
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/admin/model-identity/models", nil)
+		req := httptest.NewRequest(http.MethodPut, "/admin/model-identity/settings", strings.NewReader(`{"public_base_url":"https://site.example.com"}`))
 		req.Header.Set("Test-Role", role)
 		router.ServeHTTP(w, req)
-		if role == "" {
-			require.Equal(t, http.StatusUnauthorized, w.Code)
-		} else {
-			require.Equal(t, http.StatusForbidden, w.Code)
-		}
+		require.Contains(t, []int{401, 403}, w.Code)
+	}
+}
+
+func TestIdentityCallbacksPublishNormalRoutingCompletionForTestUser(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc, repo, _, _ := remoteIdentityFixture()
+	monitor := service.NewOpsRoutingMonitorService(nil, nil)
+	ops := &service.OpsService{}
+	ops.SetRoutingMonitor(monitor)
+	router := gin.New()
+	// Simulated gateway selection emits the same event as setOpsSelectedAccount.
+	auth := middleware.APIKeyAuthMiddleware(func(c *gin.Context) {
+		requestID, _ := c.Request.Context().Value(ctxkey.ClientRequestID).(string)
+		account, _, pinned := service.IdentityTargetFromContext(c.Request.Context())
+		require.True(t, pinned)
+		monitor.ObserveSelection(service.OpsRoutingRequestInfo{ClientRequestID: requestID, UserID: repo.run.UserID, UserLabel: "test-user", AccountID: account, AccountName: "target", RequestedModel: repo.run.RequestModel})
+		c.AbortWithStatusJSON(200, gin.H{"choices": []gin.H{{"message": gin.H{"content": "ok"}}}})
+	})
+	registerIdentityProbe(router, &handler.Handlers{}, svc, auth, func(*gin.Context) {}, handler.OpsErrorLoggerMiddleware(ops))
+	for _, tc := range []struct{ path, token, body string }{
+		{"/internal/model-identity/1/remote/v1/chat/completions", "private-test-key", `{"model":"public-model"}`},
+		{"/internal/model-identity/1/probe", strings.Repeat("a", 64), `{"prompt":"hello"}`},
+	} {
+		repo.token = strings.Repeat("a", 64)
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+		req.Header.Set("Authorization", "Bearer "+tc.token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, 200, w.Code)
+	}
+	snapshot, err := monitor.Snapshot(context.Background())
+	require.NoError(t, err)
+	require.Empty(t, snapshot.Active)
+	require.Len(t, snapshot.Recent, 2)
+	for _, event := range snapshot.Recent {
+		require.EqualValues(t, 5, event.UserID)
+		require.Equal(t, "test-user", event.UserLabel)
+		require.EqualValues(t, 42, event.AccountID)
+		require.Equal(t, service.OpsRoutingEventCompleted, event.EventType)
 	}
 }
 
@@ -201,7 +250,7 @@ func remoteIdentityFixture() (*service.ModelIdentityService, *identityRouteRepo,
 	keys := &identityRouteKeyRepo{k: &service.APIKey{ID: 9, UserID: 5, GroupID: &group, Status: service.StatusActive, Key: "private-test-key"}}
 	accounts := &identityRouteAccountRepo{a: &service.Account{ID: 42, Platform: service.PlatformOpenAI, GroupIDs: []int64{7}}}
 	api := service.NewAPIKeyService(keys, &identityRouteUserRepo{}, &identityRouteGroupRepo{}, nil, nil, nil, &config.Config{})
-	return service.NewModelIdentityService(repo, api, accounts), repo, keys, accounts
+	return service.NewModelIdentityService(repo, api, accounts, nil), repo, keys, accounts
 }
 
 func TestIdentityRemoteCallbackPinsAndRecordsWithoutCredentials(t *testing.T) {
@@ -219,7 +268,7 @@ func TestIdentityRemoteCallbackPinsAndRecordsWithoutCredentials(t *testing.T) {
 		forwarded++
 		c.AbortWithStatusJSON(200, gin.H{"choices": []gin.H{{"message": gin.H{"content": "private-test-key echoed"}}}, "usage": gin.H{"prompt_tokens": 8, "completion_tokens": 3}})
 	})
-	registerIdentityProbe(router, &handler.Handlers{}, svc, auth, func(*gin.Context) {})
+	registerIdentityProbe(router, &handler.Handlers{}, svc, auth, func(*gin.Context) {}, func(*gin.Context) {})
 	request := func(id, key, body string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest("POST", "/internal/model-identity/"+id+"/remote/v1/chat/completions", strings.NewReader(body))
@@ -257,11 +306,11 @@ func TestIdentityRemoteCallbackPinsAndRecordsWithoutCredentials(t *testing.T) {
 	require.Equal(t, 1, forwarded)
 }
 
-func TestIdentityRemoteCallbackLimitsConcurrentProbes(t *testing.T) {
+func TestIdentityRemoteCallbackQueuesAboveTenAndReleasesSlots(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc, repo, _, _ := remoteIdentityFixture()
 	router := gin.New()
-	entered := make(chan struct{}, 4)
+	entered := make(chan struct{}, service.IdentityProbeConcurrency+1)
 	release := make(chan struct{})
 	defer close(release)
 	router.POST("/internal/model-identity/:run/remote/v1/chat/completions", remoteIdentityProbe(svc), func(c *gin.Context) { entered <- struct{}{}; <-release; c.JSON(200, gin.H{"ok": true}) })
@@ -273,22 +322,35 @@ func TestIdentityRemoteCallbackLimitsConcurrentProbes(t *testing.T) {
 		return w.Code
 	}
 	var wg sync.WaitGroup
-	for i := 0; i < 4; i++ {
+	for i := 0; i < service.IdentityProbeConcurrency; i++ {
 		wg.Add(1)
 		go func() { defer wg.Done(); request() }()
 	}
-	for i := 0; i < 4; i++ {
+	for i := 0; i < service.IdentityProbeConcurrency; i++ {
 		select {
 		case <-entered:
 		case <-time.After(3 * time.Second):
 			t.Fatal("probe did not acquire a slot")
 		}
 	}
-	require.Equal(t, 429, request())
-	for i := 0; i < 4; i++ {
+	queued := make(chan int, 1)
+	go func() { queued <- request() }()
+	select {
+	case code := <-queued:
+		t.Fatalf("full pool should queue, got %d", code)
+	case <-time.After(150 * time.Millisecond):
+	}
+	release <- struct{}{}
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("queued probe did not resume")
+	}
+	for i := 0; i < service.IdentityProbeConcurrency; i++ {
 		release <- struct{}{}
 	}
 	wg.Wait()
+	require.Equal(t, 200, <-queued)
 	require.Equal(t, 0, repo.inflight)
-	require.Len(t, repo.probes, 4)
+	require.Len(t, repo.probes, service.IdentityProbeConcurrency+1)
 }

@@ -33,6 +33,40 @@ func (h *ModelIdentityHandler) Models(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"engine_commit": h.svc.EngineCommit(), "models": models})
 }
+
+func (h *ModelIdentityHandler) Settings(c *gin.Context) {
+	settings, err := h.svc.Settings(c.Request.Context())
+	if err != nil {
+		response.InternalError(c, "could not read model identity settings")
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *ModelIdentityHandler) SaveSettings(c *gin.Context) {
+	var req service.IdentitySettings
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid model identity settings")
+		return
+	}
+	settings, err := h.svc.SaveSettings(c.Request.Context(), req.PublicBaseURL)
+	if err != nil {
+		response.BadRequest(c, "Could not save Base URL; use a public HTTPS URL without credentials, query parameters or fragments")
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (h *ModelIdentityHandler) PlannedAccounts(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	result, err := h.svc.PlannedAccounts(c.Request.Context(), page, size, c.Query("search"))
+	if err != nil {
+		response.InternalError(c, "could not read detection accounts")
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
 func (h *ModelIdentityHandler) Config(c *gin.Context) {
 	v, ok := id(c)
 	if !ok {

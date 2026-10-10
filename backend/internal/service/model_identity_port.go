@@ -3,10 +3,15 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 )
 
 const IdentityEngineCommit = "5c41136741ca52b5637879cca7bd0cae07404646"
+
+const IdentityProbeConcurrency = 10
+
+var ErrIdentityProbeSlotsFull = errors.New("identity probe slots full")
 
 type IdentityConfig struct {
 	AccountID          int64  `json:"account_id"`
@@ -48,7 +53,12 @@ type IdentityModel struct {
 	Name   string `json:"name"`
 	Family string `json:"family"`
 }
+type IdentityAccountPage struct {
+	AccountIDs []int64 `json:"account_ids"`
+	Total      int     `json:"total"`
+}
 type IdentityRepository interface {
+	PlannedAccounts(context.Context, int, int, string) (*IdentityAccountPage, error)
 	Config(context.Context, int64) (*IdentityConfig, error)
 	Configure(context.Context, *IdentityConfig, string, string) error
 	Plans(context.Context, int64) ([]IdentityPlan, error)

@@ -70,6 +70,16 @@ func TestIdentityRepositoryLifecycleAndAtomicClaims(t *testing.T) {
 		require.NoError(t, repo.SavePlan(ctx, p, now))
 		plans = append(plans, p)
 	}
+	page, err := repo.PlannedAccounts(ctx, 1, 1, "identity-account-")
+	require.NoError(t, err)
+	require.Equal(t, 3, page.Total)
+	require.Equal(t, []int64{configs[2].AccountID}, page.AccountIDs)
+	page, err = repo.PlannedAccounts(ctx, 2, 1, "identity-account-")
+	require.NoError(t, err)
+	require.Equal(t, []int64{configs[1].AccountID}, page.AccountIDs)
+	page, err = repo.PlannedAccounts(ctx, 1, 20, "identity-account-0")
+	require.NoError(t, err)
+	require.Equal(t, []int64{configs[0].AccountID}, page.AccountIDs)
 	due := now.Add(9 * time.Hour)
 	require.NoError(t, repo.ScanDue(ctx, due))
 	for _, p := range plans {
@@ -107,7 +117,7 @@ func TestIdentityRepositoryLifecycleAndAtomicClaims(t *testing.T) {
 	require.NoError(t, e)
 	_, e = repo.Authorize(ctx, run.ID, service.HashIdentityToken("test-capability"), due.Add(20*time.Minute))
 	require.Error(t, e)
-	for i := 0; i < 4; i++ {
+	for i := 0; i < service.IdentityProbeConcurrency; i++ {
 		require.NoError(t, repo.ProbeSlot(ctx, run.ID, true))
 	}
 	require.Error(t, repo.ProbeSlot(ctx, run.ID, true))
@@ -149,4 +159,18 @@ func TestIdentityRepositoryLifecycleAndAtomicClaims(t *testing.T) {
 	var retained int
 	require.NoError(t, integrationDB.QueryRow(`SELECT COUNT(*) FROM account_identity_runs WHERE plan_id=$1`, p.ID).Scan(&retained))
 	require.Equal(t, 50, retained)
+	remaining, err := repo.History(ctx, plans[2].ID)
+	require.NoError(t, err)
+	for _, pending := range remaining {
+		require.NoError(t, repo.Cancel(ctx, pending.ID))
+	}
+	require.NoError(t, repo.DeletePlan(ctx, plans[2].ID))
+	page, err = repo.PlannedAccounts(ctx, 1, 20, "identity-account-")
+	require.NoError(t, err)
+	require.Equal(t, 2, page.Total, "configuration without a plan is not listed")
+	_, err = integrationDB.Exec(`UPDATE accounts SET deleted_at=NOW() WHERE id=$1`, configs[1].AccountID)
+	require.NoError(t, err)
+	page, err = repo.PlannedAccounts(ctx, 1, 20, "identity-account-")
+	require.NoError(t, err)
+	require.Equal(t, []int64{configs[0].AccountID}, page.AccountIDs)
 }

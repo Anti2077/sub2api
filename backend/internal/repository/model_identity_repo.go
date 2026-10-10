@@ -15,6 +15,27 @@ type identityRepository struct{ db *sql.DB }
 
 func NewIdentityRepository(db *sql.DB) service.IdentityRepository { return &identityRepository{db: db} }
 
+func (r *identityRepository) PlannedAccounts(ctx context.Context, page, size int, search string) (*service.IdentityAccountPage, error) {
+	const filter = ` FROM account_identity_configs c JOIN accounts a ON a.id=c.account_id WHERE a.deleted_at IS NULL AND EXISTS(SELECT 1 FROM account_identity_plans p WHERE p.account_id=c.account_id) AND ($1='' OR a.name ILIKE '%' || $1 || '%')`
+	result := &service.IdentityAccountPage{AccountIDs: []int64{}}
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*)`+filter, search).Scan(&result.Total); err != nil {
+		return nil, err
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT c.account_id`+filter+` ORDER BY c.account_id DESC LIMIT $2 OFFSET $3`, search, size, (page-1)*size)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		result.AccountIDs = append(result.AccountIDs, id)
+	}
+	return result, rows.Err()
+}
+
 func (r *identityRepository) Config(ctx context.Context, id int64) (*service.IdentityConfig, error) {
 	c := &service.IdentityConfig{}
 	err := r.db.QueryRowContext(ctx, `SELECT c.account_id,c.user_id,c.group_id,c.api_key_id,k.name FROM account_identity_configs c JOIN api_keys k ON k.id=c.api_key_id WHERE c.account_id=$1`, id).Scan(&c.AccountID, &c.UserID, &c.GroupID, &c.APIKeyID, &c.KeyName)
@@ -271,7 +292,7 @@ func (r *identityRepository) AppendProbe(ctx context.Context, id int64, probe js
 func (r *identityRepository) ProbeSlot(ctx context.Context, id int64, acquire bool) error {
 	query := `UPDATE account_identity_runs SET probe_inflight=GREATEST(0,probe_inflight-1) WHERE id=$1`
 	if acquire {
-		query = `UPDATE account_identity_runs SET probe_inflight=probe_inflight+1 WHERE id=$1 AND status='running' AND lease_until>NOW() AND probe_inflight<4 AND jsonb_array_length(probes)+probe_inflight<500`
+		query = `UPDATE account_identity_runs SET probe_inflight=probe_inflight+1 WHERE id=$1 AND status='running' AND lease_until>NOW() AND probe_inflight<10 AND jsonb_array_length(probes)+probe_inflight<500`
 	}
 	result, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
@@ -279,7 +300,16 @@ func (r *identityRepository) ProbeSlot(ctx context.Context, id int64, acquire bo
 	}
 	n, _ := result.RowsAffected()
 	if n == 0 {
-		return errors.New("probe concurrency limit reached or run inactive")
+		if acquire {
+			var canWait bool
+			if err := r.db.QueryRowContext(ctx, `SELECT status='running' AND lease_until>NOW() AND jsonb_array_length(probes)+probe_inflight<500 FROM account_identity_runs WHERE id=$1`, id).Scan(&canWait); err != nil {
+				return err
+			}
+			if canWait {
+				return service.ErrIdentityProbeSlotsFull
+			}
+		}
+		return errors.New("identity run inactive, expired or probe budget exhausted")
 	}
 	return nil
 }

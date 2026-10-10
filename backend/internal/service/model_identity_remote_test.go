@@ -41,6 +41,10 @@ func TestRemoteVerdictAndDetectedModel(t *testing.T) {
 	verdict = map[string]any{"status": "clean_match_submodel_mismatch", "trueFamily": "openai"}
 	require.Equal(t, "mismatched", remoteVerdict(verdict["status"]))
 	require.Equal(t, "openai/gpt-6-astra", remoteDetectedModel(assessment, verdict))
+	// The website can expose only the human label in trueModel. The canonical
+	// resolvedIdentity.modelId must win when both fields are present.
+	verdict = map[string]any{"status": "clean_match", "trueModel": "GPT 6 Astra"}
+	require.Equal(t, "openai/gpt-6-astra", remoteDetectedModel(assessment, verdict))
 
 	verdict = map[string]any{"status": "insufficient_data"}
 	require.Equal(t, "inconclusive", remoteVerdict(verdict["status"]))
@@ -67,6 +71,7 @@ func TestRedactRemoteSecrets(t *testing.T) {
 func TestRemoteIdentityRequiresConfirmedSpecificModel(t *testing.T) {
 	for _, tc := range []struct{ verdict, detected, want string }{
 		{"clean_match", "openai/gpt-6-astra", "matched"},
+		{"clean_match", "GPT 6 Astra", "matched"},
 		{"clean_match", "openai/gpt-5.5", "inconclusive"},
 		{"clean_match_family_only", "", "inconclusive"},
 		{"clean_match_submodel_mismatch", "openai/gpt-5.5", "mismatched"},
@@ -79,22 +84,37 @@ func TestRemoteIdentityRequiresConfirmedSpecificModel(t *testing.T) {
 			require.Equal(t, tc.want, remoteIdentityVerdict(tc.verdict, tc.detected, "openai/gpt-6-astra"))
 		})
 	}
+	require.Equal(t, "matched", remoteIdentityVerdict("match", "GPT 6 Astra", "openai/gpt-6-astra"))
+	require.Equal(t, "mismatched", remoteIdentityVerdict("mismatch", "GPT 5.5", "openai/gpt-6-astra"))
+	// When a provider omits the nested verdict status, the outer assessment
+	// status is still an exact family-level signal and must be interpreted.
+	require.Equal(t, "matched", remoteIdentityVerdict("match", "openai/gpt-6-astra", "openai/gpt-6-astra"))
+	require.Equal(t, "inconclusive", remoteIdentityVerdict("match", "anthropic/gpt-6-astra", "openai/gpt-6-astra"))
 	require.Empty(t, remoteDetectedModel(map[string]any{}, map[string]any{"trueFamily": "openai"}))
 }
 
 func TestRemoteBaselineCatalogAndVersion(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/api/probe/baselines", r.URL.Path)
 		require.Empty(t, r.URL.RawQuery)
-		_ = json.NewEncoder(w).Encode(map[string]any{"models": []string{"openai/gpt-6-astra", "anthropic/claude-opus-5"}})
+		switch r.URL.Path {
+		case "/api/probe/baselines":
+			_ = json.NewEncoder(w).Encode(map[string]any{"models": []string{"openai/gpt-6-astra", "anthropic/claude-opus-5"}})
+		case "/api/probe/suggested-models":
+			_, _ = w.Write([]byte(`{"models":[{"modelId":"openai/gpt-6-astra","identification":{"v3h":true}},{"modelId":"openai/gpt-6.1-sol","identification":{"v3h":true,"v3":false}},{"modelId":"openai/gpt-6-luna","identification":{"v3":true}},{"modelId":"openai/unsupported","identification":{"v3":false,"v3h":false}}]}`))
+		default:
+			t.Errorf("unexpected catalog path: %s", r.URL.Path)
+			w.WriteHeader(404)
+		}
 	}))
 	defer server.Close()
 	svc := &ModelIdentityService{remoteURL: server.URL + "/api/probe/run?unused=1", client: server.Client()}
 	models, err := svc.Models(context.Background())
 	require.NoError(t, err)
-	require.Len(t, models, 2)
-	require.Equal(t, "openai/gpt-6-astra", models[0].ID)
-	require.Equal(t, "openai", models[0].Family)
+	require.Len(t, models, 4)
+	require.Equal(t, "openai/gpt-6-astra", models[1].ID)
+	require.Equal(t, "openai", models[1].Family)
+	require.Equal(t, "openai/gpt-6-luna", models[2].ID)
+	require.Equal(t, "openai/gpt-6.1-sol", models[3].ID)
 	require.Equal(t, "bazaarlink-online", svc.EngineCommit())
 }
 

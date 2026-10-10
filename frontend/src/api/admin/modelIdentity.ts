@@ -1,6 +1,11 @@
 import { apiClient } from '../client'
 
 export interface IdentityModel { id: string; name: string; family: string }
+export interface IdentitySettings { public_base_url: string }
+export interface IdentityAccountPage { account_ids: number[]; total: number }
+export async function settings() { const { data } = await apiClient.get<IdentitySettings>('/admin/model-identity/settings'); return data }
+export async function saveSettings(payload:IdentitySettings) { const { data } = await apiClient.put<IdentitySettings>('/admin/model-identity/settings', payload); return data }
+export async function plannedAccounts(page = 1, pageSize = 20, search = '') { const { data } = await apiClient.get<IdentityAccountPage>('/admin/model-identity/accounts', { params: { page, page_size: pageSize, search } }); return data }
 export interface IdentityConfig { account_id: number; user_id: number; group_id: number; api_key_id: number; key_name: string; configuration_error?: string }
 export interface IdentityPlan { id: number; account_id: number; request_model: string; expected_model: string; interval_minutes: number; enabled: boolean; last_run_at?: string; next_run_at?: string }
 export interface IdentityProbe { probe_id?: string; status?: number; target_account_id?: number; request_model?: string; prompt?: string; error?: string; evidence?: {upstream_model?: string; request_id?: string}; response?: {usage?: Record<string,unknown>} }

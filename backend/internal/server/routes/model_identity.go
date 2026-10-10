@@ -29,7 +29,7 @@ func (w *identityResponseWriter) Write(b []byte) (int, error) {
 }
 func (w *identityResponseWriter) WriteString(s string) (int, error) { return w.Write([]byte(s)) }
 
-func registerIdentityProbe(r *gin.Engine, h *handler.Handlers, svc *service.ModelIdentityService, auth middleware.APIKeyAuthMiddleware, requireGroup gin.HandlerFunc) {
+func registerIdentityProbe(r *gin.Engine, h *handler.Handlers, svc *service.ModelIdentityService, auth middleware.APIKeyAuthMiddleware, requireGroup gin.HandlerFunc, opsLogger gin.HandlerFunc) {
 	r.GET("/internal/model-identity/:run/capability", func(c *gin.Context) {
 		id, e := strconv.ParseInt(c.Param("run"), 10, 64)
 		if e != nil {
@@ -43,7 +43,7 @@ func registerIdentityProbe(r *gin.Engine, h *handler.Handlers, svc *service.Mode
 		}
 		c.JSON(http.StatusOK, gin.H{"request_model": run.RequestModel, "expected_model": run.ExpectedModel})
 	})
-	r.POST("/internal/model-identity/:run/probe", middleware.RequestBodyLimit(64<<10), func(c *gin.Context) {
+	r.POST("/internal/model-identity/:run/probe", middleware.RequestBodyLimit(64<<10), identityProbeDeadline(), func(c *gin.Context) {
 		id, e := strconv.ParseInt(c.Param("run"), 10, 64)
 		if e != nil {
 			c.AbortWithStatus(http.StatusUnauthorized)
@@ -55,8 +55,7 @@ func registerIdentityProbe(r *gin.Engine, h *handler.Handlers, svc *service.Mode
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
-		if e = svc.ProbeSlot(c.Request.Context(), id, true); e != nil {
-			c.AbortWithStatus(http.StatusTooManyRequests)
+		if !waitIdentityProbeSlot(c, svc, id) {
 			return
 		}
 		defer func() {
@@ -64,6 +63,10 @@ func registerIdentityProbe(r *gin.Engine, h *handler.Handlers, svc *service.Mode
 			defer stop()
 			_ = svc.ProbeSlot(ctx, id, false)
 		}()
+		if _, e = svc.Authorize(c.Request.Context(), id, token); e != nil {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
 		key, e := svc.ValidateRun(c.Request.Context(), run)
 		if e != nil {
 			payload, _ := json.Marshal(map[string]any{"status": 409, "error": e.Error()})
@@ -140,7 +143,7 @@ func registerIdentityProbe(r *gin.Engine, h *handler.Handlers, svc *service.Mode
 		saveCtx, saveCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer saveCancel()
 		_ = svc.AppendProbe(saveCtx, id, encoded)
-	}, middleware.ClientRequestID(), handler.InboundEndpointMiddleware(), gin.HandlerFunc(auth), middleware.GroupModelAllowlist(), requireGroup, func(c *gin.Context) {
+	}, middleware.ClientRequestID(), opsLogger, handler.InboundEndpointMiddleware(), gin.HandlerFunc(auth), middleware.GroupModelAllowlist(), requireGroup, func(c *gin.Context) {
 		switch getGroupPlatform(c) {
 		case service.PlatformOpenAI, service.PlatformGrok, service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformMiniMax, service.PlatformOpenCodeGo:
 			h.OpenAIGateway.ChatCompletions(c)
@@ -150,8 +153,8 @@ func registerIdentityProbe(r *gin.Engine, h *handler.Handlers, svc *service.Mode
 	})
 	// This route is the only public identity callback. Keep capability/probe
 	// routes above private. Its own guard runs before ordinary Key billing.
-	r.POST("/internal/model-identity/:run/remote/v1/chat/completions", middleware.RequestBodyLimit(1<<20),
-		remoteIdentityProbe(svc), middleware.ClientRequestID(), handler.InboundEndpointMiddleware(), gin.HandlerFunc(auth),
+	r.POST("/internal/model-identity/:run/remote/v1/chat/completions", middleware.RequestBodyLimit(1<<20), identityProbeDeadline(),
+		remoteIdentityProbe(svc), middleware.ClientRequestID(), opsLogger, handler.InboundEndpointMiddleware(), gin.HandlerFunc(auth),
 		middleware.GroupModelAllowlist(), requireGroup, func(c *gin.Context) {
 			switch getGroupPlatform(c) {
 			case service.PlatformOpenAI, service.PlatformGrok, service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformMiniMax, service.PlatformOpenCodeGo:
@@ -160,6 +163,15 @@ func registerIdentityProbe(r *gin.Engine, h *handler.Handlers, svc *service.Mode
 				h.Gateway.ChatCompletions(c)
 			}
 		})
+}
+
+func identityProbeDeadline() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 180*time.Second)
+		defer cancel()
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+	}
 }
 
 func remoteIdentityProbe(svc *service.ModelIdentityService) gin.HandlerFunc {
@@ -182,8 +194,7 @@ func remoteIdentityProbe(svc *service.ModelIdentityService) gin.HandlerFunc {
 			}
 			return
 		}
-		if err := svc.ProbeSlot(c.Request.Context(), id, true); err != nil {
-			c.AbortWithStatus(http.StatusTooManyRequests)
+		if !waitIdentityProbeSlot(c, svc, id) {
 			return
 		}
 		defer func() {
@@ -191,6 +202,11 @@ func remoteIdentityProbe(svc *service.ModelIdentityService) gin.HandlerFunc {
 			defer cancel()
 			_ = svc.ProbeSlot(ctx, id, false)
 		}()
+		// Recheck the binding after waiting; queued requests cannot outlive cancellation.
+		if _, _, err := svc.AuthorizeRemote(c.Request.Context(), id, credential); err != nil {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
 		body, err := io.ReadAll(io.LimitReader(c.Request.Body, (1<<20)+1))
 		var input map[string]json.RawMessage
 		var model string
@@ -262,4 +278,15 @@ func remoteIdentityProbe(svc *service.ModelIdentityService) gin.HandlerFunc {
 		defer stop()
 		_ = svc.AppendProbe(saveCtx, id, encoded)
 	}
+}
+
+func waitIdentityProbeSlot(c *gin.Context, svc *service.ModelIdentityService, id int64) bool {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	if err := svc.WaitProbeSlot(ctx, id); err != nil {
+		c.Header("Retry-After", "2")
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": gin.H{"type": "rate_limit_error", "message": "Detection probe queue unavailable; retry later"}})
+		return false
+	}
+	return true
 }

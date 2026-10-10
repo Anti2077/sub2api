@@ -41,7 +41,7 @@ func RegisterGatewayRoutes(
 	requireGroupAnthropic := middleware.RequireGroupAssignment(settingService, middleware.AnthropicErrorWriter)
 	requireGroupGoogle := middleware.RequireGroupAssignment(settingService, middleware.GoogleErrorWriter)
 	if h.Admin != nil && h.Admin.ModelIdentity != nil {
-		registerIdentityProbe(r, h, h.Admin.ModelIdentity.Service(), apiKeyAuth, requireGroupAnthropic)
+		registerIdentityProbe(r, h, h.Admin.ModelIdentity.Service(), apiKeyAuth, requireGroupAnthropic, opsErrorLogger)
 	}
 
 	// 分组级模型白名单准入：在 apiKeyAuth 之后、compositeTarget 之前，

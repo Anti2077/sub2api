@@ -148,6 +148,9 @@ func RegisterAdminRoutes(
 func registerModelIdentityRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	r := admin.Group("/model-identity")
 	r.GET("/models", h.Admin.ModelIdentity.Models)
+	r.GET("/settings", h.Admin.ModelIdentity.Settings)
+	r.PUT("/settings", h.Admin.ModelIdentity.SaveSettings)
+	r.GET("/accounts", h.Admin.ModelIdentity.PlannedAccounts)
 	r.GET("/accounts/:id", h.Admin.ModelIdentity.Config)
 	r.PUT("/accounts/:id", h.Admin.ModelIdentity.SaveConfig)
 	r.GET("/accounts/:id/plans", h.Admin.ModelIdentity.Plans)
