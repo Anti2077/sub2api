@@ -6,6 +6,7 @@ export default {
   publicBaseURLHint: '填写 BazaarLink 能访问的本站 HTTPS 地址，不要填写官网 API 地址或 /v1。反向代理有路径前缀时请保留。保存后用于新启动的检测。',
   publicBaseURLRequired: '请先保存本站公网 Base URL，再启动检测。',
   settingsSaved: '连接设置已保存。',
+  settingsUnsaved: '未保存',
   manualTrigger: '手动触发',
   pausePlan:'暂停计划',
   detectedModel:'识别型号',engineVersion:'引擎版本',baselineVersion:'基准版本',evidence:'完整证据',targetAccount:'目标账号',upstreamModel:'上游模型',requestID:'请求标识',tokenUsage:'Token 用量',

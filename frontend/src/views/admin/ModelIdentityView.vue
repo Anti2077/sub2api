@@ -8,18 +8,18 @@
         </div>
         <div class="flex flex-wrap gap-2"><button class="btn btn-primary min-h-11" type="button" @click="openAddPlan"><Icon name="plus" size="sm" />{{ t('admin.modelIdentity.addPlan') }}</button><button class="btn btn-secondary min-h-11" type="button" :disabled="loading" @click="loadRows()"><Icon name="refresh" size="sm" />{{ t('common.refresh') }}</button></div>
       </header>
-      <details class="card" :open="Boolean(settingsError) || (!settingsLoading && !publicBaseURL)">
-        <summary class="flex min-h-12 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-semibold"><span>{{ t('admin.modelIdentity.connectionSettings') }}</span><span class="text-xs font-normal text-gray-500">{{ publicBaseURL ? t('admin.modelIdentity.settingsConfigured') : '' }}</span></summary>
+      <details class="card" :open="settingsOpen" @toggle="settingsOpen = ($event.target as HTMLDetailsElement).open">
+        <summary class="flex min-h-12 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-semibold"><span>{{ t('admin.modelIdentity.connectionSettings') }}</span><span class="text-xs font-normal text-gray-500">{{ publicBaseURL !== savedPublicBaseURL ? t('admin.modelIdentity.settingsUnsaved') : savedPublicBaseURL ? t('admin.modelIdentity.settingsConfigured') : '' }}</span></summary>
         <div class="border-t border-gray-200 p-4 dark:border-dark-700">
         <form class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end" @submit.prevent="saveConnectionSettings">
           <div class="min-w-0 flex-1">
             <label for="identity-base-url" class="text-sm font-medium">{{ t('admin.modelIdentity.publicBaseURL') }}</label>
-            <input id="identity-base-url" v-model="publicBaseURL" type="url" required maxlength="2048" class="input mt-1 min-h-11 w-full" placeholder="https://your-site.example.com" :disabled="settingsLoading || settingsSaving" :aria-invalid="Boolean(settingsError)" aria-describedby="identity-base-url-help identity-base-url-feedback" @input="settingsSaved = false" />
+            <input id="identity-base-url" v-model="publicBaseURL" type="url" required maxlength="2048" class="input mt-1 min-h-11 w-full" placeholder="https://your-site.example.com" :disabled="settingsLoading || settingsSaving" :aria-invalid="Boolean(settingsError)" aria-describedby="identity-base-url-help identity-base-url-feedback" @input="settingsSaved = false; settingsOpen = true; settingsError = ''" />
             <p id="identity-base-url-help" class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.modelIdentity.publicBaseURLHint') }}</p>
           </div>
           <button type="submit" class="btn btn-primary min-h-11 shrink-0" :disabled="settingsLoading || settingsSaving || !publicBaseURL.trim()">{{ settingsSaving ? t('common.saving') : t('common.save') }}</button>
         </form>
-        <p id="identity-base-url-feedback" :role="settingsError ? 'alert' : 'status'" class="mt-2 text-sm" :class="settingsError ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'">{{ settingsError || (settingsSaved ? t('admin.modelIdentity.settingsSaved') : (!settingsLoading && !publicBaseURL ? t('admin.modelIdentity.publicBaseURLRequired') : '')) }}</p>
+        <p id="identity-base-url-feedback" :role="settingsError ? 'alert' : 'status'" class="mt-2 text-sm" :class="settingsError ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'">{{ settingsError || (settingsSaved ? t('admin.modelIdentity.settingsSaved') : (!settingsLoading && !savedPublicBaseURL ? t('admin.modelIdentity.publicBaseURLRequired') : '')) }}</p>
         </div>
       </details>
       <p v-if="loadError" role="alert" class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">{{ loadError }}</p>
@@ -153,6 +153,7 @@ const addUserID = ref(0), addGroupID = ref(0), addDraft = ref({ request_model: '
 let accountSearchVersion = 0, addFormVersion = 0, userSearchVersion = 0
 const loading = ref(false), loadError = ref(''), query = ref(''), statusFilter = ref('all')
 const publicBaseURL = ref(''), settingsLoading = ref(true), settingsSaving = ref(false), settingsError = ref(''), settingsSaved = ref(false)
+const savedPublicBaseURL = ref(''), settingsOpen = ref(true)
 const page = ref(1), total = ref(0), pageSize = 20
 const expandedRows = ref(new Set<number>()), actionBusy = ref(0)
 const reportOpen = ref(false), reportLoading = ref(false), reportError = ref(''), selectedReport = ref<identityAPI.IdentityRun | null>(null)
@@ -183,14 +184,15 @@ function statusLabel(status: IdentityStatus) { return t(`admin.modelIdentity.${s
 function message(error: unknown) { return error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error) }
 async function loadConnectionSettings() {
   settingsLoading.value = true; settingsError.value = ''
-  try { publicBaseURL.value = (await identityAPI.settings()).public_base_url }
-  catch (error) { settingsError.value = message(error) }
+  try { publicBaseURL.value = savedPublicBaseURL.value = (await identityAPI.settings()).public_base_url; settingsOpen.value = !savedPublicBaseURL.value }
+  catch (error) { settingsError.value = message(error); settingsOpen.value = true }
   finally { settingsLoading.value = false }
 }
 async function saveConnectionSettings() {
+  if (settingsLoading.value || settingsSaving.value || !publicBaseURL.value.trim()) return
   settingsSaving.value = true; settingsError.value = ''; settingsSaved.value = false
-  try { publicBaseURL.value = (await identityAPI.saveSettings({ public_base_url: publicBaseURL.value.trim() })).public_base_url; settingsSaved.value = true }
-  catch (error) { settingsError.value = message(error) }
+  try { publicBaseURL.value = savedPublicBaseURL.value = (await identityAPI.saveSettings({ public_base_url: publicBaseURL.value.trim() })).public_base_url; settingsSaved.value = true }
+  catch (error) { settingsError.value = message(error); settingsOpen.value = true }
   finally { settingsSaving.value = false }
 }
 function formatTime(value?: string) { return value ? new Date(value).toLocaleString(locale.value === 'zh' ? 'zh-CN' : 'en-US', { hour12: false }) : '—' }

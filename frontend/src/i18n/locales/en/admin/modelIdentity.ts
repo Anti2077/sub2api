@@ -6,6 +6,7 @@ export default {
   publicBaseURLHint: 'Enter this site’s public HTTPS address accessible to BazaarLink, without /v1. Include a reverse proxy path prefix if needed. Do not enter the BazaarLink API URL. Saved settings apply to newly started detections.',
   publicBaseURLRequired: 'Save the public Base URL before starting a detection.',
   settingsSaved: 'Connection settings saved.',
+  settingsUnsaved: 'Unsaved changes',
   manualTrigger: 'Run manually',
   pausePlan:'Pause plan',
   detectedModel:'Detected model',engineVersion:'Engine version',baselineVersion:'Baseline version',evidence:'Full evidence',targetAccount:'Target account',upstreamModel:'Upstream model',requestID:'Request ID',tokenUsage:'Token usage',
