@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
@@ -262,10 +263,16 @@ func (r *ModelIdentityRunner) executeRemote(ctx context.Context, run *IdentityRu
 }
 
 func identityRunHTTPClient() *http.Client {
-	return &http.Client{Timeout: 20 * time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error {
-		// Run bodies contain a credential; never resend them to a redirect target.
-		return http.ErrUseLastResponse
-	}}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, MaxVersion: tls.VersionTLS12}
+	return &http.Client{
+		Timeout: 20 * time.Minute,
+		Transport: transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			// Run bodies contain a credential; never resend them to a redirect target.
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
 func remoteRunStatus(report map[string]any) string {

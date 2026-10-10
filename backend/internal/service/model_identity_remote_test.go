@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -27,6 +28,16 @@ func TestRemoteRunStatus(t *testing.T) {
 		t.Run(test.status, func(t *testing.T) {
 			require.Equal(t, test.want, remoteRunStatus(map[string]any{"status": test.status}))
 		})
+	}
+}
+
+func TestIdentityHTTPClientsUseTLS12ForHostedProbe(t *testing.T) {
+	for _, client := range []*http.Client{identityRemoteCatalogClient(), identityRunHTTPClient()} {
+		transport, ok := client.Transport.(*http.Transport)
+		require.True(t, ok)
+		require.NotNil(t, transport.TLSClientConfig)
+		require.Equal(t, uint16(tls.VersionTLS12), transport.TLSClientConfig.MinVersion)
+		require.Equal(t, uint16(tls.VersionTLS12), transport.TLSClientConfig.MaxVersion)
 	}
 }
 
