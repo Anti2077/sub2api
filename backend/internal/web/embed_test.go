@@ -653,11 +653,11 @@ func TestFrontendServer_Middleware(t *testing.T) {
 
 		// Request for existing static file
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/logo.png", nil)
+		req := httptest.NewRequest(http.MethodGet, "/logo.svg", nil)
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Header().Get("Content-Type"), "image/png")
+		assert.Contains(t, w.Header().Get("Content-Type"), "image/svg+xml")
 		assert.Empty(t, w.Header().Get("Cache-Control"))
 
 		entries, err := fs.ReadDir(server.distFS, "assets")
@@ -679,6 +679,44 @@ func TestFrontendServer_Middleware(t *testing.T) {
 		assert.Equal(t, http.StatusOK, assetWriter.Code)
 		assert.Equal(t, staticAssetsCacheControl, assetWriter.Header().Get("Cache-Control"))
 	})
+}
+
+func TestEmbeddedFrontendPreservesIdentityCallbackAuthentication(t *testing.T) {
+	server, err := NewFrontendServer(&mockSettingsProvider{settings: map[string]string{}})
+	require.NoError(t, err)
+	for name, frontend := range map[string]gin.HandlerFunc{"settings": server.Middleware(), "legacy": ServeEmbeddedFrontend()} {
+		t.Run(name, func(t *testing.T) {
+			router := gin.New()
+			router.Use(frontend)
+			router.POST("/internal/model-identity/:run/remote/v1/chat/completions", func(c *gin.Context) {
+				if c.GetHeader("Authorization") != "Bearer fixture-only" {
+					c.AbortWithStatus(http.StatusUnauthorized)
+					return
+				}
+				c.JSON(http.StatusOK, gin.H{"choices": []gin.H{{"message": gin.H{"content": "fixture response"}}}})
+			})
+			for _, authenticated := range []bool{false, true} {
+				req := httptest.NewRequest(http.MethodPost, "/internal/model-identity/2/remote/v1/chat/completions", strings.NewReader(`{"model":"fixture"}`))
+				if authenticated {
+					req.Header.Set("Authorization", "Bearer fixture-only")
+				}
+				w := httptest.NewRecorder()
+				router.ServeHTTP(w, req)
+				if authenticated {
+					require.Equal(t, http.StatusOK, w.Code)
+					require.Contains(t, w.Header().Get("Content-Type"), "application/json")
+					require.Contains(t, w.Body.String(), "fixture response")
+				} else {
+					require.Equal(t, http.StatusUnauthorized, w.Code)
+				}
+				require.NotContains(t, w.Header().Get("Content-Type"), "text/html")
+			}
+		})
+	}
+	for _, path := range []string{"/internal/model-identity/2/capability", "/internal/model-identity/2/probe"} {
+		require.True(t, shouldBypassEmbeddedFrontend(path))
+	}
+	require.False(t, shouldBypassEmbeddedFrontend("/internal/model-identity-demo"))
 }
 
 func TestEmbeddedFrontendBypassesBareVideoAPIRoutes(t *testing.T) {
@@ -772,11 +810,11 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 		router.Use(middleware)
 
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/logo.png", nil)
+		req := httptest.NewRequest(http.MethodGet, "/logo.svg", nil)
 		router.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Header().Get("Content-Type"), "image/png")
+		assert.Contains(t, w.Header().Get("Content-Type"), "image/svg+xml")
 	})
 
 	t.Run("serves_index_html_for_root", func(t *testing.T) {

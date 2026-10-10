@@ -42,6 +42,14 @@ const fs = require('node:fs');
   const worker = await fetch('http://127.0.0.1:8081/models').then(r => r.json());
   assert.equal(worker.engine_commit, '5c41136741ca52b5637879cca7bd0cae07404646');
   assert.ok(worker.models.length > 0);
+  // Embedded frontend middleware must not turn protected callbacks into HTML.
+  for (const path of ['/internal/model-identity/0/remote/v1/chat/completions', '/internal/model-identity/0/probe']) {
+    const callback = await fetch(`http://127.0.0.1:8080${path}`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}',
+    });
+    assert.equal(callback.status, 401, `unauthenticated callback must reach its guard: ${path}`);
+    assert.ok(!(callback.headers.get('Content-Type') || '').includes('text/html'));
+  }
   const login = await fetch('http://127.0.0.1:8080/api/v1/auth/login', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({email: 'admin@example.test', password: 'LocalSmokePassword123'}),
