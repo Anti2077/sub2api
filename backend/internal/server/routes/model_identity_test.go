@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,9 +23,11 @@ import (
 
 type identityRouteRepo struct {
 	service.IdentityRepository
-	run    *service.IdentityRun
-	token  string
-	probes []json.RawMessage
+	run      *service.IdentityRun
+	token    string
+	probes   []json.RawMessage
+	mu       sync.Mutex
+	inflight int
 }
 
 func (r *identityRouteRepo) Authorize(_ context.Context, id int64, hash string, _ time.Time) (*service.IdentityRun, error) {
@@ -33,8 +36,28 @@ func (r *identityRouteRepo) Authorize(_ context.Context, id int64, hash string, 
 	}
 	return r.run, nil
 }
-func (r *identityRouteRepo) ProbeSlot(context.Context, int64, bool) error { return nil }
+func (r *identityRouteRepo) Run(_ context.Context, id int64) (*service.IdentityRun, error) {
+	if id != r.run.ID {
+		return nil, errors.New("not found")
+	}
+	return r.run, nil
+}
+func (r *identityRouteRepo) ProbeSlot(_ context.Context, _ int64, acquire bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if acquire {
+		if r.inflight >= 4 {
+			return errors.New("slots full")
+		}
+		r.inflight++
+	} else {
+		r.inflight--
+	}
+	return nil
+}
 func (r *identityRouteRepo) AppendProbe(_ context.Context, _ int64, p json.RawMessage) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.probes = append(r.probes, p)
 	return nil
 }
@@ -54,7 +77,9 @@ type identityRouteKeyRepo struct {
 }
 
 func (r *identityRouteKeyRepo) GetByID(context.Context, int64) (*service.APIKey, error) {
-	return r.k, nil
+	// Real repository reads return a fresh Key; derived fields are request-local.
+	key := *r.k
+	return &key, nil
 }
 
 type identityRouteUserRepo struct{ service.UserRepository }
@@ -167,4 +192,103 @@ func TestIdentityAdminRoutesRejectUnauthenticatedAndOrdinaryUsers(t *testing.T) 
 			require.Equal(t, http.StatusForbidden, w.Code)
 		}
 	}
+}
+
+func remoteIdentityFixture() (*service.ModelIdentityService, *identityRouteRepo, *identityRouteKeyRepo, *identityRouteAccountRepo) {
+	group := int64(7)
+	now := time.Now()
+	repo := &identityRouteRepo{run: &service.IdentityRun{ID: 1, AccountID: 42, UserID: 5, GroupID: 7, APIKeyID: 9, Status: "running", StartedAt: &now, RequestModel: "public-model"}}
+	keys := &identityRouteKeyRepo{k: &service.APIKey{ID: 9, UserID: 5, GroupID: &group, Status: service.StatusActive, Key: "private-test-key"}}
+	accounts := &identityRouteAccountRepo{a: &service.Account{ID: 42, Platform: service.PlatformOpenAI, GroupIDs: []int64{7}}}
+	api := service.NewAPIKeyService(keys, &identityRouteUserRepo{}, &identityRouteGroupRepo{}, nil, nil, nil, &config.Config{})
+	return service.NewModelIdentityService(repo, api, accounts), repo, keys, accounts
+}
+
+func TestIdentityRemoteCallbackPinsAndRecordsWithoutCredentials(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc, repo, keys, accounts := remoteIdentityFixture()
+	router := gin.New()
+	forwarded := 0
+	auth := middleware.APIKeyAuthMiddleware(func(c *gin.Context) {
+		account, group, pinned := service.IdentityTargetFromContext(c.Request.Context())
+		require.True(t, pinned)
+		require.EqualValues(t, 42, account)
+		require.EqualValues(t, 7, group)
+		require.Empty(t, c.GetHeader("X-Account-ID"))
+		service.RecordIdentityEvidence(c.Request.Context(), account, "mapped-upstream", "upstream-id")
+		forwarded++
+		c.AbortWithStatusJSON(200, gin.H{"choices": []gin.H{{"message": gin.H{"content": "private-test-key echoed"}}}, "usage": gin.H{"prompt_tokens": 8, "completion_tokens": 3}})
+	})
+	registerIdentityProbe(router, &handler.Handlers{}, svc, auth, func(*gin.Context) {})
+	request := func(id, key, body string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/internal/model-identity/"+id+"/remote/v1/chat/completions", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+key)
+		req.Header.Set("X-Account-ID", "43")
+		router.ServeHTTP(w, req)
+		return w
+	}
+	body := `{"model":"public-model","messages":[{"role":"user","content":"hi"}],"account_id":43,"group_id":8,"stream":false}`
+	require.Equal(t, 200, request("1", "private-test-key", body).Code)
+	require.Equal(t, 1, forwarded)
+	require.Len(t, repo.probes, 1)
+	require.Contains(t, string(repo.probes[0]), `"target_account_id":42`)
+	require.Contains(t, string(repo.probes[0]), "mapped-upstream")
+	require.Contains(t, string(repo.probes[0]), "upstream-id")
+	require.Contains(t, string(repo.probes[0]), "prompt_tokens")
+	require.NotContains(t, string(repo.probes[0]), "private-test-key")
+	require.Equal(t, 401, request("2", "private-test-key", body).Code)
+	require.Equal(t, 401, request("1", "other-account-key", body).Code)
+	require.Equal(t, 400, request("1", "private-test-key", `{"model":"another-model"}`).Code)
+	require.Equal(t, 400, request("1", "private-test-key", `{"model":"public-model","max_tokens":9000}`).Code)
+	keys.k.Status = service.StatusAPIKeyDisabled
+	require.Equal(t, 409, request("1", "private-test-key", body).Code)
+	keys.k.Status = service.StatusActive
+	accounts.a.GroupIDs = nil
+	require.Equal(t, 409, request("1", "private-test-key", body).Code)
+	accounts.a.GroupIDs = []int64{7}
+	expired := time.Now().Add(-21 * time.Minute)
+	repo.run.StartedAt = &expired
+	require.Equal(t, 401, request("1", "private-test-key", body).Code)
+	now := time.Now()
+	repo.run.StartedAt = &now
+	repo.run.Status = "cancelling"
+	require.Equal(t, 401, request("1", "private-test-key", body).Code)
+	require.Equal(t, 1, forwarded)
+}
+
+func TestIdentityRemoteCallbackLimitsConcurrentProbes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc, repo, _, _ := remoteIdentityFixture()
+	router := gin.New()
+	entered := make(chan struct{}, 4)
+	release := make(chan struct{})
+	defer close(release)
+	router.POST("/internal/model-identity/:run/remote/v1/chat/completions", remoteIdentityProbe(svc), func(c *gin.Context) { entered <- struct{}{}; <-release; c.JSON(200, gin.H{"ok": true}) })
+	request := func() int {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/internal/model-identity/1/remote/v1/chat/completions", strings.NewReader(`{"model":"public-model","messages":[]}`))
+		req.Header.Set("Authorization", "Bearer private-test-key")
+		router.ServeHTTP(w, req)
+		return w.Code
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); request() }()
+	}
+	for i := 0; i < 4; i++ {
+		select {
+		case <-entered:
+		case <-time.After(3 * time.Second):
+			t.Fatal("probe did not acquire a slot")
+		}
+	}
+	require.Equal(t, 429, request())
+	for i := 0; i < 4; i++ {
+		release <- struct{}{}
+	}
+	wg.Wait()
+	require.Equal(t, 0, repo.inflight)
+	require.Len(t, repo.probes, 4)
 }

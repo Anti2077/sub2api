@@ -64,6 +64,7 @@ async function supervise({
         ...env,
         MODEL_IDENTITY_ENGINE_URL: env.MODEL_IDENTITY_ENGINE_URL || engine,
         MODEL_IDENTITY_CALLBACK_URL: env.MODEL_IDENTITY_CALLBACK_URL || callback,
+        MODEL_IDENTITY_REMOTE_API_URL: env.MODEL_IDENTITY_REMOTE_API_URL || 'https://bazaarlink.ai/api/probe/run',
       });
     }
     return await finished;

@@ -9,11 +9,12 @@ import (
 const IdentityEngineCommit = "5c41136741ca52b5637879cca7bd0cae07404646"
 
 type IdentityConfig struct {
-	AccountID int64  `json:"account_id"`
-	UserID    int64  `json:"user_id"`
-	GroupID   int64  `json:"group_id"`
-	APIKeyID  int64  `json:"api_key_id"`
-	KeyName   string `json:"key_name"`
+	AccountID          int64  `json:"account_id"`
+	UserID             int64  `json:"user_id"`
+	GroupID            int64  `json:"group_id"`
+	APIKeyID           int64  `json:"api_key_id"`
+	KeyName            string `json:"key_name"`
+	ConfigurationError string `json:"configuration_error,omitempty"`
 }
 type IdentityPlan struct {
 	ID              int64      `json:"id"`

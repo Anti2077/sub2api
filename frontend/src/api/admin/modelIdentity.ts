@@ -1,7 +1,7 @@
 import { apiClient } from '../client'
 
 export interface IdentityModel { id: string; name: string; family: string }
-export interface IdentityConfig { account_id: number; user_id: number; group_id: number; api_key_id: number; key_name: string }
+export interface IdentityConfig { account_id: number; user_id: number; group_id: number; api_key_id: number; key_name: string; configuration_error?: string }
 export interface IdentityPlan { id: number; account_id: number; request_model: string; expected_model: string; interval_minutes: number; enabled: boolean; last_run_at?: string; next_run_at?: string }
 export interface IdentityProbe { probe_id?: string; status?: number; target_account_id?: number; request_model?: string; prompt?: string; error?: string; evidence?: {upstream_model?: string; request_id?: string}; response?: {usage?: Record<string,unknown>} }
 export interface IdentityRun { id: number; plan_id: number; status: string; expected_model: string; request_model: string; report?: Record<string, unknown>; probes?: IdentityProbe[]; probe_count?: number; created_at: string }

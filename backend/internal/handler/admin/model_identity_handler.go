@@ -1,6 +1,8 @@
 package admin
 
 import (
+	"database/sql"
+	"errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -29,7 +31,7 @@ func (h *ModelIdentityHandler) Models(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"engine_commit": service.IdentityEngineCommit, "models": models})
+	c.JSON(http.StatusOK, gin.H{"engine_commit": h.svc.EngineCommit(), "models": models})
 }
 func (h *ModelIdentityHandler) Config(c *gin.Context) {
 	v, ok := id(c)
@@ -38,7 +40,11 @@ func (h *ModelIdentityHandler) Config(c *gin.Context) {
 	}
 	x, e := h.svc.Config(c, v)
 	if e != nil {
-		response.NotFound(c, "identity configuration not found")
+		if errors.Is(e, sql.ErrNoRows) {
+			response.NotFound(c, "identity configuration not found")
+		} else {
+			response.InternalError(c, "could not read identity configuration")
+		}
 		return
 	}
 	c.JSON(http.StatusOK, x)

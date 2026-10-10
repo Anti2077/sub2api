@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"io"
 	"net/http"
 	"os"
@@ -22,13 +22,29 @@ type ModelIdentityService struct {
 	apiKeys   *APIKeyService
 	accounts  AccountRepository
 	engineURL string
+	remoteURL string
+	publicURL string
 	client    *http.Client
 }
 
 func NewModelIdentityService(repo IdentityRepository, apiKeys *APIKeyService, accounts AccountRepository) *ModelIdentityService {
-	return &ModelIdentityService{repo: repo, apiKeys: apiKeys, accounts: accounts, engineURL: strings.TrimRight(os.Getenv("MODEL_IDENTITY_ENGINE_URL"), "/"), client: &http.Client{Timeout: 10 * time.Second}}
+	return &ModelIdentityService{repo: repo, apiKeys: apiKeys, accounts: accounts,
+		engineURL: strings.TrimRight(os.Getenv("MODEL_IDENTITY_ENGINE_URL"), "/"),
+		remoteURL: strings.TrimRight(os.Getenv("MODEL_IDENTITY_REMOTE_API_URL"), "/"),
+		publicURL: strings.TrimRight(os.Getenv("MODEL_IDENTITY_PUBLIC_BASE_URL"), "/"),
+		client:    &http.Client{Timeout: 10 * time.Second}}
 }
+func (s *ModelIdentityService) EngineCommit() string {
+	if s.remoteURL != "" {
+		return "bazaarlink-online"
+	}
+	return IdentityEngineCommit
+}
+
 func (s *ModelIdentityService) Models(ctx context.Context) ([]IdentityModel, error) {
+	if s.remoteURL != "" {
+		return s.remoteModels(ctx)
+	}
 	if s.engineURL == "" {
 		return nil, errors.New("MODEL_IDENTITY_ENGINE_URL is not configured")
 	}
@@ -49,6 +65,43 @@ func (s *ModelIdentityService) Models(ctx context.Context) ([]IdentityModel, err
 		return nil, errors.New("identity engine version mismatch or invalid catalog")
 	}
 	return catalog.Models, nil
+}
+
+func (s *ModelIdentityService) remoteModels(ctx context.Context) ([]IdentityModel, error) {
+	u, err := http.NewRequestWithContext(ctx, http.MethodGet, remoteBaselinesURL(s.remoteURL), nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := s.client.Do(u)
+	if err != nil {
+		return nil, errors.New("BazaarLink Probe API unavailable")
+	}
+	defer func() { _ = res.Body.Close() }()
+	var payload struct {
+		Models []string `json:"models"`
+	}
+	if res.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&payload) != nil {
+		return nil, errors.New("invalid BazaarLink baseline catalog")
+	}
+	models := make([]IdentityModel, 0, len(payload.Models))
+	for _, id := range payload.Models {
+		family := id
+		if i := strings.IndexByte(family, '/'); i >= 0 {
+			family = family[:i]
+		}
+		models = append(models, IdentityModel{ID: id, Name: id, Family: family})
+	}
+	return models, nil
+}
+
+func remoteBaselinesURL(remote string) string {
+	u, err := http.NewRequest(http.MethodGet, remote, nil)
+	if err != nil {
+		return strings.TrimRight(remote, "/") + "/../baselines"
+	}
+	u.URL.Path = strings.TrimSuffix(u.URL.Path, "/run") + "/baselines"
+	u.URL.RawQuery = ""
+	return u.URL.String()
 }
 func identityAccountInGroup(a *Account, g int64) bool {
 	for _, x := range a.AccountGroups {
@@ -90,7 +143,6 @@ func (s *ModelIdentityService) Configure(ctx context.Context, accountID, userID,
 		return nil, e
 	}
 	name := fmt.Sprintf("模型身份测试专用｜%s｜%s (#%d)", g.Name, a.Name, a.ID)
-	name = html.EscapeString(name)
 	if len([]rune(name)) > 100 {
 		return nil, errors.New("dedicated Key name exceeds 100 characters; shorten the account or group name")
 	}
@@ -135,7 +187,31 @@ func (s *ModelIdentityService) ValidateRun(ctx context.Context, r *IdentityRun) 
 	return k, nil
 }
 func (s *ModelIdentityService) Config(ctx context.Context, id int64) (*IdentityConfig, error) {
-	return s.repo.Config(ctx, id)
+	c, err := s.repo.Config(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.ValidateRun(ctx, &IdentityRun{AccountID: c.AccountID, UserID: c.UserID, GroupID: c.GroupID, APIKeyID: c.APIKeyID}); err != nil {
+		c.ConfigurationError = err.Error()
+	}
+	return c, nil
+}
+
+// AuthorizeRemote binds the permanent test Key to a currently leased run.
+// The public callback never accepts a client-selected account or group.
+func (s *ModelIdentityService) AuthorizeRemote(ctx context.Context, id int64, credential string) (*IdentityRun, *APIKey, error) {
+	run, err := s.repo.Run(ctx, id)
+	if err != nil || run == nil || run.Status != "running" || run.StartedAt == nil || !time.Now().Before(run.StartedAt.Add(20*time.Minute)) {
+		return nil, nil, errors.New("detection run inactive or expired")
+	}
+	key, err := s.apiKeys.GetByID(ctx, run.APIKeyID)
+	if err != nil || key == nil || len(credential) == 0 || subtle.ConstantTimeCompare([]byte(HashIdentityToken(key.Key)), []byte(HashIdentityToken(credential))) != 1 {
+		return nil, nil, errors.New("invalid dedicated test Key")
+	}
+	if _, err := s.ValidateRun(ctx, run); err != nil {
+		return run, key, err
+	}
+	return run, key, nil
 }
 func (s *ModelIdentityService) Plans(ctx context.Context, id int64) ([]IdentityPlan, error) {
 	return s.repo.Plans(ctx, id)
@@ -146,6 +222,17 @@ func (s *ModelIdentityService) SavePlan(ctx context.Context, p *IdentityPlan) er
 	}
 	if p.IntervalMinutes < 15 || p.IntervalMinutes > 10080 {
 		return errors.New("interval must be 15 minutes to 7 days")
+	}
+	if p.ID != 0 {
+		existing, err := s.repo.Plan(ctx, p.ID)
+		if err != nil {
+			return err
+		}
+		p.AccountID = existing.AccountID
+		// Pausing an unchanged plan must work even if its Key or the catalog is unavailable.
+		if !p.Enabled && p.RequestModel == existing.RequestModel && p.ExpectedModel == existing.ExpectedModel && p.IntervalMinutes == existing.IntervalMinutes {
+			return s.repo.SavePlan(ctx, p, time.Now())
+		}
 	}
 	models, e := s.Models(ctx)
 	if e != nil {
@@ -158,17 +245,10 @@ func (s *ModelIdentityService) SavePlan(ctx context.Context, p *IdentityPlan) er
 		}
 	}
 	if !valid {
-		return errors.New("expected model is not supported by the pinned identity engine")
+		return errors.New("expected model is not supported by the current identity baseline catalog")
 	}
 	if strings.TrimSpace(p.RequestModel) == "" || len(p.RequestModel) > 256 {
 		return errors.New("request model is required and must be at most 256 bytes")
-	}
-	if p.ID != 0 {
-		existing, e := s.repo.Plan(ctx, p.ID)
-		if e != nil {
-			return e
-		}
-		p.AccountID = existing.AccountID
 	}
 	c, e := s.repo.Config(ctx, p.AccountID)
 	if e != nil {
@@ -183,7 +263,7 @@ func (s *ModelIdentityService) DeletePlan(ctx context.Context, id int64) error {
 	return s.repo.DeletePlan(ctx, id)
 }
 func (s *ModelIdentityService) Enqueue(ctx context.Context, id int64) (*IdentityRun, error) {
-	if s.engineURL == "" {
+	if s.engineURL == "" && s.remoteURL == "" {
 		return nil, errors.New("identity engine is not configured")
 	}
 	p, e := s.repo.Plan(ctx, id)

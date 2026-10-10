@@ -347,6 +347,7 @@ export default {
   // Navigation
   nav: {
     dashboard: 'Dashboard',
+    modelIdentity: 'Model identity',
     personalDashboard: 'Personal Dashboard',
     announcements: 'Announcements',
     apiKeys: 'API Keys',

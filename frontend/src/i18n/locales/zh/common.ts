@@ -347,6 +347,7 @@ export default {
   // Navigation
   nav: {
     dashboard: '仪表盘',
+    modelIdentity: '模型身份',
     personalDashboard: '个人仪表盘',
     announcements: '公告',
     apiKeys: 'API 密钥',

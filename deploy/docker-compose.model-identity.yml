@@ -5,3 +5,6 @@ services:
     environment:
       MODEL_IDENTITY_ENGINE_URL: http://127.0.0.1:8081
       MODEL_IDENTITY_CALLBACK_URL: http://127.0.0.1:8080
+      MODEL_IDENTITY_REMOTE_API_URL: ${MODEL_IDENTITY_REMOTE_API_URL:-https://bazaarlink.ai/api/probe/run}
+      # Must be the public HTTPS origin used by BazaarLink to call this site.
+      MODEL_IDENTITY_PUBLIC_BASE_URL: ${MODEL_IDENTITY_PUBLIC_BASE_URL:-}

@@ -1,69 +1,120 @@
 # Account model identity
 
-The custom Sub2API image includes this worker and Node 24. Updating the one
-Sub2API container starts both services automatically; no separate worker
-image, container or environment variables are required. Build from the custom
-source or use `ghcr.io/anti2077/sub2api:custom`, not an upstream image.
+## One image, hosted detection
 
-The worker requires Node 24. Its locked dependencies use pnpm 9.15.9:
+Use the custom Sub2API image built from this repository, or
+`ghcr.io/anti2077/sub2api:custom`. There is one application container and no
+extra detection image or public worker port. Node 24 and the legacy AGPL
+worker remain bundled for compatibility; the default container detection
+mode now calls BazaarLink's hosted Probe API from Go. The frontend never
+receives or sends the permanent test Key.
+
+Pass these variables to the application container (putting them in a Compose
+`.env` alone does not pass them to the container):
+
+```dotenv
+MODEL_IDENTITY_REMOTE_API_URL=https://bazaarlink.ai/api/probe/run
+MODEL_IDENTITY_PUBLIC_BASE_URL=https://your-public-host.example.com
+```
+
+The remote API default is injected by the single-image supervisor. The public
+base URL is required and must be your public HTTPS site origin. A path prefix
+is supported when the reverse proxy preserves it. Do not include credentials,
+query parameters, or a fragment. BazaarLink rejects private destinations.
+For Compose, add these variables to `services.sub2api.environment`, or apply
+`deploy/docker-compose.model-identity.yml` as an overlay to the existing
+Compose file and project. That overlay does not create a second service.
+Keep existing production data paths and image tags when upgrading.
+
+Allow **POST** requests to
+`/internal/model-identity/<run-id>/remote/v1/chat/completions` through the public
+reverse proxy. Keep all other `/internal/model-identity/` paths private. The
+public callback requires the exact dedicated test Key bound to a running,
+unexpired detection. It fixes the account, group and request model on the
+server; neither headers nor request fields can select another account. It
+validates the current binding before ordinary gateway authentication, billing,
+limits, model mapping and forwarding. A failed target never switches accounts
+or groups. Disabling/deleting the Key or moving the account out of its group
+stops further probes. In-flight probes check cancellation every second.
+
+BazaarLink receives the **permanent dedicated test Key** in its HTTPS request
+body. This is the chosen integration mode, not a short-lived credential.
+Responses redact credential fields and embedded occurrences of that Key before
+storage; headers such as Authorization, Cookie and X-API-Key are redacted.
+The original upstream credentials stay in Sub2API. Do not log request bodies
+sent to the remote API. Tests of real upstreams incur normal gateway charges.
+
+## Administrator workflow
+
+Open **Model identity** in the admin sidebar, at `/admin/model-identity`.
+The matrix lists accounts, the latest expected/recognized model and status,
+recent five result/time chips, next schedule and dedicated Key binding.
+Click a result chip to read its stored report. Expand history to see request
+models, expected models, recognized models, full timestamps and errors.
+The mobile view uses account cards. Summary counts cover the current page.
+API failures show errors and never substitute simulated accounts or results.
+
+Choose **Configuration & plans** for an account. Search for an existing test
+user, choose one compatible account group, and save. The user's existing
+permissions, balance, subscriptions and limits apply. No permission grant or
+balance top-up happens automatically. The dedicated Key is reused and named
+`模型身份测试专用｜分组名称｜账号名称 (#账号ID)`, visible in normal Usage records.
+Deleted/disabled/expired/exhausted/rebound Keys must be repaired; no silent
+replacement is created.
+
+Add one or more request-model / expected-model plans. Expected models come
+from the hosted `/api/probe/baselines` catalog, including GPT-6 only when it
+appears in that current catalog. Schedules start disabled with a default of
+120 minutes; 15–10080 minutes is supported. Manual runs do not shift cadence.
+Go scans due plans every minute, with database leases/atomic claims for two
+global concurrent accounts. Each run permits four concurrent probe requests,
+180 seconds per request and 20 minutes in total. Restart skips missed slots
+with at most one catch-up per plan. Each plan retains 50 terminal reports.
+
+Only a completed remote `clean_match` with a recognized model equal to the
+expected model is an identity match. Family-only, ambiguous, insufficient or
+off-baseline results without a specific recognized model stay inconclusive.
+Confirmed different models are mismatches. Request failures, configuration
+errors, cancellations, timeouts and remote service failures are separate
+lifecycle states, not model mismatches. Tests do not automatically disable or
+recover upstream accounts.
+
+The hosted API's legacy `identityOnly` flag is ignored by its documented
+contract. We request fingerprint analysis and disable the optional context-size
+check; the remaining probe phases are managed by BazaarLink. No composite IQ
+score is displayed. Stored reports retain the upstream assessment, warnings,
+per-question responses, usage and classifier diagnostics. The hosted API does
+not promise a fixed engine commit or baseline version; absent versions are
+shown as unavailable, not copied from the legacy bundled worker.
+
+BazaarLink currently documents 30 run requests per IP per hour. Plan volume
+accordingly; a 429 or remote outage is recorded as a service error rather than
+retried indefinitely or interpreted as identity mismatch. Contract reference:
+<https://bazaarlink.ai/probe-api-skill.md>.
+
+## Build and verify
+
+```sh
+docker compose --env-file deploy/.env -f deploy/docker-compose.dev.yml build sub2api
+```
+
+This builds the source image and does not change a running deployment. Startup
+applies the existing identity database migration. The supervisor binds the
+legacy worker to loopback only; normal CLI `--help`, `--version` and `--setup`
+bypass it. Preserve the bundled engine's AGPL license, NOTICE and corresponding
+source when distributing the image; see `NOTICE.md`.
+
+For the legacy source build, use Node 24 and pnpm 9.15.9:
 
 ```sh
 cd identity-engine
-corepack prepare pnpm@9.15.9 --activate
 pnpm install --frozen-lockfile
 pnpm build
 pnpm test
-pnpm exec vitest run --root vendor/bazaarlink
+pnpm test:engine
 ```
 
-The container supervisor starts the worker, waits for its supported-model
-catalog, and then starts Go. Both run as the existing non-root UID 1000.
-The worker listens only on `127.0.0.1:8081`; Go defaults to that engine URL
-and the callback defaults to `http://127.0.0.1:${SERVER_PORT:-8080}`. Do not
-publish 8081. Remove any old `http://model-identity:8081` override when updating.
-Normal CLI commands such as `--version`, `--help` and `--setup` bypass the
-supervisor. On SIGTERM both services receive a graceful shutdown; after ten
-seconds remaining children are killed. If either service unexpectedly exits,
-the container exits with a failure so its existing restart policy restarts
-both. Tini reaps child processes and forwards container signals.
-
-The old `deploy/docker-compose.model-identity.yml` is now an optional
-compatibility overlay with loopback addresses and no additional service.
-Use the existing Compose project, file and data paths when upgrading. Existing
-image auto-update scripts continue updating the same Sub2API image tag.
-Reverse proxies should deny `/internal/model-identity/` from public ingress;
-the route additionally requires a random, expiring run capability.
-
-```sh
-docker compose --env-file deploy/.env \
-  -f deploy/docker-compose.dev.yml build sub2api
-```
-
-This command builds the single source image only. Starting or updating the
-production deployment is a separate operation. The normal backend startup
-applies the database migration, which creates three new tables.
-No existing account is recovered or disabled by identity tests.
-
-In Accounts, open Model identity, select an existing test user and a compatible
-billing group, and save the configuration. The user's normal permissions,
-balance, subscriptions and request limits apply. One permanent dedicated Key
-is retained per account, with a descriptive name visible in Usage. Repair
-that same Key if deleted/disabled/expired/exhausted/rebound; tests never replace
-it. Multiple plans may use distinct request and expected model names. Schedules
-start disabled; the default interval is 120 minutes (15–10080 supported).
-
-The Go backend scans schedules every minute and dispatches queued tasks within
-two seconds. Database locks and two globally shared slots serialize workers;
-each account has at most one active task. Leases expire after 20 minutes.
-Missed schedule slots advance to the next original cadence, with at most one
-queued catch-up per plan. Manual runs do not shift the schedule. Probes have
-a 180-second timeout and four concurrent slots per run. Cancellation invalidates
-the capability immediately and interrupts active probes on their next poll.
-
-Reports retain the last 50 terminal runs per plan, including textual probe
-responses, requested/upstream models, request IDs, token usage and versions.
-Behavioural fingerprints are statistical evidence, not cryptographic proof.
-Unsupported, weak, conflicting or stale evidence produces an inconclusive
-verdict. The public engine lacks the IKP raw corpus; that layer abstains.
-Publish the corresponding source and AGPL license with the deployed service;
-see NOTICE.md. Real paid production probes must be verified after deployment.
+Mock gateway tests verify target-account billing, no failover, callback
+credential/expiry checks, concurrent probe limits, exact-model verdict mapping
+and redaction without real paid probes. Verify one real paid detection after
+separately deploying/configuring the public callback.

@@ -470,6 +470,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/model-identity',
+    name: 'AdminModelIdentity',
+    component: () => import('@/views/admin/ModelIdentityView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Model Identity',
+      titleKey: 'admin.modelIdentity.title',
+      descriptionKey: 'admin.modelIdentity.overviewDescription'
+    }
+  },
+  {
     path: '/admin/ops',
     name: 'AdminOps',
     component: () => import('@/views/admin/ops/OpsDashboard.vue'),

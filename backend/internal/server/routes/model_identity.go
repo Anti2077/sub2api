@@ -148,4 +148,118 @@ func registerIdentityProbe(r *gin.Engine, h *handler.Handlers, svc *service.Mode
 			h.Gateway.ChatCompletions(c)
 		}
 	})
+	// This route is the only public identity callback. Keep capability/probe
+	// routes above private. Its own guard runs before ordinary Key billing.
+	r.POST("/internal/model-identity/:run/remote/v1/chat/completions", middleware.RequestBodyLimit(1<<20),
+		remoteIdentityProbe(svc), middleware.ClientRequestID(), handler.InboundEndpointMiddleware(), gin.HandlerFunc(auth),
+		middleware.GroupModelAllowlist(), requireGroup, func(c *gin.Context) {
+			switch getGroupPlatform(c) {
+			case service.PlatformOpenAI, service.PlatformGrok, service.PlatformKimi, service.PlatformZhipu, service.PlatformDeepseek, service.PlatformMiniMax, service.PlatformOpenCodeGo:
+				h.OpenAIGateway.ChatCompletions(c)
+			default:
+				h.Gateway.ChatCompletions(c)
+			}
+		})
+}
+
+func remoteIdentityProbe(svc *service.ModelIdentityService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseInt(c.Param("run"), 10, 64)
+		parts := strings.SplitN(c.GetHeader("Authorization"), " ", 2)
+		if err != nil || len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		credential := strings.TrimSpace(parts[1])
+		run, key, err := svc.AuthorizeRemote(c.Request.Context(), id, credential)
+		if err != nil {
+			if run != nil && key != nil { // Only record errors for the authenticated run Key.
+				payload, _ := json.Marshal(map[string]any{"status": 409, "configuration_error": true, "error": "repair the account test configuration"})
+				_ = svc.AppendProbe(c.Request.Context(), id, payload)
+				c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": gin.H{"message": "repair the account test configuration"}})
+			} else {
+				c.AbortWithStatus(http.StatusUnauthorized)
+			}
+			return
+		}
+		if err := svc.ProbeSlot(c.Request.Context(), id, true); err != nil {
+			c.AbortWithStatus(http.StatusTooManyRequests)
+			return
+		}
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = svc.ProbeSlot(ctx, id, false)
+		}()
+		body, err := io.ReadAll(io.LimitReader(c.Request.Body, (1<<20)+1))
+		var input map[string]json.RawMessage
+		var model string
+		if err != nil || len(body) > 1<<20 || json.Unmarshal(body, &input) != nil || json.Unmarshal(input["model"], &model) != nil || model != run.RequestModel {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": "probe must use the configured request model"}})
+			return
+		}
+		for _, field := range []string{"max_tokens", "max_completion_tokens"} {
+			if value, ok := input[field]; ok {
+				var count int
+				if json.Unmarshal(value, &count) != nil || count < 1 || count > 4096 {
+					c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": "probe output limit must be 1 to 4096 tokens"}})
+					return
+				}
+			}
+		}
+		if _, a := input["max_tokens"]; !a {
+			if _, b := input["max_completion_tokens"]; !b {
+				input["max_tokens"] = json.RawMessage("4096")
+				body, _ = json.Marshal(input)
+			}
+		}
+		c.Request.Body = io.NopCloser(bytes.NewReader(body))
+		c.Request.ContentLength = int64(len(body))
+		// Keep authentication and client fingerprint headers. Account pinning is
+		// installed exclusively in the server context; client fields are ignored.
+		c.Request.Header.Del("X-Account-ID")
+		c.Request.Header.Del("X-Group-ID")
+		evidence := &service.IdentityProbeEvidence{AccountID: run.AccountID}
+		ctx, cancel := context.WithTimeout(service.WithIdentityEvidence(service.WithIdentityTarget(c.Request.Context(), run.AccountID, run.GroupID), evidence), 180*time.Second)
+		defer cancel()
+		c.Request = c.Request.WithContext(ctx)
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-done:
+					return
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					if _, _, err := svc.AuthorizeRemote(ctx, id, credential); err != nil {
+						cancel()
+						return
+					}
+				}
+			}
+		}()
+		writer := &identityResponseWriter{ResponseWriter: c.Writer}
+		c.Writer = writer
+		c.Next()
+		probe := map[string]any{"request_model": run.RequestModel, "target_account_id": run.AccountID, "client_request_id": writer.Header().Get("X-Client-Request-ID"), "status": writer.Status(), "evidence": evidence, "response": json.RawMessage(writer.body.Bytes())}
+		if !json.Valid(writer.body.Bytes()) {
+			probe["response"] = writer.body.String()
+		}
+		if writer.Status() >= 400 {
+			probe["response"] = map[string]any{"error": "probe request failed", "status": writer.Status()}
+			probe["error"] = "probe request failed"
+			if writer.Status() == 401 || writer.Status() == 402 || writer.Status() == 403 || writer.Status() == 409 {
+				probe["configuration_error"] = true
+			}
+		}
+		encoded, _ := json.Marshal(probe)
+		encoded = bytes.ReplaceAll(encoded, []byte(key.Key), []byte("[redacted]"))
+		saveCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stop()
+		_ = svc.AppendProbe(saveCtx, id, encoded)
+	}
 }

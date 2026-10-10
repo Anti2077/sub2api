@@ -1,6 +1,7 @@
 <template>
   <BaseDialog :show="show" :title="`${t('admin.modelIdentity.title')} · ${account?.name ?? ''}`" width="wide" @close="emit('close')">
     <div class="space-y-5">
+      <p class="rounded-lg bg-blue-50 p-3 text-sm text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">{{ t('admin.modelIdentity.remoteConsent') }}</p>
       <p v-if="error" role="alert" class="break-words text-sm text-red-600">{{ error }}</p>
       <form class="grid grid-cols-1 gap-3 border-b border-gray-200 pb-5 dark:border-dark-600 sm:grid-cols-2" @submit.prevent="saveConfiguration">
         <label class="text-sm">{{ t('admin.modelIdentity.testUser') }}
@@ -23,7 +24,7 @@
       <div v-for="p in plans" :key="p.id" class="border-b border-gray-200 pb-4 dark:border-dark-600">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="min-w-0 text-sm"><div class="break-words font-medium">{{ p.request_model }} → {{ p.expected_model }}</div><div class="mt-1 text-xs text-gray-500">{{ p.enabled ? t('admin.modelIdentity.scheduled') : t('admin.modelIdentity.paused') }} · {{ p.interval_minutes }} {{ t('admin.modelIdentity.minutes') }}</div></div>
-          <div class="flex gap-1"><button :title="t('admin.modelIdentity.run')" :aria-label="t('admin.modelIdentity.run')" class="btn btn-secondary p-2" :disabled="busy" @click="runPlan(p)"><Icon name="play" size="sm" /></button><button :title="t('common.edit')" :aria-label="t('common.edit')" class="btn btn-secondary p-2" @click="editPlan(p)"><Icon name="edit" size="sm" /></button><button :title="t('common.delete')" :aria-label="t('common.delete')" class="btn btn-secondary p-2" :disabled="busy" @click="deletePlan(p)"><Icon name="trash" size="sm" /></button><button :title="t('admin.modelIdentity.history')" :aria-label="t('admin.modelIdentity.history')" class="btn btn-secondary p-2" @click="loadHistory(p.id)"><Icon name="clock" size="sm" /></button></div>
+          <div class="flex flex-wrap gap-2"><button v-if="p.enabled" class="btn btn-secondary min-h-11" :disabled="busy" @click="pausePlan(p)">{{ t('admin.modelIdentity.pausePlan') }}</button><button :title="t('admin.modelIdentity.run')" :aria-label="t('admin.modelIdentity.run')" class="btn btn-secondary min-h-11 min-w-11 p-2" :disabled="busy" @click="runPlan(p)"><Icon name="play" size="sm" /></button><button :title="t('common.edit')" :aria-label="t('common.edit')" class="btn btn-secondary min-h-11 min-w-11 p-2" @click="editPlan(p)"><Icon name="edit" size="sm" /></button><button :title="t('common.delete')" :aria-label="t('common.delete')" class="btn btn-secondary min-h-11 min-w-11 p-2" :disabled="busy" @click="deletePlan(p)"><Icon name="trash" size="sm" /></button><button :title="t('admin.modelIdentity.history')" :aria-label="t('admin.modelIdentity.history')" class="btn btn-secondary min-h-11 min-w-11 p-2" @click="loadHistory(p.id)"><Icon name="clock" size="sm" /></button></div>
         </div>
         <div class="mt-2 grid gap-1 text-xs text-gray-500 sm:grid-cols-2"><span>{{ t('admin.scheduledTests.lastRun') }}: {{ time(p.last_run_at) }}</span><span>{{ t('admin.scheduledTests.nextRun') }}: {{ time(p.next_run_at) }}</span></div>
       </div>
@@ -70,7 +71,7 @@ import * as api from '@/api/admin/modelIdentity'
 import * as usersAPI from '@/api/admin/users'
 
 const props = defineProps<{show:boolean;account:Account|null;groups:Group[]}>()
-const emit = defineEmits<{(e:'close'):void}>()
+const emit = defineEmits<{(e:'close'):void;(e:'changed'):void}>()
 const { t } = useI18n()
 const userID = ref(0), groupID = ref(0), search = ref(''), error = ref(''), busy = ref(false), editingID = ref(0)
 const users = ref<AdminUser[]>([]), catalog = ref<api.IdentityModel[]>([]), plans = ref<api.IdentityPlan[]>([]), runs = ref<api.IdentityRun[]>([])
@@ -88,14 +89,15 @@ async function action(fn:()=>Promise<void>) { busy.value=true;error.value='';try
 async function fetchUsers() { const version=++searchVersion; const view=viewVersion;const result=await usersAPI.list(1,20,{search:search.value,status:'active'});if(version===searchVersion&&view===viewVersion)users.value=result.items }
 function searchUsers() { clearTimeout(searchTimer);searchTimer=setTimeout(()=>{void fetchUsers().catch(e=>{error.value=message(e)})},300) }
 async function refreshPlans() { if(props.account)plans.value=await api.plans(props.account.id) }
-async function saveConfiguration() { await action(async()=>{if(!props.account)return;configuration.value=await api.saveConfig(props.account.id,{user_id:userID.value,group_id:groupID.value});await refreshPlans()}) }
+async function saveConfiguration() { await action(async()=>{if(!props.account)return;configuration.value=await api.saveConfig(props.account.id,{user_id:userID.value,group_id:groupID.value});await refreshPlans();emit('changed')}) }
 function resetDraft() { editingID.value=0;Object.assign(draft,{request_model:'',expected_model:'',interval_minutes:120,enabled:false}) }
 function editPlan(p:api.IdentityPlan) { editingID.value=p.id;Object.assign(draft,p) }
-async function savePlan() { await action(async()=>{if(!props.account)return;const body={...draft,account_id:props.account.id};if(editingID.value)await api.updatePlan(editingID.value,body);else await api.savePlan(body);resetDraft();await refreshPlans()}) }
-async function deletePlan(p:api.IdentityPlan) { await action(async()=>{await api.deletePlan(p.id);await refreshPlans()}) }
+async function savePlan() { await action(async()=>{if(!props.account)return;const body={...draft,account_id:props.account.id};if(editingID.value)await api.updatePlan(editingID.value,body);else await api.savePlan(body);resetDraft();await refreshPlans();emit('changed')}) }
+async function pausePlan(p:api.IdentityPlan) { await action(async()=>{await api.updatePlan(p.id,{...p,enabled:false});await refreshPlans();emit('changed')}) }
+async function deletePlan(p:api.IdentityPlan) { await action(async()=>{await api.deletePlan(p.id);await refreshPlans();emit('changed')}) }
 async function loadHistory(id:number) { const version=++historyVersion;const view=viewVersion;historyPlanID.value=id;await action(async()=>{const result=await api.history(id);if(version===historyVersion&&view===viewVersion)runs.value=result}) }
-async function runPlan(p:api.IdentityPlan) { await action(async()=>{await api.run(p.id);historyPlanID.value=p.id;runs.value=await api.history(p.id)}) }
-async function cancelRun(r:api.IdentityRun) { await action(async()=>{await api.cancel(r.id);runs.value=await api.history(r.plan_id)}) }
+async function runPlan(p:api.IdentityPlan) { await action(async()=>{await api.run(p.id);historyPlanID.value=p.id;runs.value=await api.history(p.id);emit('changed')}) }
+async function cancelRun(r:api.IdentityRun) { await action(async()=>{await api.cancel(r.id);runs.value=await api.history(r.plan_id);emit('changed')}) }
 async function loadReport(r:api.IdentityRun) { await action(async()=>{selectedReport.value=await api.runStatus(r.id)}) }
 watch(()=>[props.show,props.account?.id],async()=>{
   const version=++viewVersion;historyVersion++;searchVersion++;clearInterval(poll);clearTimeout(searchTimer);selectedReport.value=null;runs.value=[];plans.value=[];configuration.value=null;catalog.value=[];users.value=[];userID.value=0;groupID.value=0;search.value='';historyPlanID.value=0;resetDraft();error.value=''
