@@ -16,9 +16,10 @@ const workerScript = `
   process.on('SIGTERM', () => { console.log('worker-stopped'); server.close(); });
 `;
 const backendScript = `
-  console.log('backend-ready ' + JSON.stringify({engine:process.env.MODEL_IDENTITY_ENGINE_URL, callback:process.env.MODEL_IDENTITY_CALLBACK_URL}));
   const timer = setInterval(() => {}, 1000);
   process.on('SIGTERM', () => { console.log('backend-stopped'); clearInterval(timer); });
+  // Readiness includes the shutdown handler; tests may signal immediately.
+  console.log('backend-ready ' + JSON.stringify({engine:process.env.MODEL_IDENTITY_ENGINE_URL, callback:process.env.MODEL_IDENTITY_CALLBACK_URL}));
 `;
 
 function launch(t, { worker = workerScript, backend = backendScript, startupTimeout = 3000 } = {}) {
