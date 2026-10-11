@@ -1,6 +1,36 @@
 import type { IdentityRun } from '@/api/admin/modelIdentity'
 
 export type IdentityStatus = 'matched' | 'mismatched' | 'inconclusive' | 'configuration_error' | 'queued' | 'running' | 'cancelling' | 'cancelled' | 'timed_out' | 'service_error' | 'request_error' | 'notConfigured' | 'untested'
+
+export interface IdentityModelVote { model: string; votes: number }
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
+}
+
+// Match the hosted report's per-probe voting table, including abstained runs.
+// Scores/posteriors and family weights are not votes. Never sum V3H and V3G:
+// they may describe the same probes; V3G is only a legacy fallback.
+export function identityModelVotes(report?: Record<string, unknown>): IdentityModelVote[] {
+  const assessment = record(report?.identityAssessment)
+  for (const classifier of [assessment?.v3h, assessment?.v3g]) {
+    const perProbe = record(classifier)?.perProbe
+    if (!Array.isArray(perProbe)) continue
+    const counts = new Map<string, number>()
+    for (const probe of perProbe) {
+      const topModel = record(probe)?.topModel
+      if (typeof topModel !== 'string' || !topModel.trim()) continue
+      const model = topModel.trim()
+      counts.set(model, (counts.get(model) || 0) + 1)
+    }
+    if (counts.size) {
+      return [...counts].map(([model, votes]) => ({ model, votes }))
+        .sort((a, b) => b.votes - a.votes || a.model.localeCompare(b.model))
+    }
+  }
+  return []
+}
+
 export function identityRunStatus(run: IdentityRun): IdentityStatus {
   if (run.status === 'completed') {
     return run.report?.verdict === 'matched' ? 'matched' : run.report?.verdict === 'mismatched' ? 'mismatched' : 'inconclusive'

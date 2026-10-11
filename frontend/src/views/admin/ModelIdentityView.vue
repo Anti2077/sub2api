@@ -119,6 +119,7 @@
           <dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2"><div><dt class="text-gray-500">{{ t('admin.modelIdentity.lastResult') }}</dt><dd class="mt-1">{{ statusLabel(identityRunStatus(selectedReport)) }} · {{ formatTime(selectedReport.created_at) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.expectedModel') }}</dt><dd class="mt-1 break-all">{{ selectedReport.expected_model }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.detectedModel') }}</dt><dd class="mt-1 break-all">{{ selectedReport.report?.detected_model || '—' }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.engineVersion') }}</dt><dd class="mt-1">{{ selectedReport.report?.engine_version || '—' }}</dd></div></dl>
           <p v-if="selectedReport.report?.error" role="alert" class="text-sm text-red-600">{{ selectedReport.report.error }}</p>
           <p v-if="reportReason" class="rounded-lg bg-gray-50 p-3 text-sm dark:bg-dark-900">{{ reportReason }}</p>
+          <IdentityModelVotes :report="selectedReport.report" />
           <button v-if="isActive(selectedReport)" class="btn btn-secondary" type="button" :disabled="Boolean(actionBusy)" @click="cancelRun(selectedReport)">{{ t('common.cancel') }}</button>
           <details v-for="(probe, index) in selectedReport.probes" :key="index" class="border-b border-gray-200 py-2 dark:border-dark-700"><summary class="min-h-11 cursor-pointer break-words text-sm">{{ probe.probe_id || index + 1 }} · {{ probe.status }}</summary><dl class="space-y-1 text-xs"><div>{{ t('admin.modelIdentity.targetAccount') }}: {{ probe.target_account_id }}</div><div>{{ t('admin.modelIdentity.requestModel') }}: {{ probe.request_model }}</div><div>{{ t('admin.modelIdentity.upstreamModel') }}: {{ probe.evidence?.upstream_model || '—' }}</div><div>{{ t('admin.modelIdentity.requestID') }}: {{ probe.evidence?.request_id || '—' }}</div></dl><pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{{ JSON.stringify(probe.response, null, 2) }}</pre></details>
           <details><summary class="min-h-11 cursor-pointer text-sm">{{ t('admin.modelIdentity.evidence') }}</summary><pre class="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-50 p-3 text-xs dark:bg-dark-900">{{ JSON.stringify(selectedReport.report, null, 2) }}</pre></details>
@@ -138,6 +139,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import Select from '@/components/common/Select.vue'
 import IdentityRecentRuns from '@/components/admin/account/IdentityRecentRuns.vue'
 import IdentityHistoryTable from '@/components/admin/account/IdentityHistoryTable.vue'
+import IdentityModelVotes from '@/components/admin/account/IdentityModelVotes.vue'
 import { adminAPI } from '@/api/admin'
 import * as identityAPI from '@/api/admin/modelIdentity'
 import { identityRunStatus, identityStatusClass, isActive, type IdentityStatus } from '@/utils/modelIdentity'

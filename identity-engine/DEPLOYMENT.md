@@ -51,6 +51,11 @@ The matrix lists only accounts with detection plans, the latest expected/recogni
 recent five result/time chips, next schedule and dedicated Key binding.
 Click a result chip to read its stored report. Expand history to see request
 models, expected models, recognized models, full timestamps and errors.
+Reports also show per-model probe vote counts, ranked by count, using the
+hosted `identityAssessment.v3h.perProbe[].topModel` data (V3G for older reports).
+These counts remain visible when the engine abstains; they are supporting
+evidence, not confidence or an override of the identity verdict. Existing
+reports without this data show an explicit unavailable message.
 The mobile view uses account cards. Summary counts cover the current page.
 API failures show errors and never substitute simulated accounts or results.
 
