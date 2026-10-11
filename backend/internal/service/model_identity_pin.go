@@ -3,7 +3,38 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"time"
 )
+
+const IdentityProbeMaxRetries = 5
+
+func IdentityProbeRetryableStatus(status int) bool {
+	switch status {
+	case 0, http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
+}
+
+// IdentityTargetRetryable permits transient upstream failures to be retried
+// while the identity callback is pinned to one account. It never applies to
+// ordinary client traffic or configuration/authentication failures.
+func IdentityTargetRetryable(ctx context.Context, status int) bool {
+	_, _, pinned := IdentityTargetFromContext(ctx)
+	return pinned && IdentityProbeRetryableStatus(status)
+}
+
+func IdentityProbeRetryDelay(attempt int) time.Duration {
+	if attempt < 1 {
+		attempt = 1
+	}
+	if attempt > 3 {
+		attempt = 3
+	}
+	return time.Duration(1<<(attempt-1)) * time.Second
+}
 
 type identityTargetKey struct{}
 type identityTarget struct{ AccountID, GroupID int64 }

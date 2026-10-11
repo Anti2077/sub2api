@@ -88,16 +88,17 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 	upstreamMsg string,
 	upstreamModel string,
 ) *UpstreamFailoverError {
+	_, _, identityPinned := IdentityTargetFromContext(ctx)
 	shouldFailover := s.shouldFailoverOpenAIUpstreamResponse(account, resp.StatusCode, upstreamMsg, respBody)
 	tempUnscheduled := false
-	if c != nil && account != nil && account.Platform != PlatformGrok && !shouldFailover && !IsResponseCommitted(c) && s.rateLimitService != nil {
+	if c != nil && account != nil && account.Platform != PlatformGrok && !identityPinned && !shouldFailover && !IsResponseCommitted(c) && s.rateLimitService != nil {
 		tempUnscheduled = s.rateLimitService.CheckErrorPolicy(ctx, account, resp.StatusCode, respBody, upstreamModel) == ErrorPolicyTempUnscheduled
 		shouldFailover = tempUnscheduled
 	}
 	if account != nil && account.Platform == PlatformGrok {
 		shouldFailover = s.shouldFailoverGrokUpstreamError(resp.StatusCode, respBody)
 	}
-	if account != nil && account.Platform == PlatformGrok {
+	if account != nil && account.Platform == PlatformGrok && !identityPinned {
 		s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
 	}
 	if !shouldFailover {
@@ -124,7 +125,7 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 		Detail:             upstreamDetail,
 	})
 	shouldDisable := tempUnscheduled
-	if account.Platform != PlatformGrok && !tempUnscheduled {
+	if account.Platform != PlatformGrok && !tempUnscheduled && !identityPinned {
 		shouldDisable = s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, upstreamModel)
 	}
 	return s.newOpenAIAccountFailoverError(
@@ -134,7 +135,7 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 		respBody,
 		upstreamMsg,
 		shouldDisable,
-		!shouldDisable && account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
+		!shouldDisable && ((account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody))) || IdentityTargetRetryable(ctx, resp.StatusCode)),
 	)
 }
 

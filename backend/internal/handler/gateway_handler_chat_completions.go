@@ -182,6 +182,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 	}
 	// 3. Account selection + failover loop
 	fs := NewFailoverState(h.maxAccountSwitches, false)
+	identityRetryCount := 0
 	if groupPlatform == service.PlatformGemini {
 		fs = NewFailoverState(h.maxAccountSwitchesGemini, false)
 	}
@@ -321,6 +322,20 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
 				if _, _, pinned := service.IdentityTargetFromContext(c.Request.Context()); pinned {
+					if service.IdentityProbeRetryableStatus(failoverErr.StatusCode) && identityRetryCount < service.IdentityProbeMaxRetries {
+						identityRetryCount++
+						reqLog.Warn("gateway_cc.identity_probe_retry",
+							zap.Int("retry_count", identityRetryCount),
+							zap.Int("retry_limit", service.IdentityProbeMaxRetries),
+							zap.Int("upstream_status", failoverErr.StatusCode),
+						)
+						select {
+						case <-c.Request.Context().Done():
+							return
+						case <-time.After(service.IdentityProbeRetryDelay(identityRetryCount)):
+						}
+						continue
+					}
 					h.handleCCFailoverExhausted(c, failoverErr, streamStarted)
 					return
 				}

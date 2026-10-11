@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -179,32 +180,121 @@ func (r *ModelIdentityRunner) executeRemote(ctx context.Context, run *IdentityRu
 	baseURL := public + "/internal/model-identity/" + fmtIdentityID(run.ID) + "/remote/v1"
 	body, _ := json.Marshal(map[string]any{
 		"baseUrl": baseURL, "apiKey": key.Key, "modelId": run.RequestModel,
-		"claimedModel": run.ExpectedModel, "runContextCheck": false, "biasFingerprint": true, "sync": true,
+		"claimedModel": run.ExpectedModel, "runContextCheck": false, "biasFingerprint": true, "sync": false,
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.svc.remoteURL, bytes.NewReader(body))
-	if err != nil {
+	client := identityRunHTTPClient()
+	var acknowledgement map[string]any
+	for attempt := 0; attempt <= IdentityProbeMaxRetries; attempt++ {
+		req, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, r.svc.remoteURL, bytes.NewReader(body))
+		if requestErr != nil {
+			finish("service_error", map[string]string{"error": "invalid BazaarLink Probe API URL"})
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		res, requestErr := client.Do(req)
+		if requestErr != nil {
+			if ctx.Err() != nil {
+				finishRemoteRequestContext(ctx, finish)
+				return
+			}
+			// The POST may have been accepted before the connection failed. Do not
+			// replay a paid run when its outcome is unknown.
+			finish("service_error", map[string]string{"error": "BazaarLink Probe API request outcome is unknown"})
+			return
+		}
+		var response map[string]any
+		decodeErr := json.NewDecoder(io.LimitReader(res.Body, 2<<20)).Decode(&response)
+		statusCode := res.StatusCode
+		_ = res.Body.Close()
+		if statusCode >= 200 && statusCode < 300 && decodeErr == nil {
+			if runID := remoteRunID(response); runID != "" {
+				acknowledgement = response
+				break
+			}
+			finish("service_error", map[string]any{"error": "BazaarLink Probe API returned an invalid response", "status": statusCode})
+			return
+		}
+		if IdentityProbeRetryableStatus(statusCode) && attempt < IdentityProbeMaxRetries {
+			if !waitIdentityRetry(ctx, attempt+1) {
+				return
+			}
+			continue
+		}
+		finish("service_error", map[string]any{"error": "BazaarLink Probe API returned an invalid response", "status": statusCode})
+		return
+	}
+	runID := remoteRunID(acknowledgement)
+	if runID == "" {
+		finish("service_error", map[string]string{"error": "BazaarLink Probe API did not return a run id"})
+		return
+	}
+	remoteEndpoint, parseErr := url.Parse(r.svc.remoteURL)
+	if parseErr != nil {
 		finish("service_error", map[string]string{"error": "invalid BazaarLink Probe API URL"})
 		return
 	}
-	req.Header.Set("Content-Type", "application/json")
-	client := identityRunHTTPClient()
-	res, err := client.Do(req)
-	if err != nil {
-		status := "service_error"
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			status = "timed_out"
-		} else if errors.Is(ctx.Err(), context.Canceled) {
-			status = "cancelled"
-		}
-		finish(status, map[string]string{"error": "BazaarLink Probe API request interrupted"})
-		return
-	}
-	defer func() { _ = res.Body.Close() }()
+	remoteEndpoint.Path = strings.TrimRight(remoteEndpoint.Path, "/") + "/" + url.PathEscape(runID)
+	remoteEndpoint.RawQuery = ""
+	reportURL := remoteEndpoint.String()
 	var report map[string]any
-	decodeErr := json.NewDecoder(io.LimitReader(res.Body, 16<<20)).Decode(&report)
-	if decodeErr != nil || res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		finish("service_error", map[string]any{"error": "BazaarLink Probe API returned an invalid response", "status": res.StatusCode})
-		return
+	transientFailures := 0
+	for {
+		if ctx.Err() != nil {
+			finishRemoteRequestContext(ctx, finish)
+			return
+		}
+		pollReq, requestErr := http.NewRequestWithContext(ctx, http.MethodGet, reportURL, nil)
+		if requestErr != nil {
+			finish("service_error", map[string]string{"error": "invalid BazaarLink Probe report URL"})
+			return
+		}
+		res, requestErr := client.Do(pollReq)
+		if requestErr != nil {
+			if ctx.Err() != nil {
+				finishRemoteRequestContext(ctx, finish)
+				return
+			}
+			transientFailures++
+			if transientFailures > IdentityProbeMaxRetries {
+				finish("service_error", map[string]string{"error": "BazaarLink Probe report request failed after retries"})
+				return
+			}
+			if !waitIdentityRetry(ctx, transientFailures) {
+				return
+			}
+			continue
+		}
+		var current map[string]any
+		decodeErr := json.NewDecoder(io.LimitReader(res.Body, 16<<20)).Decode(&current)
+		statusCode := res.StatusCode
+		_ = res.Body.Close()
+		if IdentityProbeRetryableStatus(statusCode) {
+			transientFailures++
+			if transientFailures > IdentityProbeMaxRetries {
+				finish("service_error", map[string]any{"error": "BazaarLink Probe report failed after retries", "status": statusCode})
+				return
+			}
+			if !waitIdentityRetry(ctx, transientFailures) {
+				return
+			}
+			continue
+		}
+		if statusCode < 200 || statusCode >= 300 || decodeErr != nil {
+			finish("service_error", map[string]any{"error": "BazaarLink Probe API returned an invalid report", "status": statusCode})
+			return
+		}
+		transientFailures = 0
+		report = current
+		status, _ := report["status"].(string)
+		if status == "completed" || status == "failed" || status == "aborted" || status == "cancelled" {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			finishRemoteRequestContext(ctx, finish)
+			return
+		case <-time.After(2 * time.Second):
+		}
 	}
 	redactRemoteSecrets(report)
 	encoded, _ := json.Marshal(report)
@@ -223,16 +313,20 @@ func (r *ModelIdentityRunner) executeRemote(ctx context.Context, run *IdentityRu
 	}
 	report["verdict"] = remoteIdentityVerdict(verdictStatus, detected, run.ExpectedModel)
 	report["expected_model"] = run.ExpectedModel
+	probeWarnings := 0
 	if items, ok := report["items"].([]any); ok {
 		for _, item := range items {
 			if entry, ok := item.(map[string]any); ok {
 				entry["target_account_id"] = run.AccountID
 				entry["request_model"] = run.RequestModel
 				if entry["status"] == "error" && status == "completed" {
-					status = "request_error"
+					probeWarnings++
 				}
 			}
 		}
+	}
+	if probeWarnings > 0 {
+		report["probe_warnings"] = probeWarnings
 	}
 	current, err := r.svc.repo.Run(ctx, run.ID)
 	if err != nil || current == nil {
@@ -251,10 +345,13 @@ func (r *ModelIdentityRunner) executeRemote(ctx context.Context, run *IdentityRu
 					break
 				}
 				if probe.Status >= 400 && status == "completed" {
-					status = "request_error"
+					probeWarnings++
 				}
 			}
 		}
+	}
+	if probeWarnings > 0 {
+		report["probe_warnings"] = probeWarnings
 	}
 	if status != "completed" {
 		report["verdict"] = "inconclusive"
@@ -273,6 +370,37 @@ func identityRunHTTPClient() *http.Client {
 			return http.ErrUseLastResponse
 		},
 	}
+}
+
+func waitIdentityRetry(ctx context.Context, attempt int) bool {
+	timer := time.NewTimer(IdentityProbeRetryDelay(attempt))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func finishRemoteRequestContext(ctx context.Context, finish func(string, any)) {
+	status := "service_error"
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		status = "timed_out"
+	} else if errors.Is(ctx.Err(), context.Canceled) {
+		status = "cancelled"
+	}
+	finish(status, map[string]string{"error": "BazaarLink Probe API request interrupted"})
+}
+
+func remoteRunID(response map[string]any) string {
+	if value, ok := response["runId"].(string); ok {
+		return strings.TrimSpace(value)
+	}
+	if value, ok := response["run_id"].(string); ok {
+		return strings.TrimSpace(value)
+	}
+	return ""
 }
 
 func remoteRunStatus(report map[string]any) string {
