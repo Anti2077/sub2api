@@ -31,6 +31,29 @@ func TestRemoteRunStatus(t *testing.T) {
 	}
 }
 
+func TestIdentityProbeRetryPolicy(t *testing.T) {
+	require.Equal(t, 5, IdentityProbeMaxRetries)
+	for _, status := range []int{0, http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout} {
+		require.True(t, IdentityProbeRetryableStatus(status))
+	}
+	for _, status := range []int{http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden, http.StatusConflict, http.StatusNotFound} {
+		require.False(t, IdentityProbeRetryableStatus(status))
+	}
+	require.Equal(t, time.Second, IdentityProbeRetryDelay(1))
+	require.Equal(t, 4*time.Second, IdentityProbeRetryDelay(3))
+	require.Equal(t, 4*time.Second, IdentityProbeRetryDelay(6))
+	ctx := WithIdentityTarget(context.Background(), 42, 7)
+	require.True(t, IdentityTargetRetryable(ctx, http.StatusBadGateway))
+	require.False(t, IdentityTargetRetryable(ctx, http.StatusForbidden))
+	require.False(t, IdentityTargetRetryable(context.Background(), http.StatusBadGateway))
+}
+
+func TestRemoteRunIDVariants(t *testing.T) {
+	require.Equal(t, "abc", remoteRunID(map[string]any{"runId": "abc"}))
+	require.Equal(t, "def", remoteRunID(map[string]any{"run_id": "def"}))
+	require.Empty(t, remoteRunID(map[string]any{"status": "running"}))
+}
+
 func TestIdentityHTTPClientsUseTLS12ForHostedProbe(t *testing.T) {
 	for _, client := range []*http.Client{identityRemoteCatalogClient(), identityRunHTTPClient()} {
 		transport, ok := client.Transport.(*http.Transport)

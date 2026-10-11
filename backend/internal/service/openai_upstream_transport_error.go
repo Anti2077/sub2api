@@ -149,6 +149,13 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 	if errors.As(err, &pluginErr) && pluginErr.RequestSent {
 		return err
 	}
+	if _, _, pinned := IdentityTargetFromContext(ctx); pinned {
+		return &UpstreamFailoverError{
+			StatusCode:             http.StatusBadGateway,
+			ResponseBody:           openAITransportFailoverBody,
+			RetryableOnSameAccount: true,
+		}
+	}
 
 	if classifyUpstreamTransportError(err).Persistent {
 		s.tempUnscheduleOpenAITransportError(ctx, account, safeErr)

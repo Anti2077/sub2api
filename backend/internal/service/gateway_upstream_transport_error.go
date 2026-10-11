@@ -59,6 +59,13 @@ func (s *GatewayService) handleUpstreamTransportError(ctx context.Context, c *gi
 	if errors.Is(err, context.Canceled) || (errors.Is(err, context.DeadlineExceeded) && errors.Is(ctx.Err(), context.DeadlineExceeded)) {
 		return err
 	}
+	if _, _, pinned := IdentityTargetFromContext(ctx); pinned {
+		return &UpstreamFailoverError{
+			StatusCode:             http.StatusBadGateway,
+			ResponseBody:           gatewayTransportFailoverBody,
+			RetryableOnSameAccount: true,
+		}
+	}
 
 	// Transport attempt left local validation; count Ollama Cloud activity.
 	scheduleOllamaCloudUsageActivity(s.deferredService, account)

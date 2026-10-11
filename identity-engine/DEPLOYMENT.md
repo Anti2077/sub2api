@@ -93,8 +93,10 @@ not promise a fixed engine commit or baseline version; absent versions are
 shown as unavailable, not copied from the legacy bundled worker.
 
 BazaarLink currently documents 30 run requests per IP per hour. Plan volume
-accordingly; a 429 or remote outage is recorded as a service error rather than
-retried indefinitely or interpreted as identity mismatch. Contract reference:
+accordingly. Transient 429/502/503/504 responses and report-poll transport
+failures are retried at most five times with backoff; configuration failures
+are not retried, and an uncertain POST is never replayed because it may already
+have started a paid run. Contract reference:
 <https://bazaarlink.ai/probe-api-skill.md>.
 
 ## Build and verify

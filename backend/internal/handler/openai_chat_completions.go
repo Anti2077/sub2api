@@ -167,6 +167,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 	profitVetoCount := 0
 	failedAccountIDs := make(map[int64]struct{})
 	sameAccountRetryCount := make(map[int64]int)
+	identityRetryCount := 0
 	var lastFailoverErr *service.UpstreamFailoverError
 	var oauth429FailoverState service.OpenAIOAuth429FailoverState
 
@@ -333,6 +334,20 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
 					if _, _, pinned := service.IdentityTargetFromContext(c.Request.Context()); pinned {
+						if service.IdentityProbeRetryableStatus(failoverErr.StatusCode) && identityRetryCount < service.IdentityProbeMaxRetries {
+							identityRetryCount++
+							reqLog.Warn("openai_chat_completions.identity_probe_retry",
+								zap.Int("retry_count", identityRetryCount),
+								zap.Int("retry_limit", service.IdentityProbeMaxRetries),
+								zap.Int("upstream_status", failoverErr.StatusCode),
+							)
+							select {
+							case <-c.Request.Context().Done():
+								return
+							case <-time.After(service.IdentityProbeRetryDelay(identityRetryCount)):
+							}
+							continue
+						}
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}

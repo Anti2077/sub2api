@@ -168,13 +168,14 @@ func (s *GatewayService) ForwardAsChatCompletions(
 				Message:            upstreamMsg,
 			})
 			shouldDisable := false
-			if s.rateLimitService != nil {
+			_, _, identityPinned := IdentityTargetFromContext(ctx)
+			if s.rateLimitService != nil && !identityPinned {
 				shouldDisable = s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, mappedModel)
 			}
 			return nil, &UpstreamFailoverError{
 				StatusCode:             resp.StatusCode,
 				ResponseBody:           respBody,
-				RetryableOnSameAccount: !shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
+				RetryableOnSameAccount: !shouldDisable && (account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode) || IdentityTargetRetryable(ctx, resp.StatusCode)),
 			}
 		}
 
