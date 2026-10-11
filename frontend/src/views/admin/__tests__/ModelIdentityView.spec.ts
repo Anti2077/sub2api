@@ -83,6 +83,18 @@ describe('model identity account matrix', () => {
     expect(mocks.runStatus).toHaveBeenCalledWith(6)
     expect(w.text()).toContain('openai/gpt-5.5')
   })
+  it('shows per-model votes in a stored inconclusive report without replacing its verdict', async () => {
+    mocks.runStatus.mockResolvedValue({ ...runs[5], report: { verdict: 'inconclusive', identityAssessment: {
+      verdict: { reasoning: 'Conflicting fingerprint signals' },
+      v3h: { abstained: true, perProbe: [{ topModel: 'openai/gpt-6-astra' }, { topModel: 'openai/gpt-6-astra' }, { topModel: 'openai/gpt-6.1-sol' }] },
+    } } })
+    const w = open(); await flushPromises()
+    await w.get('table tr[data-plan-id="1"]').findComponent(IdentityRecentRuns).find('button').trigger('click'); await flushPromises()
+    const votes = w.get('[data-testid="identity-model-votes"]')
+    expect(votes.findAll('dt').map(row => row.text())).toEqual(['openai/gpt-6-astra', 'openai/gpt-6.1-sol'])
+    expect(w.text()).toContain('Conflicting fingerprint signals')
+    expect(votes.element.parentElement?.textContent).toContain('admin.modelIdentity.inconclusive')
+  })
   it('separates multiple plans for one account and retains each plan’s own history', async () => {
     const secondPlan = { ...plan, id: 2, request_model: 'gpt-6-luna', expected_model: 'openai/gpt-6-luna', enabled: false }
     mocks.plans.mockResolvedValue([plan, secondPlan])
