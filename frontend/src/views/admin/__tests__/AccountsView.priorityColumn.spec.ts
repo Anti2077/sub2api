@@ -57,6 +57,7 @@ function mountView() {
   return mount(AccountsView, {
     global: {
       stubs: {
+        AccountFolderSidebar: true,
         AppLayout: { template: '<div><slot /></div>' },
         TablePageLayout: {
           template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
@@ -121,6 +122,14 @@ describe('admin AccountsView priority column preferences', () => {
       expect.objectContaining({ sort_by: 'priority', sort_order: 'desc' }),
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
+  })
+
+  it('restores column order while keeping name and actions anchored', async () => {
+    localStorage.setItem('account-column-order', JSON.stringify(['priority', 'id', 'priority', 'removed']))
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.findAll('[data-column]').slice(0, 4).map(node => node.attributes('data-column'))).toEqual(['select', 'name', 'priority', 'id'])
+    expect(wrapper.findAll('[data-column]').at(-1)?.attributes('data-column')).toBe('actions')
   })
 
   it('preserves an existing preference that explicitly hides priority', async () => {

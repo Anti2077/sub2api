@@ -169,6 +169,7 @@ describe('admin AccountsView bulk edit scope', () => {
     const wrapper = mount(AccountsView, {
       global: {
         stubs: {
+          AccountFolderSidebar: true,
           AppLayout: { template: '<div><slot /></div>' },
           TablePageLayout: {
             template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
@@ -234,6 +235,7 @@ describe('admin AccountsView bulk edit scope', () => {
     const wrapper = mount(AccountsView, {
       global: {
         stubs: {
+          AccountFolderSidebar: true,
           AppLayout: { template: '<div><slot /></div>' },
           TablePageLayout: {
             template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
@@ -303,6 +305,7 @@ describe('admin AccountsView bulk edit scope', () => {
     const wrapper = mount(AccountsView, {
       global: {
         stubs: {
+          AccountFolderSidebar: true,
           AppLayout: { template: '<div><slot /></div>' },
           TablePageLayout: { template: '<div><slot name="table" /></div>' },
           DataTable: {
@@ -366,6 +369,7 @@ describe('admin AccountsView bulk edit scope', () => {
     const wrapper = mount(AccountsView, {
       global: {
         stubs: {
+          AccountFolderSidebar: true,
           AppLayout: { template: '<div><slot /></div>' },
           TablePageLayout: { template: '<div><slot name="table" /><slot name="pagination" /></div>' },
           DataTable: DataTableStub,
@@ -441,6 +445,7 @@ describe('admin AccountsView bulk edit scope', () => {
     const wrapper = mount(AccountsView, {
       global: {
         stubs: {
+          AccountFolderSidebar: true,
           AppLayout: { template: '<div><slot /></div>' },
           TablePageLayout: { template: '<div><slot name="table" /><slot name="pagination" /></div>' },
           DataTable: DataTableStub,
@@ -515,6 +520,7 @@ describe('admin AccountsView bulk edit scope', () => {
     const wrapper = mount(AccountsView, {
       global: {
         stubs: {
+          AccountFolderSidebar: true,
           AppLayout: { template: '<div><slot /></div>' },
           TablePageLayout: { template: '<div><slot name="table" /></div>' },
           DataTable: DataTableStub,
@@ -587,6 +593,7 @@ describe('admin AccountsView bulk edit scope', () => {
     const wrapper = mount(AccountsView, {
       global: {
         stubs: {
+          AccountFolderSidebar: true,
           AppLayout: { template: '<div><slot /></div>' },
           TablePageLayout: { template: '<div><slot name="table" /></div>' },
           DataTable: ProbeDataTableStub,

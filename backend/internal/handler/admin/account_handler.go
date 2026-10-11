@@ -49,6 +49,7 @@ func NewOAuthHandler(oauthService *service.OAuthService) *OAuthHandler {
 
 // AccountHandler handles admin account management
 type AccountHandler struct {
+	accountFolders          *service.AccountFolderService
 	claudeResetCredits      claudeResetReader
 	adminService            service.AdminService
 	oauthService            *service.OAuthService
@@ -181,6 +182,7 @@ type BulkUpdateAccountsRequest struct {
 }
 
 type BulkUpdateAccountFilters struct {
+	Folder      string `json:"folder"`
 	Platform    string `json:"platform"`
 	Type        string `json:"type"`
 	Status      string `json:"status"`
@@ -2387,6 +2389,7 @@ func toServiceBulkUpdateAccountFilters(filters *BulkUpdateAccountFilters) *servi
 		return nil
 	}
 	return &service.BulkUpdateAccountFilters{
+		Folder:      filters.Folder,
 		Platform:    filters.Platform,
 		Type:        filters.Type,
 		Status:      filters.Status,

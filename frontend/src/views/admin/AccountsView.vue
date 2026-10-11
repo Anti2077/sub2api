@@ -1,6 +1,8 @@
 <template>
   <AppLayout>
-    <TablePageLayout>
+    <div class="flex min-w-0 flex-col gap-4 lg:flex-row">
+    <AccountFolderSidebar ref="folderSidebar" :model-value="params.folder" @select="selectFolder" @moved="handleFolderMoved" @changed="reload" />
+    <TablePageLayout class="min-w-0 flex-1">
       <template #filters>
         <div class="flex flex-wrap-reverse items-start justify-between gap-3">
           <AccountTableFilters
@@ -136,25 +138,7 @@
                       </button>
 
                       <div class="my-2 border-t border-gray-100 dark:border-dark-700"></div>
-                      <div class="px-2 py-2">
-                        <div class="flex items-center justify-between gap-3">
-                          <span class="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                            {{ t('admin.accounts.viewColumns') }}
-                          </span>
-                          <Icon name="grid" size="sm" class="text-gray-400" />
-                        </div>
-                      </div>
-                      <div class="grid grid-cols-1 gap-1">
-                        <button
-                          v-for="col in toggleableColumns"
-                          :key="col.key"
-                          @click="toggleColumn(col.key)"
-                          class="flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-dark-700"
-                        >
-                          <span class="truncate">{{ col.label }}</span>
-                          <Icon v-if="isColumnVisible(col.key)" name="check" size="sm" class="text-primary-500" />
-                        </button>
-                      </div>
+                      <AccountColumnSettings :columns="toggleableColumns" :hidden="hiddenColumns" @toggle="toggleColumn" @order="saveColumnOrder" @reset="resetColumns" />
                     </div>
                   </div>
                 </Teleport>
@@ -181,6 +165,7 @@
           :total-results="pagination.total"
           :selecting-all="selectingAllResults"
           :all-results-selected="allResultsSelected"
+          @move-folder="folderSidebar?.openMove(selIds)"
           @delete="handleBulkDelete"
           @reset-status="handleBulkResetStatus"
           @refresh-token="handleBulkRefreshToken"
@@ -455,6 +440,7 @@
       </template>
       <template #pagination><Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" /></template>
     </TablePageLayout>
+    </div>
     <CreateAccountModal :show="showCreate" :proxies="proxies" :groups="groups" @close="showCreate = false" @created="reload" />
     <EditAccountModal :show="showEdit" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
@@ -511,6 +497,8 @@ import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { CreateAccountModal, EditAccountModal, BulkEditAccountModal, SyncFromCrsModal, TempUnschedStatusModal } from '@/components/account'
 import AccountTableActions from '@/components/admin/account/AccountTableActions.vue'
+import AccountColumnSettings from '@/components/admin/account/AccountColumnSettings.vue'
+import AccountFolderSidebar from '@/components/admin/account/AccountFolderSidebar.vue'
 import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
 import AccountBulkActionsBar from '@/components/admin/account/AccountBulkActionsBar.vue'
 import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
@@ -566,6 +554,7 @@ type AccountBulkEditTarget =
   | {
       mode: 'filtered'
       filters: {
+        folder?: string
         platform?: string
         type?: string
         status?: string
@@ -654,6 +643,9 @@ const accountToolsDropdownStyle = computed(() => ({
 const hiddenColumns = reactive<Set<string>>(new Set())
 const DEFAULT_HIDDEN_COLUMNS = ['today_stats', 'proxy', 'notes', 'scheduler_score', 'rate_multiplier']
 const HIDDEN_COLUMNS_KEY = 'account-hidden-columns'
+const COLUMN_ORDER_KEY = 'account-column-order'
+const columnOrder = ref<string[]>([])
+const folderSidebar = ref<InstanceType<typeof AccountFolderSidebar> | null>(null)
 // One-time migration: hide scheduler score for existing admins too, because showing it opt-ins to heavy backend scoring.
 const HIDDEN_COLUMNS_VERSION_KEY = 'account-hidden-columns-version'
 const HIDDEN_COLUMNS_CURRENT_VERSION = 'scheduler-score-hidden-by-default'
@@ -958,9 +950,14 @@ const formatSchedulerScoreGroup = (score: AccountSchedulerGroupScore): string =>
 
 const loadSavedColumns = () => {
   try {
+    const order: unknown = JSON.parse(localStorage.getItem(COLUMN_ORDER_KEY) || '[]')
+    if (Array.isArray(order)) columnOrder.value = [...new Set(order.filter((key): key is string => typeof key === 'string'))]
+  } catch { /* Ignore invalid saved column order. */ }
+  try {
     const saved = localStorage.getItem(HIDDEN_COLUMNS_KEY)
     if (saved) {
       const parsed = JSON.parse(saved) as string[]
+      if (!Array.isArray(parsed)) throw new Error("Invalid column preferences")
       parsed.forEach(key => {
         hiddenColumns.add(key)
       })
@@ -1077,6 +1074,9 @@ const syncAccountListDerivedParams = () => {
   requestParams.include_scheduler_score = shouldIncludeSchedulerScore() ? '1' : '0'
 }
 
+const getSavedFolder = () => {
+  try { const value = localStorage.getItem('account-selected-folder') || ''; return value === 'unfiled' || /^[1-9]\d*$/.test(value) ? value : '' } catch { return '' }
+}
 const {
   items: accounts,
   loading,
@@ -1095,6 +1095,7 @@ const {
     status: '',
     privacy_mode: '',
     group: '',
+    folder: getSavedFolder(),
     search: '',
     lite: '1',
     include_scheduler_score: shouldIncludeSchedulerScore() ? '1' : '0',
@@ -1182,7 +1183,17 @@ const reload = async () => {
   pendingTodayStatsRefresh.value = false
   await baseReload()
   await refreshTodayStatsBatch()
+  await folderSidebar.value?.refresh?.()
 }
+
+const selectFolder = async (folder: string) => {
+  if (params.folder === folder) return
+  clearSelection()
+  params.folder = folder
+  try { localStorage.setItem("account-selected-folder", folder) } catch { /* Storage is optional. */ }
+  await reload()
+}
+const handleFolderMoved = async () => { clearSelection(); await reload() }
 
 const buildUpstreamBillingRateFilters = () => {
   const rawParams = toRaw(params) as Record<string, unknown>
@@ -1190,6 +1201,7 @@ const buildUpstreamBillingRateFilters = () => {
     platform: typeof rawParams.platform === 'string' ? rawParams.platform : '',
     type: typeof rawParams.type === 'string' ? rawParams.type : '',
     status: typeof rawParams.status === 'string' ? rawParams.status : '',
+    folder: typeof rawParams.folder === 'string' ? rawParams.folder : '',
     group: typeof rawParams.group === 'string' ? rawParams.group : '',
     search: typeof rawParams.search === 'string' ? rawParams.search : '',
     privacy_mode: typeof rawParams.privacy_mode === 'string' ? rawParams.privacy_mode : '',
@@ -1820,17 +1832,31 @@ const allColumns = computed(() => {
   return c
 })
 
-// Columns that can be toggled (exclude select, name, and actions)
-const toggleableColumns = computed(() =>
-  allColumns.value.filter(col => col.key !== 'select' && col.key !== 'name' && col.key !== 'actions')
-)
-
-// Filtered columns based on visibility
-const cols = computed(() =>
-  allColumns.value.filter(col =>
-    col.key === 'select' || col.key === 'name' || col.key === 'actions' || !hiddenColumns.has(col.key)
-  )
-)
+// Keep selection/name/actions anchored; reorder the remaining columns.
+const toggleableColumns = computed(() => {
+  const available = allColumns.value.filter(col => !['select', 'name', 'actions'].includes(col.key))
+  const byKey = new Map(available.map(col => [col.key, col]))
+  const keys = [...new Set([...columnOrder.value, ...available.map(col => col.key)])]
+  return keys.map(key => byKey.get(key)).filter((col): col is NonNullable<typeof col> => !!col)
+})
+const saveColumnOrder = (keys: string[]) => {
+  // Preserve columns temporarily unavailable in simple mode.
+  columnOrder.value = [...keys, ...columnOrder.value.filter(key => !keys.includes(key))]
+  try { localStorage.setItem(COLUMN_ORDER_KEY, JSON.stringify(columnOrder.value)) } catch { /* Storage is optional. */ }
+}
+const resetColumns = () => {
+  for (const col of allColumns.value) {
+    if (['select', 'name', 'actions'].includes(col.key)) continue
+    if (hiddenColumns.has(col.key) !== DEFAULT_HIDDEN_COLUMNS.includes(col.key)) toggleColumn(col.key)
+  }
+  columnOrder.value = []
+  try { localStorage.removeItem(COLUMN_ORDER_KEY) } catch { /* Storage is optional. */ }
+}
+const cols = computed(() => [
+  ...allColumns.value.filter(col => ['select', 'name'].includes(col.key)),
+  ...toggleableColumns.value.filter(col => !hiddenColumns.has(col.key)),
+  ...allColumns.value.filter(col => col.key === 'actions')
+])
 
 const accountDetailLoading = new Set<number>()
 const loadAccountDetails = async (account: Pick<AccountListItem, 'id'>): Promise<Account | null> => {
@@ -2062,6 +2088,7 @@ const buildBulkEditFilterSnapshot = () => {
     platform: typeof rawParams.platform === 'string' ? rawParams.platform : '',
     type: typeof rawParams.type === 'string' ? rawParams.type : '',
     status: typeof rawParams.status === 'string' ? rawParams.status : '',
+    folder: typeof rawParams.folder === 'string' ? rawParams.folder : '',
     group: typeof rawParams.group === 'string' ? rawParams.group : '',
     search: typeof rawParams.search === 'string' ? rawParams.search : '',
     privacy_mode: typeof rawParams.privacy_mode === 'string' ? rawParams.privacy_mode : '',
@@ -2139,6 +2166,7 @@ const buildAccountQueryFilters = () => ({
   platform: params.platform || '',
   type: params.type || '',
   status: params.status || '',
+  folder: params.folder || '',
   group: params.group || '',
   privacy_mode: params.privacy_mode || '',
   search: params.search || '',

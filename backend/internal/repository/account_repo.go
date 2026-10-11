@@ -1003,8 +1003,22 @@ func (r *accountRepository) List(ctx context.Context, params pagination.Paginati
 	return r.ListWithFilters(ctx, params, "", "", "", "", 0, "")
 }
 
-func (r *accountRepository) accountListFilteredQuery(platform, accountType, status, search string, groupID int64, privacyMode string) *dbent.AccountQuery {
+func (r *accountRepository) accountListFilteredQuery(ctx context.Context, platform, accountType, status, search string, groupID int64, privacyMode string) *dbent.AccountQuery {
 	q := r.client.Account.Query()
+	if folderID, scoped := service.AccountFolderFilterFromContext(ctx); scoped {
+		q = q.Where(dbpredicate.Account(func(s *entsql.Selector) {
+			members := entsql.Table("account_folder_members").As("folder_members")
+			membership := entsql.Select(members.C("account_id")).From(members).Where(entsql.ColumnsEQ(members.C("account_id"), s.C(dbaccount.FieldID)))
+			if folderID == -1 {
+				s.Where(entsql.Not(entsql.Exists(membership)))
+			} else {
+				folders := entsql.Table("account_folders").As("folder_children")
+				children := entsql.Select(folders.C("id")).From(folders).Where(entsql.EQ(folders.C("parent_id"), folderID))
+				membership.Where(entsql.Or(entsql.EQ(members.C("folder_id"), folderID), entsql.In(members.C("folder_id"), children)))
+				s.Where(entsql.Exists(membership))
+			}
+		}))
+	}
 
 	if platform != "" {
 		q = q.Where(dbaccount.PlatformEQ(platform))
@@ -1100,7 +1114,7 @@ func (r *accountRepository) accountListFilteredQuery(platform, accountType, stat
 }
 
 func (r *accountRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, accountType, status, search string, groupID int64, privacyMode string) ([]service.Account, *pagination.PaginationResult, error) {
-	q := r.accountListFilteredQuery(platform, accountType, status, search, groupID, privacyMode)
+	q := r.accountListFilteredQuery(ctx, platform, accountType, status, search, groupID, privacyMode)
 	// Clone before Count so interceptor-appended predicates (SoftDeleteMixin's
 	// deleted_at IS NULL) don't accumulate on the shared builder and pollute the
 	// subsequent list query. Same pattern used in group_repo/promo_code_repo/user_repo
@@ -1130,7 +1144,7 @@ func (r *accountRepository) ListWithFilters(ctx context.Context, params paginati
 }
 
 func (r *accountRepository) ListAllWithFilters(ctx context.Context, platform, accountType, status, search string, groupID int64, privacyMode string) ([]service.Account, error) {
-	accounts, err := r.accountListFilteredQuery(platform, accountType, status, search, groupID, privacyMode).All(ctx)
+	accounts, err := r.accountListFilteredQuery(ctx, platform, accountType, status, search, groupID, privacyMode).All(ctx)
 	if err != nil {
 		return nil, err
 	}

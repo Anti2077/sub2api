@@ -390,7 +390,21 @@ func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 
 func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAuth middleware.StepUpAuthMiddleware) {
 	accounts := admin.Group("/accounts")
+	accounts.Use(func(c *gin.Context) {
+		ctx, err := service.WithAccountFolderFilter(c.Request.Context(), c.Query("folder"))
+		if err != nil {
+			response.ErrorFrom(c, err)
+			c.Abort()
+			return
+		}
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+	})
 	{
+		accounts.GET("/folders", h.Admin.Account.FolderOverview)
+		accounts.POST("/folders", h.Admin.Account.SaveFolder)
+		accounts.DELETE("/folders/:id", h.Admin.Account.DeleteFolder)
+		accounts.POST("/folders/move", h.Admin.Account.MoveToFolder)
 		accounts.GET("", h.Admin.Account.List)
 		accounts.GET("/upstream-billing-rates", h.Admin.Account.GetUpstreamBillingRates)
 		accounts.GET("/upstream-billing-probe/settings", h.Admin.Account.GetUpstreamBillingProbeSettings)

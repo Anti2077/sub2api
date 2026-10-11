@@ -467,6 +467,7 @@ type BulkUpdateAccountsInput struct {
 }
 
 type BulkUpdateAccountFilters struct {
+	Folder      string
 	Platform    string
 	Type        string
 	Status      string

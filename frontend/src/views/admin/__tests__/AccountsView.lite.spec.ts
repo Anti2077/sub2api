@@ -98,6 +98,7 @@ function mountView(stubActionMenu = true) {
     attachTo: document.body,
     global: {
       stubs: {
+        AccountFolderSidebar: true,
         AppLayout: { template: '<div><slot /></div>' },
         TablePageLayout: { template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>' },
         DataTable: DataTableStub,

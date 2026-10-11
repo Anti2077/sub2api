@@ -92,6 +92,7 @@ function mountView() {
   return mount(AccountsView, {
     global: {
       stubs: {
+        AccountFolderSidebar: true,
         AppLayout: { template: '<div><slot /></div>' },
         TablePageLayout: {
           template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'

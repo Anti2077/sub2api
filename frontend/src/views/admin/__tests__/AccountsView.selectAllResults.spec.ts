@@ -105,6 +105,7 @@ const AccountTableFiltersStub = {
 const mountView = () => mount(AccountsView, {
   global: {
     stubs: {
+        AccountFolderSidebar: true,
       AppLayout: { template: '<div><slot /></div>' },
       TablePageLayout: {
         template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
@@ -170,6 +171,17 @@ describe('admin AccountsView select all filtered results', () => {
     vi.clearAllTimers()
     vi.useRealTimers()
     vi.restoreAllMocks()
+  })
+
+  it('keeps the saved folder scope when selecting every result', async () => {
+    localStorage.setItem('account-selected-folder', '7')
+    listAccounts.mockResolvedValue({ items: makeAccounts(2), total: 2, page: 1, page_size: 20, pages: 1 })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-test="select-all-results"]').trigger('click')
+    await flushPromises()
+    expect(listAccounts.mock.calls.every(call => call[2].folder === '7')).toBe(true)
+    expect(wrapper.get('[data-test="selected-count"]').text()).toBe('2')
   })
 
   it.each([
