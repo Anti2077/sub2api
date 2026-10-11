@@ -73,6 +73,9 @@ global concurrent accounts. Each run permits ten concurrent probe requests,
 180 seconds per request and 20 minutes in total. Full probe pools wait up to
 30 seconds. Target accounts use the ordinary gateway wait queue without
 account failover; user and account concurrency limits still apply. Detection
+may use a target whose manual scheduling switch is off, without changing that
+switch or admitting ordinary client traffic. Disabled/error accounts, expiry,
+cooldowns, rate limits, quotas and group compatibility still apply. Detection
 requests also appear in the normal routing monitor with their test user. Restart skips missed slots
 with at most one catch-up per plan. Each plan retains 50 terminal reports.
 

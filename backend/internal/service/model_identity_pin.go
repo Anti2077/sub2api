@@ -48,6 +48,23 @@ func IdentityTargetFromContext(ctx context.Context) (int64, int64, bool) {
 	p, ok := ctx.Value(identityTargetKey{}).(identityTarget)
 	return p.AccountID, p.GroupID, ok
 }
+
+// Only authenticated identity probes may ignore the target's manual scheduling
+// switch. Check a copy so cached/repository accounts and ordinary traffic stay
+// paused, while every other availability gate still applies.
+func (a *Account) isSchedulableForIdentityContext(ctx context.Context) bool {
+	if a == nil {
+		return false
+	}
+	id, groupID, pinned := IdentityTargetFromContext(ctx)
+	if pinned && id == a.ID && identityAccountInGroup(a, groupID) {
+		probeAccount := *a
+		probeAccount.Schedulable = true
+		return probeAccount.IsSchedulable()
+	}
+	return a.IsSchedulable()
+}
+
 func identityTargetAllowed(ctx context.Context, g *int64, excluded map[int64]struct{}) (int64, bool, error) {
 	id, group, ok := IdentityTargetFromContext(ctx)
 	if !ok {

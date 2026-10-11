@@ -17,7 +17,7 @@ import (
 func TestIdentityOpenAIProbesUsePinnedAccountModelMappingAndNormalBilling(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	groupID := int64(7)
-	target := &Account{ID: 42, Name: "target", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 4, GroupIDs: []int64{groupID}, Credentials: map[string]any{"api_key": "simulation-upstream-key", "base_url": "https://simulation.example", "api_protocol": "responses", "model_mapping": map[string]any{"public-test-model": "gpt-5.1"}}}
+	target := &Account{ID: 42, Name: "target", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: false, Concurrency: 4, GroupIDs: []int64{groupID}, Credentials: map[string]any{"api_key": "simulation-upstream-key", "base_url": "https://simulation.example", "api_protocol": "responses", "model_mapping": map[string]any{"public-test-model": "gpt-5.1"}}}
 	other := &Account{ID: 43, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, GroupIDs: []int64{groupID}}
 	accountRepo := &mockAccountRepoForPlatform{accounts: []Account{*target, *other}, accountsByID: map[int64]*Account{42: target, 43: other}}
 	logs := &openAIRecordUsageLogRepoStub{inserted: true}
@@ -30,6 +30,8 @@ func TestIdentityOpenAIProbesUsePinnedAccountModelMappingAndNormalBilling(t *tes
 		selected, _, e := svc.SelectAccountWithSchedulerForCapability(ctx, &groupID, "", "", "public-test-model", nil, OpenAIUpstreamTransportHTTPSSE, OpenAIEndpointCapabilityChatCompletions, false, false, true)
 		require.NoError(t, e)
 		require.EqualValues(t, 42, selected.Account.ID)
+		require.False(t, target.Schedulable)
+		require.False(t, selected.Account.Schedulable)
 		upstream := &httpUpstreamRecorder{resp: &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/event-stream"}, "X-Request-Id": []string{"simulation-request"}}, Body: io.NopCloser(strings.NewReader(`data: {"type":"response.completed","response":{"id":"resp_simulated","object":"response","model":"gpt-5.1","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"simulated identity probe"}]}],"usage":{"input_tokens":100,"output_tokens":20}}}` + "\n\ndata: [DONE]\n\n"))}}
 		svc.httpUpstream = upstream
 		body := []byte(`{"model":"public-test-model","stream":false,"messages":[{"role":"user","content":"hello"}]}`)
