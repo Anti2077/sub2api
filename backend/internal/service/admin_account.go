@@ -1238,6 +1238,11 @@ func (s *adminServiceImpl) resolveBulkUpdateTargetIDs(ctx context.Context, filte
 		return nil, nil
 	}
 
+	var err error
+	ctx, err = WithAccountFolderFilter(ctx, filters.Folder)
+	if err != nil {
+		return nil, err
+	}
 	groupID := int64(0)
 	switch strings.TrimSpace(filters.Group) {
 	case "":

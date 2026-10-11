@@ -40,6 +40,7 @@ const icons = {
 
   // Navigation
   chevronDown: 'M19.5 8.25l-7.5 7.5-7.5-7.5',
+  folder: 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7z',
   chevronRight: 'M8.25 4.5l7.5 7.5-7.5 7.5',
   chevronLeft: 'M15.75 19.5L8.25 12l7.5-7.5',
 
