@@ -14,7 +14,8 @@ import (
 )
 
 // The Claude redeem route consumes an irreversible credit just like the Codex
-// reset-quota route, so it must sit behind exactly the same middleware chain.
+// reset-quota route, so it must sit behind exactly the same security middleware
+// chain before the account routes' additional folder filter.
 func TestClaudeResetRedeemRouteMatchesCodexResetProtection(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -36,22 +37,28 @@ func TestClaudeResetRedeemRouteMatchesCodexResetProtection(t *testing.T) {
 	codex := "/api/v1/admin/openai/accounts/1/reset-quota"
 	claude := "/api/v1/admin/accounts/1/claude/reset-credits/redeem"
 	for _, path := range []string{codex, claude} {
-		for _, auth := range []string{"", "Bearer user-token"} {
-			recorder := httptest.NewRecorder()
-			request := httptest.NewRequest(http.MethodPost, path, nil)
-			if auth != "" {
-				request.Header.Set("Authorization", auth)
-			}
-			router.ServeHTTP(recorder, request)
-			if auth == "" {
-				require.Equal(t, http.StatusUnauthorized, recorder.Code, path)
-			} else {
-				require.Equal(t, http.StatusForbidden, recorder.Code, path)
+		for _, query := range []string{"", "?folder=invalid"} {
+			for _, auth := range []string{"", "Bearer user-token"} {
+				recorder := httptest.NewRecorder()
+				request := httptest.NewRequest(http.MethodPost, path+query, nil)
+				if auth != "" {
+					request.Header.Set("Authorization", auth)
+				}
+				router.ServeHTTP(recorder, request)
+				if auth == "" {
+					require.Equal(t, http.StatusUnauthorized, recorder.Code, path)
+				} else {
+					require.Equal(t, http.StatusForbidden, recorder.Code, path)
+				}
 			}
 		}
 	}
 	codexChain := chains["/api/v1/admin/openai/accounts/:id/reset-quota"]
 	claudeChain := chains["/api/v1/admin/accounts/:id/claude/reset-credits/redeem"]
 	require.NotEmpty(t, codexChain)
-	require.Equal(t, strings.Join(codexChain, "\n"), strings.Join(claudeChain, "\n"))
+	// Keep the exact order and every security layer; the folder filter must run
+	// after them, including when its query is invalid.
+	expectedClaudeChain := append(append([]string{}, codexChain...),
+		"github.com/Wei-Shaw/sub2api/internal/server/routes.registerAccountRoutes.func1")
+	require.Equal(t, strings.Join(expectedClaudeChain, "\n"), strings.Join(claudeChain, "\n"))
 }

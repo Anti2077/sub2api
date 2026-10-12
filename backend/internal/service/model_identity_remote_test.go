@@ -54,13 +54,15 @@ func TestRemoteRunIDVariants(t *testing.T) {
 	require.Empty(t, remoteRunID(map[string]any{"status": "running"}))
 }
 
-func TestIdentityHTTPClientsUseTLS12ForHostedProbe(t *testing.T) {
+func TestIdentityHTTPClientsPreferModernTLS(t *testing.T) {
 	for _, client := range []*http.Client{identityRemoteCatalogClient(), identityRunHTTPClient()} {
-		transport, ok := client.Transport.(*http.Transport)
+		transport, ok := client.Transport.(*identityTLSFallbackTransport)
 		require.True(t, ok)
-		require.NotNil(t, transport.TLSClientConfig)
-		require.Equal(t, uint16(tls.VersionTLS12), transport.TLSClientConfig.MinVersion)
-		require.Equal(t, uint16(tls.VersionTLS12), transport.TLSClientConfig.MaxVersion)
+		require.Equal(t, uint16(tls.VersionTLS12), transport.primary.TLSClientConfig.MinVersion)
+		require.Zero(t, transport.primary.TLSClientConfig.MaxVersion)
+		require.False(t, transport.primary.TLSClientConfig.InsecureSkipVerify)
+		require.Equal(t, uint16(tls.VersionTLS12), transport.fallback.TLSClientConfig.MaxVersion)
+		require.False(t, transport.fallback.TLSClientConfig.InsecureSkipVerify)
 	}
 }
 

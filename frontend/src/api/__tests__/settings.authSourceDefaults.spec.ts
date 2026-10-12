@@ -8,18 +8,43 @@ import {
   type UpdateSettingsRequest,
   type DefaultPlatformQuotasMap,
 } from "@/api/admin/settings";
+import { listPlatformIds } from "@/constants/platformCatalog";
 
-/** 全 null 的平台 map，用于断言归一化默认值 */
-const allNullQuotas: DefaultPlatformQuotasMap = {
-  anthropic: { daily: null, weekly: null, monthly: null },
-  openai:    { daily: null, weekly: null, monthly: null },
-  gemini:    { daily: null, weekly: null, monthly: null },
-  antigravity: { daily: null, weekly: null, monthly: null },
-  grok: { daily: null, weekly: null, monthly: null },
-  typesafe: { daily: null, weekly: null, monthly: null },
-}
+/** 与后端 AllowedQuotaPlatforms 一致的全部具体平台（平台清单）。 */
+const quotaPlatforms = [
+  "anthropic", "openai", "gemini", "antigravity", "grok",
+  "kimi", "zhipu", "deepseek", "minimax", "opencode_go", "typesafe", "command_code", "cline",
+];
+
+/** 全部平台全 null 的 map，用于断言归一化默认值 */
+const allNullQuotas: DefaultPlatformQuotasMap = Object.fromEntries(
+  quotaPlatforms.map((platform) => [platform, { daily: null, weekly: null, monthly: null }]),
+)
 
 describe("admin settings auth source defaults helpers", () => {
+  it("round-trips custom auth-source quotas for existing and newly registered platforms", () => {
+    const quotas: DefaultPlatformQuotasMap = {
+      typesafe: { daily: 3, weekly: 12, monthly: 30 },
+      command_code: { daily: 0, weekly: 20, monthly: 100 },
+      cline: { daily: 5, weekly: null, monthly: 50 },
+    };
+    const state = buildAuthSourceDefaultsState({
+      auth_source_default_dingtalk_platform_quotas: quotas,
+      auth_source_default_dingtalk_grant_on_signup: false,
+      auth_source_default_dingtalk_grant_on_first_bind: true,
+    });
+    const payload: UpdateSettingsRequest = {};
+
+    appendAuthSourceDefaultsToUpdateRequest(payload, state);
+
+    expect(payload.auth_source_default_dingtalk_platform_quotas).toEqual({
+      ...allNullQuotas,
+      ...quotas,
+    });
+    expect(payload.auth_source_default_dingtalk_grant_on_signup).toBe(false);
+    expect(payload.auth_source_default_dingtalk_grant_on_first_bind).toBe(true);
+  });
+
   it("builds auth source defaults state from flat settings fields", () => {
     const state = buildAuthSourceDefaultsState({
       auth_source_default_email_balance: 9.5,
@@ -239,11 +264,14 @@ describe("normalizePlatformQuotasMap", () => {
     expect(result.gemini).toEqual({ daily: null, weekly: null, monthly: null });
     expect(result.antigravity).toEqual({ daily: null, weekly: null, monthly: null });
     expect(result.grok).toEqual({ daily: null, weekly: null, monthly: null });
+    expect(result.kimi).toEqual({ daily: null, weekly: null, monthly: null });
+    expect(result.opencode_go).toEqual({ daily: null, weekly: null, monthly: null });
   });
 
-  it("无参数时返回所有平台全 null", () => {
+  it("无参数时返回平台清单中的全部平台全 null", () => {
     const result = normalizePlatformQuotasMap();
-    expect(Object.keys(result)).toHaveLength(Object.keys(allNullQuotas).length);
+    expect(listPlatformIds()).toEqual(quotaPlatforms);
+    expect(Object.keys(result)).toEqual(quotaPlatforms);
     for (const v of Object.values(result)) {
       expect(v).toEqual({ daily: null, weekly: null, monthly: null });
     }
@@ -291,7 +319,7 @@ describe("sanitizePlatformQuotasMap", () => {
 
   it("缺失平台填充为全 null", () => {
     const result = sanitizePlatformQuotasMap({});
-    expect(Object.keys(result)).toHaveLength(Object.keys(allNullQuotas).length);
+    expect(Object.keys(result)).toEqual(quotaPlatforms);
     for (const v of Object.values(result)) {
       expect(v).toEqual({ daily: null, weekly: null, monthly: null });
     }

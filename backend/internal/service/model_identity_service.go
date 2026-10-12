@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
-	"crypto/tls"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -39,16 +38,10 @@ func NewModelIdentityService(repo IdentityRepository, apiKeys *APIKeyService, ac
 		client:    identityRemoteCatalogClient()}
 }
 
-// Some self-hosted network paths terminate or rewrite TLS 1.3 connections to
-// the hosted Probe API. Keep the remote catalog client on TLS 1.2, which is
-// still widely supported and avoids turning a reachable API into a generic
-// invalid-response error.
 func identityRemoteCatalogClient() *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, MaxVersion: tls.VersionTLS12}
 	return &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: transport,
+		Timeout:   10 * time.Second,
+		Transport: identityHTTPTransport(),
 	}
 }
 

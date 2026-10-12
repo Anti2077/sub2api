@@ -15,7 +15,7 @@ import (
 func TestAccountFolderRejectsThirdLevel(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	repo := &accountFolderRepository{db: db}
 	parent := int64(2)
 	mock.ExpectBegin()
@@ -30,7 +30,7 @@ func TestAccountFolderRejectsThirdLevel(t *testing.T) {
 func TestAccountFolderMoveRollsBackWhenAccountDeleted(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	repo := &accountFolderRepository{db: db}
 	folder := int64(3)
 	mock.ExpectBegin()
@@ -48,7 +48,7 @@ func TestAccountFolderFilterAppliedBeforePaginationCount(t *testing.T) {
 		t.Run(folder, func(t *testing.T) {
 			db, mock, err := sqlmock.New()
 			require.NoError(t, err)
-			defer db.Close()
+			defer func() { _ = db.Close() }()
 			client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 			repo := &accountRepository{client: client}
 			ctx, err := service.WithAccountFolderFilter(context.Background(), folder)
