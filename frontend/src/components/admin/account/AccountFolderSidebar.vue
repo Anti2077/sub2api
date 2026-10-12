@@ -1,13 +1,13 @@
 <template>
-  <aside class="min-w-0 rounded-xl border border-gray-200 bg-white p-3 dark:border-dark-700 dark:bg-dark-800 lg:w-56 lg:shrink-0 lg:self-start">
-    <div class="flex items-center justify-between gap-2">
+  <aside class="flex min-w-0 flex-col rounded-xl border border-gray-200 bg-white p-3 dark:border-dark-700 dark:bg-dark-800 lg:h-48" data-testid="account-folder-panel">
+    <div class="flex shrink-0 items-center justify-between gap-2">
       <button type="button" class="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100 lg:pointer-events-none" :aria-expanded="mobileOpen" @click="mobileOpen = !mobileOpen">
         <Icon name="folder" size="sm" />{{ t('admin.accounts.folders.title') }}
         <Icon name="chevronDown" size="xs" class="lg:hidden" />
       </button>
       <button type="button" class="rounded p-2 text-primary-600 hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-dark-700" :aria-label="t('admin.accounts.folders.create')" @click="edit()"><Icon name="plus" size="sm" /></button>
     </div>
-    <div :class="[mobileOpen ? 'block' : 'hidden', 'mt-3 space-y-1 lg:block lg:max-h-[calc(100vh-14rem)] lg:overflow-y-auto']" :aria-busy="loading">
+    <div :class="[mobileOpen ? 'block' : 'hidden', 'mt-3 min-h-0 max-h-48 space-y-1 overflow-y-auto lg:block lg:max-h-none lg:flex-1']" :aria-busy="loading">
       <button type="button" :class="rowClass('')" @click="emit('select', '')"><span>{{ t('admin.accounts.folders.all') }}</span><span class="text-xs tabular-nums">{{ overview.total }}</span></button>
       <button type="button" :class="rowClass('unfiled')" @click="emit('select', 'unfiled')"><span>{{ t('admin.accounts.folders.unfiled') }}</span><span class="text-xs tabular-nums">{{ overview.unfiled }}</span></button>
       <p v-if="error" class="px-2 py-2 text-xs text-red-600" role="alert">{{ error }} <button type="button" class="underline" @click="refresh">{{ t('common.tryAgain') }}</button></p>
