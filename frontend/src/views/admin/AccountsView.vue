@@ -1,12 +1,12 @@
 <template>
   <AppLayout>
-    <div class="flex min-w-0 flex-col gap-4 lg:flex-row">
-    <AccountFolderSidebar ref="folderSidebar" :model-value="params.folder" @select="selectFolder" @moved="handleFolderMoved" @changed="reload" />
-    <TablePageLayout class="min-w-0 flex-1">
+    <TablePageLayout class="min-w-0">
       <template #filters>
-        <div class="flex flex-wrap-reverse items-start justify-between gap-3">
+        <div class="grid min-w-0 gap-4 lg:grid-cols-[14rem_minmax(0,1fr)]" data-testid="account-toolbar">
+          <AccountFolderSidebar ref="folderSidebar" :model-value="params.folder" @select="selectFolder" @moved="handleFolderMoved" @changed="reload" />
+          <div class="flex min-w-0 flex-wrap-reverse items-end justify-between gap-3 lg:min-h-48 lg:flex-col lg:flex-nowrap lg:items-stretch" data-testid="account-toolbar-controls">
           <AccountTableFilters
-            class="lg:w-auto lg:flex-1"
+            class="self-start lg:max-w-md"
             v-model:searchQuery="params.search"
             :filters="params"
             :groups="groups"
@@ -15,6 +15,7 @@
             @update:searchQuery="debouncedReload"
           />
           <AccountTableActions
+            class="ml-auto"
             :loading="loading"
             @refresh="handleManualRefresh"
             @create="showCreate = true"
@@ -145,6 +146,7 @@
               </div>
             </template>
           </AccountTableActions>
+          </div>
         </div>
         <div
           v-if="hasPendingListSync"
@@ -440,7 +442,6 @@
       </template>
       <template #pagination><Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" /></template>
     </TablePageLayout>
-    </div>
     <CreateAccountModal :show="showCreate" :proxies="proxies" :groups="groups" @close="showCreate = false" @created="reload" />
     <EditAccountModal :show="showEdit" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
