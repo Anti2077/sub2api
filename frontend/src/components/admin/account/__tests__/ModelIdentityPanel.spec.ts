@@ -3,10 +3,10 @@ import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import ModelIdentityPanel from '../ModelIdentityPanel.vue'
 import type { Account, Group } from '@/types'
 
-const mocks = vi.hoisted(() => ({models:vi.fn(),config:vi.fn(),plans:vi.fn(),saveConfig:vi.fn(),savePlan:vi.fn(),updatePlan:vi.fn(),history:vi.fn(),list:vi.fn(),getById:vi.fn()}))
+const mocks = vi.hoisted(() => ({runStatus:vi.fn(),models:vi.fn(),config:vi.fn(),plans:vi.fn(),saveConfig:vi.fn(),savePlan:vi.fn(),updatePlan:vi.fn(),history:vi.fn(),list:vi.fn(),getById:vi.fn()}))
 vi.mock('@/api/admin/modelIdentity',()=>mocks)
 vi.mock('@/api/admin/users',()=>({list:mocks.list,getById:mocks.getById}))
-vi.mock('vue-i18n',()=>({useI18n:()=>({t:(key:string)=>key})}))
+vi.mock('vue-i18n',()=>({useI18n:()=>({t:(key:string)=>key,locale:{value:'zh'}})}))
 enableAutoUnmount(afterEach)
 const account={id:1,name:'Target',platform:'openai',group_ids:[7,8]} as Account
 const groups=[{id:7,name:'Billing',platform:'openai'},{id:8,name:'Incompatible',platform:'anthropic'}] as Group[]
@@ -24,6 +24,17 @@ describe('account model identity configuration',()=>{
     mocks.config.mockResolvedValue({account_id:1,user_id:5,group_id:7,api_key_id:9,key_name:'Dedicated'})
     const w=open();await flushPromises();const form=w.findAll('form')[1];await form.find('input').setValue('gpt-5.5');await form.find('select').setValue('openai/gpt-5.5');await form.trigger('submit');await flushPromises()
     expect(mocks.savePlan).toHaveBeenCalledWith({account_id:1,request_model:'gpt-5.5',expected_model:'openai/gpt-5.5',interval_minutes:120,enabled:false})
+  })
+  it('renders hosted item timing in account history without joining local gateway probes',async()=>{
+    mocks.plans.mockResolvedValue([{id:2,account_id:1,request_model:'gpt-5.5',expected_model:'openai/gpt-5.5',enabled:false,interval_minutes:120}])
+    const run={id:3,plan_id:2,status:'completed',created_at:'2026-10-13T00:00:00Z',report:{verdict:'inconclusive',items:[{probeId:'hosted-probe',status:'done',ttftMs:123,tps:45}]},probes:[]}
+    mocks.history.mockResolvedValue([run]);mocks.runStatus.mockResolvedValue(run)
+    const w=open();await flushPromises()
+    await w.findAll('button').find(button=>button.text()==='admin.modelIdentity.report')!.trigger('click');await flushPromises()
+    expect(mocks.runStatus).toHaveBeenCalledWith(3)
+    expect(w.get('[data-testid="averageTtft"]').text()).toContain('123 ms')
+    expect(w.get('[data-testid="averageTps"]').text()).toContain('45 token/s')
+    expect(w.get('[data-testid="identity-performance"]').text()).toContain('hosted-probe')
   })
   it('displays engine failures and disables plan creation',async()=>{
     mocks.models.mockRejectedValue(new Error('worker unavailable'));const w=open();await flushPromises();expect(w.get('[role="alert"]').text()).toContain('worker unavailable');expect(w.findAll('form')[1].get('button').attributes('disabled')).toBeDefined()

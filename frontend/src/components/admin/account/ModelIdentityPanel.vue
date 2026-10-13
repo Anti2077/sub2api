@@ -43,6 +43,7 @@
           <div><dt class="text-gray-500">{{ t('admin.modelIdentity.baselineVersion') }}</dt><dd class="break-words">{{ selectedReport.report?.baseline_version || '-' }}</dd></div>
         </dl>
         <p v-if="selectedReport.report?.error" role="alert" class="break-words text-sm text-red-600">{{ selectedReport.report.error }}</p>
+        <IdentityPerformance :report="selectedReport.report" />
         <IdentityModelVotes :report="selectedReport.report" />
         <details v-for="(probe,index) in selectedReport.probes" :key="index" class="border-b border-gray-200 py-2 text-sm dark:border-dark-600">
           <summary class="cursor-pointer break-words">{{ probe.probe_id || index + 1 }} · {{ probe.status }}</summary>
@@ -66,6 +67,7 @@
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import IdentityPerformance from './IdentityPerformance.vue'
 import IdentityModelVotes from './IdentityModelVotes.vue'
 import { Icon } from '@/components/icons'
 import type { Account, AdminUser, Group } from '@/types'

@@ -95,6 +95,15 @@ describe('model identity account matrix', () => {
     expect(w.text()).toContain('Conflicting fingerprint signals')
     expect(votes.element.parentElement?.textContent).toContain('admin.modelIdentity.inconclusive')
   })
+  it('shows hosted performance in historical reports independently of local probes', async () => {
+    mocks.runStatus.mockResolvedValue({ ...runs[5], probes: [], report: { verdict: 'matched', wallClockMs: 5000, items: [{ probeId: 'hosted-only', status: 'done', ttftMs: 250, tps: 80 }] } })
+    const w = open(); await flushPromises()
+    await w.get('table tr[data-plan-id="1"]').findComponent(IdentityRecentRuns).find('button').trigger('click'); await flushPromises()
+    expect(w.get('[data-testid="averageTtft"]').text()).toContain('250 ms')
+    expect(w.get('[data-testid="averageTps"]').text()).toContain('80 token/s')
+    expect(w.get('[data-testid="identity-performance"]').text()).toContain('hosted-only')
+    expect(w.get('[data-testid="identity-performance"]').element.parentElement?.textContent).toContain('admin.modelIdentity.matched')
+  })
   it('separates multiple plans for one account and retains each plan’s own history', async () => {
     const secondPlan = { ...plan, id: 2, request_model: 'gpt-6-luna', expected_model: 'openai/gpt-6-luna', enabled: false }
     mocks.plans.mockResolvedValue([plan, secondPlan])

@@ -107,6 +107,19 @@ are not retried, and an uncertain POST is never replayed because it may already
 have started a paid run. Contract reference:
 <https://bazaarlink.ai/probe-api-skill.md>.
 
+## Report performance
+
+Both admin report views display the hosted `items[].ttftMs`, `tps`,
+`durationMs`, and `outputTokens`, plus run-level `wallClockMs`. Existing stored
+reports need no migration. TTFT and TPS averages use independent sample counts
+and only successful (`done`) items with finite valid measurements. Zero TTFT
+is valid; TPS must be positive. Missing measurements show a dash, never zero.
+Retry history is not counted again, and local gateway probes are not joined by
+index. Average TPS is the arithmetic mean of reported question speeds, not
+total tokens divided by detection duration. These measurements include the
+network/proxy path observed by BazaarLink. Failed items may retain diagnostic
+timing but do not contribute to either average.
+
 ## Build and verify
 
 ```sh
