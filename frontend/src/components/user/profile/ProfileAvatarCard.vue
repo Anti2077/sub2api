@@ -41,12 +41,17 @@
           </p>
         </div>
 
-        <div class="flex flex-wrap items-center gap-3">
+        <p v-if="avatarReading || avatarSaving" role="status" class="text-sm text-gray-500 dark:text-gray-400">
+          {{ t(avatarReading ? 'profile.avatar.reading' : 'profile.avatar.saving') }}
+        </p>
+
+        <div class="flex flex-wrap items-center gap-3" :aria-busy="avatarReading || avatarSaving">
           <label class="btn btn-secondary btn-sm cursor-pointer">
             <input
               data-testid="profile-avatar-file-input"
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              :disabled="avatarSaving || avatarReading"
               class="hidden"
               @change="handleAvatarFileChange"
             >
@@ -57,17 +62,17 @@
             data-testid="profile-avatar-save"
             type="button"
             class="btn btn-primary btn-sm"
-            :disabled="avatarSaving || !avatarDraft"
+            :disabled="avatarSaving || avatarReading || !avatarDraft"
             @click="handleAvatarSave"
           >
-            {{ t('common.save') }}
+            {{ avatarSaving ? t('profile.avatar.saving') : t('common.save') }}
           </button>
 
           <button
             data-testid="profile-avatar-delete"
             type="button"
             class="btn btn-secondary btn-sm"
-            :disabled="avatarSaving"
+            :disabled="avatarSaving || avatarReading"
             @click="handleAvatarDelete"
           >
             {{ t('common.delete') }}
@@ -98,11 +103,11 @@ const { t } = useI18n()
 const authStore = useAuthStore()
 const appStore = useAppStore()
 
-const targetAvatarUploadBytes = 20 * 1024
-const avatarScaleSteps = [1, 0.92, 0.84, 0.76, 0.68, 0.6, 0.52, 0.44, 0.36]
-const avatarQualitySteps = [0.92, 0.84, 0.76, 0.68, 0.6, 0.52, 0.44, 0.36]
+const maxAvatarUploadBytes = 10 * 1024 * 1024
+const supportedAvatarTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 const avatarDraft = ref('')
 const avatarSaving = ref(false)
+const avatarReading = ref(false)
 
 const displayName = computed(() => props.user?.username?.trim() || props.user?.email?.trim() || t('profile.user'))
 const avatarInitial = computed(() => displayName.value.charAt(0).toUpperCase() || 'U')
@@ -138,85 +143,27 @@ function readFileAsDataURL(file: File): Promise<string> {
   })
 }
 
-function loadImage(dataURL: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const image = new Image()
-    image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error(t('profile.avatar.readFailed')))
-    image.src = dataURL
-  })
-}
-
-function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        reject(new Error(t('profile.avatar.compressFailed')))
-        return
-      }
-      resolve(blob)
-    }, type, quality)
-  })
-}
-
-async function compressAvatarFile(file: File): Promise<File> {
-  const sourceDataURL = await readFileAsDataURL(file)
-  const image = await loadImage(sourceDataURL)
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d')
-  if (!ctx) {
-    throw new Error(t('profile.avatar.compressFailed'))
-  }
-
-  for (const scale of avatarScaleSteps) {
-    const width = Math.max(1, Math.round(image.naturalWidth * scale))
-    const height = Math.max(1, Math.round(image.naturalHeight * scale))
-    canvas.width = width
-    canvas.height = height
-    ctx.clearRect(0, 0, width, height)
-    ctx.drawImage(image, 0, 0, width, height)
-
-    for (const quality of avatarQualitySteps) {
-      const blob = await canvasToBlob(canvas, 'image/webp', quality)
-      if (blob.size <= targetAvatarUploadBytes) {
-        const fileName = file.name.replace(/\.[^.]+$/, '') || 'avatar'
-        return new File([blob], `${fileName}.webp`, { type: 'image/webp' })
-      }
-    }
-  }
-
-  throw new Error(t('profile.avatar.compressTooLarge'))
-}
-
-async function prepareAvatarUpload(file: File): Promise<File> {
-  if (!file.type.startsWith('image/')) {
-    throw new Error(t('profile.avatar.invalidType'))
-  }
-  if (file.type === 'image/gif') {
-    if (file.size > targetAvatarUploadBytes) {
-      throw new Error(t('profile.avatar.gifTooLarge'))
-    }
-    return file
-  }
-  if (file.size <= targetAvatarUploadBytes) {
-    return file
-  }
-  return compressAvatarFile(file)
-}
-
 async function handleAvatarFileChange(event: Event) {
   const input = event.target as HTMLInputElement | null
   const file = input?.files?.[0]
   if (input) {
     input.value = ''
   }
-  if (!file) {
+  if (!file || avatarSaving.value || avatarReading.value) {
     return
   }
 
+  avatarDraft.value = ''
+  avatarReading.value = true
   try {
-    const preparedFile = await prepareAvatarUpload(file)
-    const dataURL = await readFileAsDataURL(preparedFile)
+    if (!supportedAvatarTypes.has(file.type)) {
+      throw new Error(t('profile.avatar.invalidType'))
+    }
+    if (file.size > maxAvatarUploadBytes) {
+      throw new Error(t('profile.avatar.uploadTooLarge'))
+    }
+    // Send the original to the server so GIF frames survive compression.
+    const dataURL = await readFileAsDataURL(file)
     const normalized = normalizeUploadedAvatar(dataURL)
     if (!normalized) {
       return
@@ -224,10 +171,13 @@ async function handleAvatarFileChange(event: Event) {
     avatarDraft.value = normalized
   } catch (error: unknown) {
     appStore.showError(extractApiErrorMessage(error, t('common.error')))
+  } finally {
+    avatarReading.value = false
   }
 }
 
 async function handleAvatarSave() {
+  if (avatarSaving.value || avatarReading.value) return
   const normalized = normalizeUploadedAvatar(avatarDraft.value)
   if (!normalized) {
     return
@@ -237,7 +187,7 @@ async function handleAvatarSave() {
   try {
     const updated = await userAPI.updateProfile({ avatar_url: normalized })
     authStore.user = updated
-    avatarDraft.value = updated.avatar_url?.trim() || ''
+    avatarDraft.value = ''
     appStore.showSuccess(t('profile.avatar.saveSuccess'))
   } catch (error: unknown) {
     appStore.showError(extractApiErrorMessage(error, t('common.error')))
@@ -247,7 +197,7 @@ async function handleAvatarSave() {
 }
 
 async function handleAvatarDelete() {
-  if (avatarSaving.value) {
+  if (avatarSaving.value || avatarReading.value) {
     return
   }
   if (!avatarDraft.value.trim() && !props.user?.avatar_url?.trim()) {
