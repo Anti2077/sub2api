@@ -4,9 +4,27 @@
 
 ## 开始前
 
-- 安装并打开 [RustDesk](https://rustdesk.com/)；下方截图来自 macOS 版，其他系统的入口名称或位置可能略有不同。
+- 从下方蓝奏云链接或 [RustDesk 官网](https://rustdesk.com/)下载安装并打开 RustDesk；下方截图来自 macOS 版，其他系统的入口名称或位置可能略有不同。
 - 准备好本站提供的服务器配置串。它仅用于导入服务器设置，不是 Sub2API 的 API Key。
 - 如果 RustDesk 已配置其他自建服务器，导入会替换当前的 ID/中继服务器设置；先确认是否需要保留原配置。
+
+## 下载安装包（蓝奏云）
+
+以下安装包均为 **RustDesk 1.5.0**，来自 [GitHub 官方稳定版发布页](https://github.com/rustdesk/rustdesk/releases/tag/1.5.0)，于 **2026-10-13** 下载并上传到蓝奏云。上传前已逐个核对文件大小及官方 SHA-256，未修改安装包内容。打开“蓝奏云下载”后，输入同一行的提取码。
+
+| 系统与架构 | 格式 | 蓝奏云下载 | 提取码 | 大小 |
+| --- | --- | --- | --- | --- |
+| Windows 64 位（x86_64，常用） | EXE | [蓝奏云下载](https://anti2077.lanzout.com/iv4yg4btwn0f) | `gd4s` | 24.69 MiB |
+| Windows 32 位（x86，Sciter 版） | EXE | [蓝奏云下载](https://anti2077.lanzout.com/it3t74btwmsh) | `fybr` | 12.76 MiB |
+| macOS Apple Silicon（ARM64 / aarch64） | DMG | [蓝奏云下载](https://anti2077.lanzout.com/ipzQz4btwnaf) | `6hom` | 28.49 MiB |
+| Linux 64 位（x86_64，Ubuntu / Debian 等） | DEB | [蓝奏云下载](https://anti2077.lanzout.com/i0Ear4btwnhc) | `93cp` | 23.79 MiB |
+| Linux 64 位（x86_64，Fedora / RHEL 等） | RPM | [蓝奏云下载](https://anti2077.lanzout.com/iDmZ84btwnuf) | `h8aj` | 32.17 MiB |
+| Linux 64 位（x86_64，AppImage） | AppImage | [蓝奏云下载](https://anti2077.lanzout.com/ii4Wz4btwota) | `5s4a` | 83.92 MiB |
+
+- **Windows**：普通 Intel / AMD 64 位电脑优先选 x86_64；32 位系统选 x86 Sciter 版。Windows ARM 设备请到官方发布页选择 ARM64 安装包。
+- **Mac**：上表适用于 M 系列芯片；Intel Mac 请到官方发布页选择 x86_64 DMG。
+- **Linux**：按发行版选择 DEB 或 RPM；使用 AppImage 时需先赋予文件可执行权限。蓝奏云会把 AppImage 文件名的扩展名显示为 `.appimage`，它仍是 Linux 安装包；如有需要可改回 `.AppImage`。
+- 如需其他架构、格式或更新版本，请使用 [GitHub 官方下载](https://github.com/rustdesk/rustdesk/releases/latest)。蓝奏云链接固定对应 1.5.0，不会自动更新。
 
 ## 第一步：进入网络设置
 
