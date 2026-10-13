@@ -12,7 +12,7 @@ import (
 	"image"
 	"image/color"
 	stddraw "image/draw"
-	_ "image/gif"
+	"image/gif"
 	"image/jpeg"
 	_ "image/png"
 	"log/slog"
@@ -24,6 +24,7 @@ import (
 	"time"
 
 	xdraw "golang.org/x/image/draw"
+	_ "golang.org/x/image/webp"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -34,7 +35,7 @@ var (
 	ErrInsufficientPerms        = infraerrors.Forbidden("INSUFFICIENT_PERMISSIONS", "insufficient permissions")
 	ErrNotifyCodeUserRateLimit  = infraerrors.TooManyRequests("NOTIFY_CODE_USER_RATE_LIMIT", "too many verification codes requested, please try again later")
 	ErrAvatarInvalid            = infraerrors.BadRequest("AVATAR_INVALID", "avatar must be a valid image data URL or http(s) URL")
-	ErrAvatarTooLarge           = infraerrors.BadRequest("AVATAR_TOO_LARGE", "avatar image must be 100KB or smaller")
+	ErrAvatarTooLarge           = infraerrors.BadRequest("AVATAR_TOO_LARGE", "avatar upload must be 10MB or smaller and compressible to 1MB")
 	ErrAvatarNotImage           = infraerrors.BadRequest("AVATAR_NOT_IMAGE", "avatar content must be an image")
 	ErrUsernameRequired         = infraerrors.BadRequest("USERNAME_REQUIRED", "username is required")
 	ErrUsernameInvalid          = infraerrors.BadRequest("USERNAME_INVALID", "username is invalid")
@@ -49,8 +50,8 @@ var (
 
 const (
 	maxNotifyEmails      = 3 // Maximum number of notification emails per user
-	maxInlineAvatarBytes = 100 * 1024
-	targetAvatarBytes    = 20 * 1024
+	maxInlineAvatarBytes = 10 * 1024 * 1024
+	targetAvatarBytes    = 1024 * 1024
 
 	// User-level rate limiting for notify email verification codes
 	notifyCodeUserRateLimit  = 5
@@ -672,6 +673,10 @@ func normalizeInlineUserAvatarInput(raw string) (UpsertUserAvatarInput, error) {
 		return UpsertUserAvatarInput{}, ErrAvatarNotImage
 	}
 
+	// Bound base64 input before allocating the decoded upload.
+	if len(encoded) > base64.StdEncoding.EncodedLen(maxInlineAvatarBytes) {
+		return UpsertUserAvatarInput{}, ErrAvatarTooLarge
+	}
 	decoded, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		return UpsertUserAvatarInput{}, ErrAvatarInvalid
@@ -680,13 +685,31 @@ func normalizeInlineUserAvatarInput(raw string) (UpsertUserAvatarInput, error) {
 		return UpsertUserAvatarInput{}, ErrAvatarTooLarge
 	}
 
-	if len(decoded) > targetAvatarBytes {
+	// Detect GIF by its bytes as well as its declared type: a mislabeled GIF
+	// must never pass through the static-image encoder and lose its animation.
+	isGIF := bytes.HasPrefix(decoded, []byte("GIF87a")) || bytes.HasPrefix(decoded, []byte("GIF89a"))
+	if isGIF || strings.EqualFold(contentType, "image/gif") {
+		if err := validateAvatarGIF(decoded); err != nil {
+			return UpsertUserAvatarInput{}, err
+		}
+		animation, decodeErr := gif.DecodeAll(bytes.NewReader(decoded))
+		if decodeErr != nil {
+			return UpsertUserAvatarInput{}, ErrAvatarInvalid
+		}
+		if len(decoded) > targetAvatarBytes {
+			decoded, err = compressAvatarGIF(animation)
+			if err != nil {
+				return UpsertUserAvatarInput{}, err
+			}
+		}
+		contentType = "image/gif"
+	} else if len(decoded) > targetAvatarBytes {
 		decoded, contentType, err = compressInlineAvatar(decoded)
 		if err != nil {
 			return UpsertUserAvatarInput{}, err
 		}
-		raw = "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(decoded)
 	}
+	raw = "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(decoded)
 
 	sum := sha256.Sum256(decoded)
 	return UpsertUserAvatarInput{
@@ -699,6 +722,13 @@ func normalizeInlineUserAvatarInput(raw string) (UpsertUserAvatarInput, error) {
 }
 
 func compressInlineAvatar(decoded []byte) ([]byte, string, error) {
+	config, _, err := image.DecodeConfig(bytes.NewReader(decoded))
+	if err != nil {
+		return nil, "", ErrAvatarInvalid
+	}
+	if config.Width <= 0 || config.Height <= 0 || int64(config.Width)*int64(config.Height) > maxAvatarPixels {
+		return nil, "", ErrAvatarTooLarge
+	}
 	src, _, err := image.Decode(bytes.NewReader(decoded))
 	if err != nil {
 		return nil, "", ErrAvatarInvalid
@@ -709,7 +739,9 @@ func compressInlineAvatar(decoded []byte) ([]byte, string, error) {
 		return nil, "", ErrAvatarInvalid
 	}
 
-	for _, scale := range avatarScaleSteps {
+	baseScale := min(1.0, 1024.0/float64(max(srcBounds.Dx(), srcBounds.Dy())))
+	for _, step := range avatarScaleSteps {
+		scale := baseScale * step
 		width := max(1, int(float64(srcBounds.Dx())*scale))
 		height := max(1, int(float64(srcBounds.Dy())*scale))
 		dst := image.NewRGBA(image.Rect(0, 0, width, height))
