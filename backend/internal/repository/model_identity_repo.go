@@ -276,7 +276,18 @@ func (r *identityRepository) Cancel(ctx context.Context, id int64) error {
 	return err
 }
 func (r *identityRepository) History(ctx context.Context, id int64) ([]service.IdentityRun, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,jsonb_build_object('verdict',report->'verdict','detected_model',report->'detected_model','expected_model',report->'expected_model','remote_run_id',COALESCE(report->'remote_run_id',report->'runId',report->'run_id')),'[]'::jsonb,jsonb_array_length(probes) FROM account_identity_runs WHERE plan_id=$1 ORDER BY id DESC LIMIT 50`, id)
+	rows, err := r.db.QueryContext(ctx, `SELECT id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,jsonb_build_object('verdict',report->'verdict','detected_model',report->'detected_model','expected_model',report->'expected_model','remote_run_id',COALESCE(report->'remote_run_id',report->'runId',report->'run_id'),
+ 'identityAssessment',jsonb_build_object(
+  'claimedModel',report#>'{identityAssessment,claimedModel}',
+  'predictedFamily',report#>'{identityAssessment,predictedFamily}',
+  'familyFusion',jsonb_build_object('confirmedFamily',report#>'{identityAssessment,familyFusion,confirmedFamily}'),
+  'verdict',jsonb_build_object('status',report#>'{identityAssessment,verdict,status}','trueFamily',report#>'{identityAssessment,verdict,trueFamily}','flagshipClass',report#>'{identityAssessment,verdict,flagshipClass}','flagshipPairResolved',report#>'{identityAssessment,verdict,flagshipPairResolved}'),
+  'resolvedIdentity',jsonb_build_object('strongPass',report#>'{identityAssessment,resolvedIdentity,strongPass}'),
+  'v3h',jsonb_build_object('abstained',report#>'{identityAssessment,v3h,abstained}','posteriors',report#>'{identityAssessment,v3h,posteriors}'),
+  'v3',jsonb_build_object('candidates',report#>'{identityAssessment,v3,candidates}')
+ ),
+ 'identity_probe_coverage',(SELECT jsonb_build_object('total',COUNT(*),'errors',COUNT(*) FILTER (WHERE item->>'status'='error')) FROM jsonb_array_elements(CASE WHEN jsonb_typeof(report->'items')='array' THEN report->'items' ELSE '[]'::jsonb END) item WHERE item->>'group' IN ('identity','submodel'))
+),'[]'::jsonb,jsonb_array_length(probes) FROM account_identity_runs WHERE plan_id=$1 ORDER BY id DESC LIMIT 50`, id)
 	if err != nil {
 		return nil, err
 	}

@@ -83,6 +83,22 @@ describe('model identity account matrix', () => {
     expect(mocks.runStatus).toHaveBeenCalledWith(6)
     expect(w.text()).toContain('openai/gpt-5.5')
   })
+  it('shows the flagship range in matrix, history and reports without counting an exact match', async () => {
+    const fixture = (await import('@/utils/__tests__/fixtures/identity-flagship-954c.json')).default
+    const flagship = { ...runs[5], ...fixture }
+    mocks.history.mockResolvedValue([flagship]); mocks.runStatus.mockResolvedValue(flagship)
+    const w = open(); await flushPromises()
+    const row = w.get('table tr[data-plan-id="1"]')
+    expect(row.text()).toContain('admin.modelIdentity.flagshipClass')
+    expect(row.text()).toContain('GPT-6 Astra / GPT-6.1 Sol')
+    expect(row.text()).not.toContain('admin.modelIdentity.matched')
+    await row.findComponent(IdentityRecentRuns).find('button').trigger('click'); await flushPromises()
+    expect(w.get('[data-testid="identity-scope-summary"]').text()).toContain('admin.modelIdentity.flagshipRange')
+    expect(w.get('[data-testid="identity-scope-summary"]').text()).toContain('admin.modelIdentity.flagshipHint')
+    expect(flagship.report.verdict).toBe('inconclusive')
+    await w.get('#identity-filter').setValue('flagshipClass'); await flushPromises()
+    expect(w.find('table tr[data-plan-id="1"]').exists()).toBe(true)
+  })
   it('shows per-model votes in a stored inconclusive report without replacing its verdict', async () => {
     mocks.runStatus.mockResolvedValue({ ...runs[5], report: { verdict: 'inconclusive', identityAssessment: {
       verdict: { reasoning: 'Conflicting fingerprint signals' },

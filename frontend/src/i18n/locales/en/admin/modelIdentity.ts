@@ -1,5 +1,8 @@
 export default {
   modelIdentity: {
+  flagshipClass: 'Flagship · unresolved',
+  flagshipRange: 'GPT-6 flagship (Astra / 6.1 Sol unresolved)',
+  flagshipHint: 'The official report identifies the GPT-6 flagship range, but cannot confirm the specific model. This does not count as an exact match or a mismatch.',
   officialProgress: 'View live progress on BazaarLink',
   officialReport: 'View report on BazaarLink',
 

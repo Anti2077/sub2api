@@ -134,6 +134,15 @@ total tokens divided by detection duration. These measurements include the
 network/proxy path observed by BazaarLink. Failed items may retain diagnostic
 timing but do not contribute to either average.
 
+## Flagship model ranges
+
+Completed family-only reports can display `GPT-6 Astra / GPT-6.1 Sol` when
+BazaarLink's final verdict and classifier evidence support its flagship range.
+This is a presentation category: the stored exact-model verdict remains
+`inconclusive`, and it never counts as an exact match or a mismatch. Historical
+reports are supported through a compact classification projection; no stored
+reports are rewritten and no paid probes are started to refresh the display.
+
 ## Build and verify
 
 ```sh

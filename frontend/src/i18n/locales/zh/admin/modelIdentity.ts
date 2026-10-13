@@ -1,5 +1,8 @@
 export default {
   modelIdentity: {
+  flagshipClass: '旗舰级待细分',
+  flagshipRange: 'GPT-6 旗舰级（Astra / 6.1 Sol 无法区分）',
+  flagshipHint: '官网确认到 GPT-6 旗舰模型范围，尚未确认具体型号。此结果不计为身份相符，也不表示模型不符。',
   officialProgress: '查看官网实时过程',
   officialReport: '查看官网报告',
 
