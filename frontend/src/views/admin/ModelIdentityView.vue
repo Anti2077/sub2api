@@ -66,7 +66,7 @@
                   <td class="px-3 py-2.5"><IdentityRecentRuns :runs="row.history.slice(0, 5)" compact @report="openReport" /></td>
                   <td class="px-3 py-2.5 text-xs"><time>{{ formatTime(nextRun(row)) }}</time><span class="mt-1 block text-gray-500">{{ row.plan.enabled ? t('admin.modelIdentity.scheduled') : t('admin.modelIdentity.paused') }}</span></td>
                   <td class="max-w-48 px-3 py-2.5 text-xs"><span :class="row.config?.configuration_error ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'">{{ row.config ? (row.config.configuration_error ? t('admin.modelIdentity.keyError') : t('admin.modelIdentity.keyReady')) : t('admin.modelIdentity.notConfigured') }}</span><span v-if="row.config" class="mt-1 block break-words" :title="row.config.key_name">#{{ row.config.api_key_id }}</span></td>
-                  <td class="px-3 py-2.5"><div class="flex flex-col gap-1"><button class="btn btn-primary min-h-11 text-xs" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" :aria-busy="actionBusy === row.plan.id" type="button" @click="runPlan(row.plan)"><Icon name="play" size="sm" />{{ actionBusy === row.plan.id ? t('common.loading') : t('admin.modelIdentity.manualTrigger') }}</button><button class="btn btn-secondary min-h-11 text-xs" type="button" @click="editPlan(row)">{{ t('common.edit') }}</button><button class="btn btn-ghost min-h-11 text-xs" type="button" :aria-expanded="expandedRows.has(row.plan.id)" :aria-controls="`identity-history-${row.plan.id}`" @click="toggleHistory(row.plan.id)">{{ expandedRows.has(row.plan.id) ? t('common.collapse') : t('admin.modelIdentity.history') }}</button></div></td>
+                  <td class="px-3 py-2.5"><div class="flex flex-col gap-1"><IdentityOfficialLink :run="row.latest" /><button class="btn btn-primary min-h-11 text-xs" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" :aria-busy="actionBusy === row.plan.id" type="button" @click="runPlan(row.plan)"><Icon name="play" size="sm" />{{ actionBusy === row.plan.id ? t('common.loading') : t('admin.modelIdentity.manualTrigger') }}</button><button class="btn btn-secondary min-h-11 text-xs" type="button" @click="editPlan(row)">{{ t('common.edit') }}</button><button class="btn btn-ghost min-h-11 text-xs" type="button" :aria-expanded="expandedRows.has(row.plan.id)" :aria-controls="`identity-history-${row.plan.id}`" @click="toggleHistory(row.plan.id)">{{ expandedRows.has(row.plan.id) ? t('common.collapse') : t('admin.modelIdentity.history') }}</button></div></td>
                 </tr>
                 <tr v-if="expandedRows.has(row.plan.id)" :id="`identity-history-${row.plan.id}`"><td colspan="7" class="bg-gray-50/70 px-3 py-2.5 dark:bg-dark-900/30"><div class="space-y-3">
                   <IdentityHistoryTable :runs="row.history" :busy="Boolean(actionBusy)" @report="openReport" @cancel="cancelRun" />
@@ -81,7 +81,7 @@
             <p v-if="row.error" role="alert" class="text-sm text-red-600">{{ row.error }}</p>
             <dl class="grid grid-cols-2 gap-3 text-xs"><div><dt class="text-gray-500">{{ t('admin.modelIdentity.expectedModel') }}</dt><dd class="mt-1 break-all">{{ row.plan.expected_model }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.detectedModel') }}</dt><dd class="mt-1 break-all">{{ row.latest?.report?.detected_model || '—' }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.nextRun') }}</dt><dd class="mt-1">{{ formatTime(nextRun(row)) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.keyStatus') }}</dt><dd class="mt-1">{{ row.config ? (row.config.configuration_error ? t('admin.modelIdentity.keyError') : `#${row.config.api_key_id}`) : t('admin.modelIdentity.notConfigured') }}</dd></div></dl>
             <div><h4 class="mb-2 text-xs text-gray-500">{{ t('admin.modelIdentity.recentRuns') }}</h4><IdentityRecentRuns :runs="row.history.slice(0, 5)" @report="openReport" /></div>
-            <div class="flex flex-wrap gap-2"><button class="btn btn-secondary min-h-11" type="button" @click="editPlan(row)">{{ t('common.edit') }}</button><button class="btn btn-primary min-h-11 text-xs" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" :aria-busy="actionBusy === row.plan.id" type="button" @click="runPlan(row.plan)"><Icon name="play" size="sm" />{{ actionBusy === row.plan.id ? t('common.loading') : t('admin.modelIdentity.manualTrigger') }}</button><button v-if="isActive(row.latest)" class="btn btn-secondary min-h-11" :disabled="Boolean(actionBusy)" type="button" @click="cancelRun(row.latest!)">{{ t('common.cancel') }}</button></div>
+            <div class="flex flex-wrap gap-2"><IdentityOfficialLink :run="row.latest" /><button class="btn btn-secondary min-h-11" type="button" @click="editPlan(row)">{{ t('common.edit') }}</button><button class="btn btn-primary min-h-11 text-xs" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" :aria-busy="actionBusy === row.plan.id" type="button" @click="runPlan(row.plan)"><Icon name="play" size="sm" />{{ actionBusy === row.plan.id ? t('common.loading') : t('admin.modelIdentity.manualTrigger') }}</button><button v-if="isActive(row.latest)" class="btn btn-secondary min-h-11" :disabled="Boolean(actionBusy)" type="button" @click="cancelRun(row.latest!)">{{ t('common.cancel') }}</button></div>
           </article>
         </div>
         <Pagination v-if="total > pageSize" :page="page" :page-size="pageSize" :total="total" :show-page-size-selector="false" @update:page="changePage" />
@@ -119,6 +119,7 @@
           <dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2"><div><dt class="text-gray-500">{{ t('admin.modelIdentity.lastResult') }}</dt><dd class="mt-1">{{ statusLabel(identityRunStatus(selectedReport)) }} · {{ formatTime(selectedReport.created_at) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.expectedModel') }}</dt><dd class="mt-1 break-all">{{ selectedReport.expected_model }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.detectedModel') }}</dt><dd class="mt-1 break-all">{{ selectedReport.report?.detected_model || '—' }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.engineVersion') }}</dt><dd class="mt-1">{{ selectedReport.report?.engine_version || '—' }}</dd></div></dl>
           <p v-if="selectedReport.report?.error" role="alert" class="text-sm text-red-600">{{ selectedReport.report.error }}</p>
           <p v-if="reportReason" class="rounded-lg bg-gray-50 p-3 text-sm dark:bg-dark-900">{{ reportReason }}</p>
+          <IdentityOfficialLink :run="selectedReport" />
           <IdentityPerformance :report="selectedReport.report" />
           <IdentityModelVotes :report="selectedReport.report" />
           <button v-if="isActive(selectedReport)" class="btn btn-secondary" type="button" :disabled="Boolean(actionBusy)" @click="cancelRun(selectedReport)">{{ t('common.cancel') }}</button>
@@ -133,6 +134,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import IdentityOfficialLink from '@/components/admin/account/IdentityOfficialLink.vue'
 import { Icon } from '@/components/icons'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
@@ -327,11 +329,17 @@ async function openReport(run: identityAPI.IdentityRun) {
   catch (error) { if (version === reportVersion) reportError.value = message(error) }
   finally { if (version === reportVersion) reportLoading.value = false }
 }
+async function refreshActiveReport() {
+  const selected = selectedReport.value, version = reportVersion
+  if (!selected || !isActive(selected)) return
+  try { const result = await identityAPI.runStatus(selected.id); if (version === reportVersion && selectedReport.value?.id === selected.id) selectedReport.value = result }
+  catch (error) { if (version === reportVersion) reportError.value = message(error) }
+}
 function closeReport() { reportVersion++; reportOpen.value = false; selectedReport.value = null }
 watch(query, () => { clearTimeout(queryTimer); queryTimer = setTimeout(() => { page.value = 1; void loadRows() }, 300) })
 onMounted(async () => {
   await Promise.allSettled([loadConnectionSettings(), loadRows(), adminAPI.groups.getAll().then(result => { groups.value = result }).catch(error => { loadError.value = message(error) })])
-  poll = setInterval(() => { if (!document.hidden && !loading.value && !addPlanOpen.value && planRows.value.some(row => isActive(row.latest))) void loadRows() }, 5000)
+  poll = setInterval(() => { if (!document.hidden) void refreshActiveReport(); if (!document.hidden && !loading.value && !addPlanOpen.value && planRows.value.some(row => isActive(row.latest))) void loadRows() }, 5000)
 })
 onUnmounted(() => { accountSearchVersion++; addFormVersion++; userSearchVersion++; loadVersion++; reportVersion++; clearInterval(poll); clearTimeout(queryTimer) })
 </script>

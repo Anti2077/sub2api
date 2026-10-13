@@ -104,6 +104,23 @@ describe('model identity account matrix', () => {
     expect(w.get('[data-testid="identity-performance"]').text()).toContain('hosted-only')
     expect(w.get('[data-testid="identity-performance"]').element.parentElement?.textContent).toContain('admin.modelIdentity.matched')
   })
+  it('links live and completed reports to their hosted task and refreshes an open running report', async () => {
+    vi.useFakeTimers()
+    const live = { ...runs[5], status: 'running', report: {} }
+    mocks.history.mockResolvedValue([live]); mocks.runStatus.mockResolvedValue(live)
+    const w = open(); await flushPromises()
+    await w.get('table tr[data-plan-id="1"]').findComponent(IdentityRecentRuns).find('button').trigger('click'); await flushPromises()
+    expect(w.find('[data-testid="identity-official-link"]').exists()).toBe(false)
+    const hosted = { ...live, report: { remote_run_id: 'hosted-live-task' } }
+    mocks.runStatus.mockResolvedValue(hosted); mocks.history.mockResolvedValue([hosted])
+    await vi.advanceTimersByTimeAsync(5000); await flushPromises()
+    expect(w.findAll('[data-testid="identity-official-link"]').every(link => link.attributes('href') === 'https://bazaarlink.ai/probe?runId=hosted-live-task')).toBe(true)
+    expect(w.text()).toContain('admin.modelIdentity.officialProgress')
+    mocks.runStatus.mockResolvedValue({ ...hosted, status: 'completed' }); mocks.history.mockResolvedValue([{ ...hosted, status: 'completed' }])
+    await vi.advanceTimersByTimeAsync(5000); await flushPromises()
+    expect(w.text()).toContain('admin.modelIdentity.officialReport')
+    w.unmount(); vi.useRealTimers()
+  })
   it('separates multiple plans for one account and retains each plan’s own history', async () => {
     const secondPlan = { ...plan, id: 2, request_model: 'gpt-6-luna', expected_model: 'openai/gpt-6-luna', enabled: false }
     mocks.plans.mockResolvedValue([plan, secondPlan])

@@ -252,8 +252,15 @@ func (r *identityRepository) Run(ctx context.Context, id int64) (*service.Identi
 func (r *identityRepository) Authorize(ctx context.Context, id int64, hash string, now time.Time) (*service.IdentityRun, error) {
 	return scanIdentityRun(r.db.QueryRowContext(ctx, `SELECT id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,'{}'::jsonb,'[]'::jsonb FROM account_identity_runs WHERE id=$1 AND token_hash=$2 AND status='running' AND lease_until>$3`, id, hash, now))
 }
+
+// Persist only the hosted task ID before polling. Never store the acknowledgement
+// payload here because it may include keys or other operational data.
+func (r *identityRepository) SetRemoteRunID(ctx context.Context, id int64, remoteID string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE account_identity_runs SET report=jsonb_set(report,'{remote_run_id}',to_jsonb($2::text)) WHERE id=$1 AND status IN ('running','cancelling')`, id, remoteID)
+	return err
+}
 func (r *identityRepository) Finish(ctx context.Context, id int64, status string, report json.RawMessage) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE account_identity_runs SET status=CASE WHEN status='cancelling' THEN 'cancelled' ELSE $2 END,report=CASE WHEN status='cancelling' THEN jsonb_set($3::jsonb,'{verdict}','"inconclusive"'::jsonb) ELSE $3::jsonb END,finished_at=NOW(),token_hash=NULL,worker_slot=NULL WHERE id=$1 AND status IN ('running','cancelling')`, id, status, report)
+	_, err := r.db.ExecContext(ctx, `UPDATE account_identity_runs SET status=CASE WHEN status='cancelling' THEN 'cancelled' ELSE $2 END,report=CASE WHEN status='cancelling' THEN jsonb_set($3::jsonb || jsonb_strip_nulls(jsonb_build_object('remote_run_id',report->'remote_run_id')),'{verdict}','"inconclusive"'::jsonb) ELSE $3::jsonb || jsonb_strip_nulls(jsonb_build_object('remote_run_id',report->'remote_run_id')) END,finished_at=NOW(),token_hash=NULL,worker_slot=NULL WHERE id=$1 AND status IN ('running','cancelling')`, id, status, report)
 	if err != nil {
 		return err
 	}
@@ -269,7 +276,7 @@ func (r *identityRepository) Cancel(ctx context.Context, id int64) error {
 	return err
 }
 func (r *identityRepository) History(ctx context.Context, id int64) ([]service.IdentityRun, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,jsonb_build_object('verdict',report->'verdict','detected_model',report->'detected_model','expected_model',report->'expected_model'),'[]'::jsonb,jsonb_array_length(probes) FROM account_identity_runs WHERE plan_id=$1 ORDER BY id DESC LIMIT 50`, id)
+	rows, err := r.db.QueryContext(ctx, `SELECT id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,jsonb_build_object('verdict',report->'verdict','detected_model',report->'detected_model','expected_model',report->'expected_model','remote_run_id',COALESCE(report->'remote_run_id',report->'runId',report->'run_id')),'[]'::jsonb,jsonb_array_length(probes) FROM account_identity_runs WHERE plan_id=$1 ORDER BY id DESC LIMIT 50`, id)
 	if err != nil {
 		return nil, err
 	}

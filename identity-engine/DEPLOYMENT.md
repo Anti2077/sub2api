@@ -107,6 +107,20 @@ are not retried, and an uncertain POST is never replayed because it may already
 have started a paid run. Contract reference:
 <https://bazaarlink.ai/probe-api-skill.md>.
 
+## Hosted task links
+
+Admin plan rows, history, and report details link to
+`https://bazaarlink.ai/probe?runId=<hosted task ID>` during and after detection.
+The runner saves only `remote_run_id` as soon as the asynchronous start is
+acknowledged; no credentials or acknowledgement payload are stored for this
+link. Terminal reports preserve that ID even on polling failure, cancellation,
+or timeout. Old reports use their existing `runId`/`run_id` when available.
+Queued or older reports without a hosted ID have no link. Links always use the
+fixed BazaarLink origin, never an upstream-provided `reportUrl`.
+The live GET object expires 30 minutes after completion per the API contract;
+the website also attempts its historical report lookup. Historical retention
+and availability remain controlled by BazaarLink.
+
 ## Report performance
 
 Both admin report views display the hosted `items[].ttftMs`, `tps`,

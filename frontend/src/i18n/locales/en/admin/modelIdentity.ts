@@ -1,5 +1,8 @@
 export default {
   modelIdentity: {
+  officialProgress: 'View live progress on BazaarLink',
+  officialReport: 'View report on BazaarLink',
+
   performance: 'Response performance',
   ttft: 'Time to first token',
   tps: 'Output speed (TPS)',

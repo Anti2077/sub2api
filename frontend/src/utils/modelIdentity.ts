@@ -45,3 +45,15 @@ export function identityStatusClass(status: IdentityStatus) {
   if (status === 'inconclusive') return 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
   return 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300'
 }
+
+// Always construct a fixed-origin URL from an opaque ID. Never trust reportUrl
+// or the local numeric run ID; old hosted reports may contain runId/run_id.
+export function identityOfficialURL(run?: IdentityRun | null): string | undefined {
+  const report = run?.report
+  for (const id of [report?.remote_run_id, report?.runId, report?.run_id]) {
+    if (typeof id === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(id)) {
+      return `https://bazaarlink.ai/probe?runId=${encodeURIComponent(id)}`
+    }
+  }
+  return undefined
+}

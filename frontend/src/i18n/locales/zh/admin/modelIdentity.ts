@@ -1,5 +1,8 @@
 export default {
   modelIdentity: {
+  officialProgress: '查看官网实时过程',
+  officialReport: '查看官网报告',
+
   performance: '响应性能',
   ttft: '首 Token 时间',
   tps: '输出速度（TPS）',
