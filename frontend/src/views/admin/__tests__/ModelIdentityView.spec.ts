@@ -83,6 +83,22 @@ describe('model identity account matrix', () => {
     expect(mocks.runStatus).toHaveBeenCalledWith(6)
     expect(w.text()).toContain('openai/gpt-5.5')
   })
+  it('shows the flagship range in matrix, history and reports without counting an exact match', async () => {
+    const fixture = (await import('@/utils/__tests__/fixtures/identity-flagship-954c.json')).default
+    const flagship = { ...runs[5], ...fixture }
+    mocks.history.mockResolvedValue([flagship]); mocks.runStatus.mockResolvedValue(flagship)
+    const w = open(); await flushPromises()
+    const row = w.get('table tr[data-plan-id="1"]')
+    expect(row.text()).toContain('admin.modelIdentity.flagshipClass')
+    expect(row.text()).toContain('GPT-6 Astra / GPT-6.1 Sol')
+    expect(row.text()).not.toContain('admin.modelIdentity.matched')
+    await row.findComponent(IdentityRecentRuns).find('button').trigger('click'); await flushPromises()
+    expect(w.get('[data-testid="identity-scope-summary"]').text()).toContain('admin.modelIdentity.flagshipRange')
+    expect(w.get('[data-testid="identity-scope-summary"]').text()).toContain('admin.modelIdentity.flagshipHint')
+    expect(flagship.report.verdict).toBe('inconclusive')
+    await w.get('#identity-filter').setValue('flagshipClass'); await flushPromises()
+    expect(w.find('table tr[data-plan-id="1"]').exists()).toBe(true)
+  })
   it('shows per-model votes in a stored inconclusive report without replacing its verdict', async () => {
     mocks.runStatus.mockResolvedValue({ ...runs[5], report: { verdict: 'inconclusive', identityAssessment: {
       verdict: { reasoning: 'Conflicting fingerprint signals' },
@@ -94,6 +110,32 @@ describe('model identity account matrix', () => {
     expect(votes.findAll('dt').map(row => row.text())).toEqual(['openai/gpt-6-astra', 'openai/gpt-6.1-sol'])
     expect(w.text()).toContain('Conflicting fingerprint signals')
     expect(votes.element.parentElement?.textContent).toContain('admin.modelIdentity.inconclusive')
+  })
+  it('shows hosted performance in historical reports independently of local probes', async () => {
+    mocks.runStatus.mockResolvedValue({ ...runs[5], probes: [], report: { verdict: 'matched', wallClockMs: 5000, items: [{ probeId: 'hosted-only', status: 'done', ttftMs: 250, tps: 80 }] } })
+    const w = open(); await flushPromises()
+    await w.get('table tr[data-plan-id="1"]').findComponent(IdentityRecentRuns).find('button').trigger('click'); await flushPromises()
+    expect(w.get('[data-testid="averageTtft"]').text()).toContain('250 ms')
+    expect(w.get('[data-testid="averageTps"]').text()).toContain('80 token/s')
+    expect(w.get('[data-testid="identity-performance"]').text()).toContain('hosted-only')
+    expect(w.get('[data-testid="identity-performance"]').element.parentElement?.textContent).toContain('admin.modelIdentity.matched')
+  })
+  it('links live and completed reports to their hosted task and refreshes an open running report', async () => {
+    vi.useFakeTimers()
+    const live = { ...runs[5], status: 'running', report: {} }
+    mocks.history.mockResolvedValue([live]); mocks.runStatus.mockResolvedValue(live)
+    const w = open(); await flushPromises()
+    await w.get('table tr[data-plan-id="1"]').findComponent(IdentityRecentRuns).find('button').trigger('click'); await flushPromises()
+    expect(w.find('[data-testid="identity-official-link"]').exists()).toBe(false)
+    const hosted = { ...live, report: { remote_run_id: 'hosted-live-task' } }
+    mocks.runStatus.mockResolvedValue(hosted); mocks.history.mockResolvedValue([hosted])
+    await vi.advanceTimersByTimeAsync(5000); await flushPromises()
+    expect(w.findAll('[data-testid="identity-official-link"]').every(link => link.attributes('href') === 'https://bazaarlink.ai/probe?runId=hosted-live-task')).toBe(true)
+    expect(w.text()).toContain('admin.modelIdentity.officialProgress')
+    mocks.runStatus.mockResolvedValue({ ...hosted, status: 'completed' }); mocks.history.mockResolvedValue([{ ...hosted, status: 'completed' }])
+    await vi.advanceTimersByTimeAsync(5000); await flushPromises()
+    expect(w.text()).toContain('admin.modelIdentity.officialReport')
+    w.unmount(); vi.useRealTimers()
   })
   it('separates multiple plans for one account and retains each plan’s own history', async () => {
     const secondPlan = { ...plan, id: 2, request_model: 'gpt-6-luna', expected_model: 'openai/gpt-6-luna', enabled: false }

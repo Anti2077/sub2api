@@ -69,6 +69,7 @@ type IdentityRepository interface {
 	ScanDue(context.Context, time.Time) error
 	Claim(context.Context, string, time.Time) (*IdentityRun, error)
 	Authorize(context.Context, int64, string, time.Time) (*IdentityRun, error)
+	SetRemoteRunID(context.Context, int64, string) error
 	Finish(context.Context, int64, string, json.RawMessage) error
 	Cancel(context.Context, int64) error
 	Run(context.Context, int64) (*IdentityRun, error)

@@ -227,6 +227,12 @@ func (r *ModelIdentityRunner) executeRemote(ctx context.Context, run *IdentityRu
 		finish("service_error", map[string]string{"error": "BazaarLink Probe API did not return a run id"})
 		return
 	}
+	// Save immediately so admin history can link to the live hosted run, and
+	// retain the ID even if subsequent polling fails or the local run is cancelled.
+	if err := r.svc.repo.SetRemoteRunID(ctx, run.ID, runID); err != nil {
+		finish("service_error", map[string]any{"error": "could not save BazaarLink task ID", "remote_run_id": runID})
+		return
+	}
 	remoteEndpoint, parseErr := url.Parse(r.svc.remoteURL)
 	if parseErr != nil {
 		finish("service_error", map[string]string{"error": "invalid BazaarLink Probe API URL"})

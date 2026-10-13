@@ -107,6 +107,42 @@ are not retried, and an uncertain POST is never replayed because it may already
 have started a paid run. Contract reference:
 <https://bazaarlink.ai/probe-api-skill.md>.
 
+## Hosted task links
+
+Admin plan rows, history, and report details link to
+`https://bazaarlink.ai/probe?runId=<hosted task ID>` during and after detection.
+The runner saves only `remote_run_id` as soon as the asynchronous start is
+acknowledged; no credentials or acknowledgement payload are stored for this
+link. Terminal reports preserve that ID even on polling failure, cancellation,
+or timeout. Old reports use their existing `runId`/`run_id` when available.
+Queued or older reports without a hosted ID have no link. Links always use the
+fixed BazaarLink origin, never an upstream-provided `reportUrl`.
+The live GET object expires 30 minutes after completion per the API contract;
+the website also attempts its historical report lookup. Historical retention
+and availability remain controlled by BazaarLink.
+
+## Report performance
+
+Both admin report views display the hosted `items[].ttftMs`, `tps`,
+`durationMs`, and `outputTokens`, plus run-level `wallClockMs`. Existing stored
+reports need no migration. TTFT and TPS averages use independent sample counts
+and only successful (`done`) items with finite valid measurements. Zero TTFT
+is valid; TPS must be positive. Missing measurements show a dash, never zero.
+Retry history is not counted again, and local gateway probes are not joined by
+index. Average TPS is the arithmetic mean of reported question speeds, not
+total tokens divided by detection duration. These measurements include the
+network/proxy path observed by BazaarLink. Failed items may retain diagnostic
+timing but do not contribute to either average.
+
+## Flagship model ranges
+
+Completed family-only reports can display `GPT-6 Astra / GPT-6.1 Sol` when
+BazaarLink's final verdict and classifier evidence support its flagship range.
+This is a presentation category: the stored exact-model verdict remains
+`inconclusive`, and it never counts as an exact match or a mismatch. Historical
+reports are supported through a compact classification projection; no stored
+reports are rewritten and no paid probes are started to refresh the display.
+
 ## Build and verify
 
 ```sh

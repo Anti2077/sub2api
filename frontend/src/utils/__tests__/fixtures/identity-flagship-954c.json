@@ -1,0 +1,78 @@
+{
+  "status": "completed",
+  "report": {
+    "verdict": "inconclusive",
+    "detected_model": "",
+    "identityAssessment": {
+      "claimedModel": "openai/gpt-6.1-sol",
+      "predictedFamily": "openai",
+      "verdict": {
+        "status": "clean_match_family_only",
+        "trueFamily": "openai",
+        "trueModel": null,
+        "spoofMethod": null,
+        "confidence": "high",
+        "reasoning": [
+          "① surface: openai (98%)  ← matches claim",
+          "② behavior: openai (86%)  ← matches claim",
+          "family_only: V3 abstained (no usable sub-model signal)"
+        ]
+      },
+      "familyFusion": {
+        "confirmedFamily": "openai",
+        "confidence": 0.98,
+        "source": "v2",
+        "hardOverride": false,
+        "claimIgnored": false,
+        "evidence": [
+          "family openai 98%"
+        ]
+      },
+      "v3h": {
+        "abstained": false,
+        "posteriors": [
+          {
+            "modelId": "openai/gpt-6-astra",
+            "score": 0.9950911196792396
+          },
+          {
+            "modelId": "openai/gpt-6.1-sol",
+            "score": 0.004908876227108168
+          },
+          {
+            "modelId": "openai/gpt-5.6-sol",
+            "score": 4.046783308483658e-09
+          },
+          {
+            "modelId": "openai/gpt-6-luna",
+            "score": 4.6805220466015544e-11
+          },
+          {
+            "modelId": "openai/gpt-5.6-luna",
+            "score": 3.867658893804582e-14
+          },
+          {
+            "modelId": "openai/gpt-5.5",
+            "score": 2.5052800020915936e-14
+          },
+          {
+            "modelId": "openai/gpt-6-sol",
+            "score": 1.0508311891340208e-16
+          },
+          {
+            "modelId": "openai/gpt-5.3-codex",
+            "score": 2.924235501309985e-21
+          },
+          {
+            "modelId": "openai/gpt-5.6-terra",
+            "score": 3.7762748700653596e-27
+          }
+        ]
+      }
+    },
+    "identity_probe_coverage": {
+      "total": 46,
+      "errors": 0
+    }
+  }
+}

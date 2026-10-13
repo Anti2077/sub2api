@@ -31,18 +31,21 @@
       <div v-if="runs.length" class="space-y-2">
         <h4 class="text-sm font-medium">{{ t('admin.modelIdentity.history') }}</h4>
         <div v-for="r in runs" :key="r.id" class="border-b border-gray-200 py-2 dark:border-dark-600">
-          <div class="flex flex-wrap items-center justify-between gap-2 text-sm"><span>{{ time(r.created_at) }} · {{ t(`admin.modelIdentity.${String(r.status === 'completed' ? r.report?.verdict || r.status : r.status)}`) }} <span v-if="r.status === 'running'">({{ r.probe_count ?? 0 }})</span></span><button v-if="['queued','running','cancelling'].includes(r.status)" class="btn btn-secondary" @click="cancelRun(r)">{{ t('common.cancel') }}</button><button class="btn btn-secondary" @click="loadReport(r)">{{ t('admin.modelIdentity.report') }}</button></div>
+          <div class="flex flex-wrap items-center justify-between gap-2 text-sm"><span>{{ time(r.created_at) }} · {{ t(`admin.modelIdentity.${identityRunStatus(r)}`) }} <span v-if="r.status === 'running'">({{ r.probe_count ?? 0 }})</span></span><button v-if="['queued','running','cancelling'].includes(r.status)" class="btn btn-secondary" @click="cancelRun(r)">{{ t('common.cancel') }}</button><IdentityOfficialLink :run="r" /><button class="btn btn-secondary" @click="loadReport(r)">{{ t('admin.modelIdentity.report') }}</button></div>
         </div>
       </div>
       <div v-if="selectedReport" class="min-w-0 space-y-3">
         <h4 class="text-sm font-medium">{{ t('admin.modelIdentity.report') }} #{{ selectedReport.id }}</h4>
         <dl class="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
           <div><dt class="text-gray-500">{{ t('admin.modelIdentity.expectedModel') }}</dt><dd class="break-words">{{ selectedReport.expected_model }}</dd></div>
-          <div><dt class="text-gray-500">{{ t('admin.modelIdentity.detectedModel') }}</dt><dd class="break-words">{{ selectedReport.report?.detected_model || '-' }}</dd></div>
+          <div><dt class="text-gray-500">{{ t('admin.modelIdentity.detectedModel') }}</dt><dd class="break-words">{{ identityDetectedModel(selectedReport) }}</dd></div>
           <div><dt class="text-gray-500">{{ t('admin.modelIdentity.engineVersion') }}</dt><dd class="break-words">{{ selectedReport.report?.engine_version || '-' }} ({{ selectedReport.report?.engine_commit || '-' }})</dd></div>
           <div><dt class="text-gray-500">{{ t('admin.modelIdentity.baselineVersion') }}</dt><dd class="break-words">{{ selectedReport.report?.baseline_version || '-' }}</dd></div>
         </dl>
         <p v-if="selectedReport.report?.error" role="alert" class="break-words text-sm text-red-600">{{ selectedReport.report.error }}</p>
+        <IdentityOfficialLink :run="selectedReport" />
+        <IdentityScopeSummary :run="selectedReport" />
+        <IdentityPerformance :report="selectedReport.report" />
         <IdentityModelVotes :report="selectedReport.report" />
         <details v-for="(probe,index) in selectedReport.probes" :key="index" class="border-b border-gray-200 py-2 text-sm dark:border-dark-600">
           <summary class="cursor-pointer break-words">{{ probe.probe_id || index + 1 }} · {{ probe.status }}</summary>
@@ -65,7 +68,11 @@
 <script setup lang="ts">
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import IdentityOfficialLink from './IdentityOfficialLink.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import IdentityPerformance from './IdentityPerformance.vue'
+import { identityDetectedModel, identityRunStatus } from '@/utils/modelIdentity'
+import IdentityScopeSummary from './IdentityScopeSummary.vue'
 import IdentityModelVotes from './IdentityModelVotes.vue'
 import { Icon } from '@/components/icons'
 import type { Account, AdminUser, Group } from '@/types'
@@ -101,6 +108,12 @@ async function loadHistory(id:number) { const version=++historyVersion;const vie
 async function runPlan(p:api.IdentityPlan) { await action(async()=>{await api.run(p.id);historyPlanID.value=p.id;runs.value=await api.history(p.id);emit('changed')}) }
 async function cancelRun(r:api.IdentityRun) { await action(async()=>{await api.cancel(r.id);runs.value=await api.history(r.plan_id);emit('changed')}) }
 async function loadReport(r:api.IdentityRun) { await action(async()=>{selectedReport.value=await api.runStatus(r.id)}) }
+async function refreshActiveReport(version:number) {
+  const selected=selectedReport.value
+  if(!selected||!['queued','running','cancelling'].includes(selected.status))return
+  try {const result=await api.runStatus(selected.id);if(version===viewVersion&&selectedReport.value?.id===selected.id)selectedReport.value=result}
+  catch(e){if(version===viewVersion)error.value=message(e)}
+}
 watch(()=>[props.show,props.account?.id],async()=>{
   const version=++viewVersion;historyVersion++;searchVersion++;clearInterval(poll);clearTimeout(searchTimer);selectedReport.value=null;runs.value=[];plans.value=[];configuration.value=null;catalog.value=[];users.value=[];userID.value=0;groupID.value=0;search.value='';historyPlanID.value=0;resetDraft();error.value=''
   if(!props.show||!props.account)return
@@ -113,7 +126,7 @@ watch(()=>[props.show,props.account?.id],async()=>{
     if(plans.value.length){historyPlanID.value=plans.value[0].id;const history=await api.history(historyPlanID.value);if(version===viewVersion)runs.value=history}
   })
   if(version!==viewVersion)return
-  poll=setInterval(()=>{const plan=historyPlanID.value;if(props.show&&plan)void Promise.all([api.history(plan),api.plans(accountID)]).then(([history,latestPlans])=>{if(version===viewVersion&&plan===historyPlanID.value){runs.value=history;plans.value=latestPlans}}).catch(e=>{if(version===viewVersion)error.value=message(e)})},3000)
+  poll=setInterval(()=>{const plan=historyPlanID.value;if(props.show&&plan)void Promise.all([api.history(plan),api.plans(accountID)]).then(([history,latestPlans])=>{if(version===viewVersion&&plan===historyPlanID.value){runs.value=history;plans.value=latestPlans;void refreshActiveReport(version)}}).catch(e=>{if(version===viewVersion)error.value=message(e)})},3000)
 },{immediate:true})
 onUnmounted(()=>{clearInterval(poll);clearTimeout(searchTimer);searchVersion++;viewVersion++;historyVersion++})
 </script>

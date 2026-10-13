@@ -62,11 +62,11 @@
                 <tr :data-plan-id="row.plan.id" class="align-top hover:bg-gray-50/80 dark:hover:bg-dark-800/60">
                   <td class="px-3 py-2.5"><strong class="block text-gray-900 dark:text-white">{{ row.account.name }}</strong><span class="mt-1 block text-xs text-gray-500">#{{ row.account.id }} · {{ groupName(row) }} · {{ t('admin.modelIdentity.planNumber', { id: row.plan.id }) }}</span><p v-if="row.error" role="alert" class="mt-2 max-w-64 text-xs text-red-600 dark:text-red-400">{{ row.error }}</p></td>
                   <td class="px-3 py-2.5"><code class="block break-all text-xs">{{ row.plan.expected_model }}</code><span class="mt-1 block text-xs text-gray-500">{{ row.plan.request_model }}</span></td>
-                  <td class="px-3 py-2.5"><span class="inline-flex rounded-full px-2 py-1 text-xs font-medium" :class="identityStatusClass(row.status)">{{ statusLabel(row.status) }}</span><span class="mt-2 block break-all text-xs">{{ row.latest?.report?.detected_model || '—' }}</span><time class="mt-1 block whitespace-nowrap text-xs text-gray-500">{{ formatTime(row.latest?.created_at) }}</time></td>
+                  <td class="px-3 py-2.5"><span class="inline-flex rounded-full px-2 py-1 text-xs font-medium" :class="identityStatusClass(row.status)">{{ statusLabel(row.status) }}</span><span class="mt-2 block break-all text-xs">{{ identityDetectedModel(row.latest) }}</span><time class="mt-1 block whitespace-nowrap text-xs text-gray-500">{{ formatTime(row.latest?.created_at) }}</time></td>
                   <td class="px-3 py-2.5"><IdentityRecentRuns :runs="row.history.slice(0, 5)" compact @report="openReport" /></td>
                   <td class="px-3 py-2.5 text-xs"><time>{{ formatTime(nextRun(row)) }}</time><span class="mt-1 block text-gray-500">{{ row.plan.enabled ? t('admin.modelIdentity.scheduled') : t('admin.modelIdentity.paused') }}</span></td>
                   <td class="max-w-48 px-3 py-2.5 text-xs"><span :class="row.config?.configuration_error ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'">{{ row.config ? (row.config.configuration_error ? t('admin.modelIdentity.keyError') : t('admin.modelIdentity.keyReady')) : t('admin.modelIdentity.notConfigured') }}</span><span v-if="row.config" class="mt-1 block break-words" :title="row.config.key_name">#{{ row.config.api_key_id }}</span></td>
-                  <td class="px-3 py-2.5"><div class="flex flex-col gap-1"><button class="btn btn-primary min-h-11 text-xs" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" :aria-busy="actionBusy === row.plan.id" type="button" @click="runPlan(row.plan)"><Icon name="play" size="sm" />{{ actionBusy === row.plan.id ? t('common.loading') : t('admin.modelIdentity.manualTrigger') }}</button><button class="btn btn-secondary min-h-11 text-xs" type="button" @click="editPlan(row)">{{ t('common.edit') }}</button><button class="btn btn-ghost min-h-11 text-xs" type="button" :aria-expanded="expandedRows.has(row.plan.id)" :aria-controls="`identity-history-${row.plan.id}`" @click="toggleHistory(row.plan.id)">{{ expandedRows.has(row.plan.id) ? t('common.collapse') : t('admin.modelIdentity.history') }}</button></div></td>
+                  <td class="px-3 py-2.5"><div class="flex flex-col gap-1"><IdentityOfficialLink :run="row.latest" /><button class="btn btn-primary min-h-11 text-xs" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" :aria-busy="actionBusy === row.plan.id" type="button" @click="runPlan(row.plan)"><Icon name="play" size="sm" />{{ actionBusy === row.plan.id ? t('common.loading') : t('admin.modelIdentity.manualTrigger') }}</button><button class="btn btn-secondary min-h-11 text-xs" type="button" @click="editPlan(row)">{{ t('common.edit') }}</button><button class="btn btn-ghost min-h-11 text-xs" type="button" :aria-expanded="expandedRows.has(row.plan.id)" :aria-controls="`identity-history-${row.plan.id}`" @click="toggleHistory(row.plan.id)">{{ expandedRows.has(row.plan.id) ? t('common.collapse') : t('admin.modelIdentity.history') }}</button></div></td>
                 </tr>
                 <tr v-if="expandedRows.has(row.plan.id)" :id="`identity-history-${row.plan.id}`"><td colspan="7" class="bg-gray-50/70 px-3 py-2.5 dark:bg-dark-900/30"><div class="space-y-3">
                   <IdentityHistoryTable :runs="row.history" :busy="Boolean(actionBusy)" @report="openReport" @cancel="cancelRun" />
@@ -79,15 +79,15 @@
           <article v-for="row in filteredRows" :key="row.plan.id" class="space-y-4 p-4" :data-plan-id="row.plan.id">
             <div class="flex items-start justify-between gap-3"><div><h3 class="font-semibold text-gray-900 dark:text-white">{{ row.account.name }}</h3><p class="mt-1 text-xs text-gray-500">#{{ row.account.id }} · {{ groupName(row) }} · {{ t('admin.modelIdentity.planNumber', { id: row.plan.id }) }}</p></div><span class="shrink-0 rounded-full px-2 py-1 text-xs" :class="identityStatusClass(row.status)">{{ statusLabel(row.status) }}</span></div>
             <p v-if="row.error" role="alert" class="text-sm text-red-600">{{ row.error }}</p>
-            <dl class="grid grid-cols-2 gap-3 text-xs"><div><dt class="text-gray-500">{{ t('admin.modelIdentity.expectedModel') }}</dt><dd class="mt-1 break-all">{{ row.plan.expected_model }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.detectedModel') }}</dt><dd class="mt-1 break-all">{{ row.latest?.report?.detected_model || '—' }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.nextRun') }}</dt><dd class="mt-1">{{ formatTime(nextRun(row)) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.keyStatus') }}</dt><dd class="mt-1">{{ row.config ? (row.config.configuration_error ? t('admin.modelIdentity.keyError') : `#${row.config.api_key_id}`) : t('admin.modelIdentity.notConfigured') }}</dd></div></dl>
+            <dl class="grid grid-cols-2 gap-3 text-xs"><div><dt class="text-gray-500">{{ t('admin.modelIdentity.expectedModel') }}</dt><dd class="mt-1 break-all">{{ row.plan.expected_model }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.detectedModel') }}</dt><dd class="mt-1 break-all">{{ identityDetectedModel(row.latest) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.nextRun') }}</dt><dd class="mt-1">{{ formatTime(nextRun(row)) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.keyStatus') }}</dt><dd class="mt-1">{{ row.config ? (row.config.configuration_error ? t('admin.modelIdentity.keyError') : `#${row.config.api_key_id}`) : t('admin.modelIdentity.notConfigured') }}</dd></div></dl>
             <div><h4 class="mb-2 text-xs text-gray-500">{{ t('admin.modelIdentity.recentRuns') }}</h4><IdentityRecentRuns :runs="row.history.slice(0, 5)" @report="openReport" /></div>
-            <div class="flex flex-wrap gap-2"><button class="btn btn-secondary min-h-11" type="button" @click="editPlan(row)">{{ t('common.edit') }}</button><button class="btn btn-primary min-h-11 text-xs" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" :aria-busy="actionBusy === row.plan.id" type="button" @click="runPlan(row.plan)"><Icon name="play" size="sm" />{{ actionBusy === row.plan.id ? t('common.loading') : t('admin.modelIdentity.manualTrigger') }}</button><button v-if="isActive(row.latest)" class="btn btn-secondary min-h-11" :disabled="Boolean(actionBusy)" type="button" @click="cancelRun(row.latest!)">{{ t('common.cancel') }}</button></div>
+            <div class="flex flex-wrap gap-2"><IdentityOfficialLink :run="row.latest" /><button class="btn btn-secondary min-h-11" type="button" @click="editPlan(row)">{{ t('common.edit') }}</button><button class="btn btn-primary min-h-11 text-xs" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" :aria-busy="actionBusy === row.plan.id" type="button" @click="runPlan(row.plan)"><Icon name="play" size="sm" />{{ actionBusy === row.plan.id ? t('common.loading') : t('admin.modelIdentity.manualTrigger') }}</button><button v-if="isActive(row.latest)" class="btn btn-secondary min-h-11" :disabled="Boolean(actionBusy)" type="button" @click="cancelRun(row.latest!)">{{ t('common.cancel') }}</button></div>
           </article>
         </div>
         <Pagination v-if="total > pageSize" :page="page" :page-size="pageSize" :total="total" :show-page-size-selector="false" @update:page="changePage" />
       </section>
       <section class="grid gap-6 lg:grid-cols-3">
-        <div class="card p-5 lg:col-span-2"><h2 class="font-semibold">{{ t('admin.modelIdentity.recentActivity') }}</h2><p class="mt-1 text-xs text-gray-500">{{ t('admin.modelIdentity.currentPage') }}</p><p v-if="!events.length" class="mt-5 text-sm text-gray-500">{{ t('admin.modelIdentity.noHistory') }}</p><button v-for="event in events" :key="event.run.id" type="button" class="mt-3 flex min-h-11 w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-100 p-3 text-left dark:border-dark-700" @click="openReport(event.run)"><span class="text-sm">{{ event.name }} <span class="ml-2 rounded-full px-2 py-1 text-xs" :class="identityStatusClass(identityRunStatus(event.run))">{{ statusLabel(identityRunStatus(event.run)) }}</span><span class="mt-1 block break-all text-xs text-gray-500">{{ event.run.request_model }} → {{ event.run.report?.detected_model || '—' }}</span></span><time class="text-xs text-gray-500">{{ formatTime(event.run.created_at) }}</time></button></div>
+        <div class="card p-5 lg:col-span-2"><h2 class="font-semibold">{{ t('admin.modelIdentity.recentActivity') }}</h2><p class="mt-1 text-xs text-gray-500">{{ t('admin.modelIdentity.currentPage') }}</p><p v-if="!events.length" class="mt-5 text-sm text-gray-500">{{ t('admin.modelIdentity.noHistory') }}</p><button v-for="event in events" :key="event.run.id" type="button" class="mt-3 flex min-h-11 w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-100 p-3 text-left dark:border-dark-700" @click="openReport(event.run)"><span class="text-sm">{{ event.name }} <span class="ml-2 rounded-full px-2 py-1 text-xs" :class="identityStatusClass(identityRunStatus(event.run))">{{ statusLabel(identityRunStatus(event.run)) }}</span><span class="mt-1 block break-all text-xs text-gray-500">{{ event.run.request_model }} → {{ identityDetectedModel(event.run) }}</span></span><time class="text-xs text-gray-500">{{ formatTime(event.run.created_at) }}</time></button></div>
         <div class="card p-5"><h2 class="font-semibold">{{ t('admin.modelIdentity.scheduleSummary') }}</h2><dl class="mt-5 space-y-4 text-sm"><div class="flex justify-between gap-3"><dt class="text-gray-500">{{ t('admin.modelIdentity.enabledPlans') }}</dt><dd>{{ enabledPlans.length }}</dd></div><div class="flex justify-between gap-3"><dt class="text-gray-500">{{ t('admin.modelIdentity.runningNow') }}</dt><dd>{{ rows.filter(row => isActive(row.latest)).length }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.nextWindow') }}</dt><dd class="mt-1">{{ formatTime(scheduleNext) }}</dd></div></dl><p class="mt-5 text-xs text-gray-500">{{ t('admin.modelIdentity.scheduleHint') }}</p></div>
       </section>
       <BaseDialog :show="addPlanOpen" :title="t(editingPlanID ? 'admin.modelIdentity.editPlan' : 'admin.modelIdentity.addPlan')" width="normal" :close-on-escape="!addSaving" :show-close-button="!addSaving" @close="closeAddPlan">
@@ -116,9 +116,12 @@
         <p v-if="reportLoading" role="status" class="text-sm text-gray-500">{{ t('common.loading') }}</p>
         <p v-if="reportError" role="alert" class="text-sm text-red-600">{{ reportError }}</p>
         <div v-if="selectedReport" class="space-y-4">
-          <dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2"><div><dt class="text-gray-500">{{ t('admin.modelIdentity.lastResult') }}</dt><dd class="mt-1">{{ statusLabel(identityRunStatus(selectedReport)) }} · {{ formatTime(selectedReport.created_at) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.expectedModel') }}</dt><dd class="mt-1 break-all">{{ selectedReport.expected_model }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.detectedModel') }}</dt><dd class="mt-1 break-all">{{ selectedReport.report?.detected_model || '—' }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.engineVersion') }}</dt><dd class="mt-1">{{ selectedReport.report?.engine_version || '—' }}</dd></div></dl>
+          <dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2"><div><dt class="text-gray-500">{{ t('admin.modelIdentity.lastResult') }}</dt><dd class="mt-1">{{ statusLabel(identityRunStatus(selectedReport)) }} · {{ formatTime(selectedReport.created_at) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.expectedModel') }}</dt><dd class="mt-1 break-all">{{ selectedReport.expected_model }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.detectedModel') }}</dt><dd class="mt-1 break-all">{{ identityDetectedModel(selectedReport) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.engineVersion') }}</dt><dd class="mt-1">{{ selectedReport.report?.engine_version || '—' }}</dd></div></dl>
           <p v-if="selectedReport.report?.error" role="alert" class="text-sm text-red-600">{{ selectedReport.report.error }}</p>
           <p v-if="reportReason" class="rounded-lg bg-gray-50 p-3 text-sm dark:bg-dark-900">{{ reportReason }}</p>
+          <IdentityOfficialLink :run="selectedReport" />
+          <IdentityScopeSummary :run="selectedReport" />
+          <IdentityPerformance :report="selectedReport.report" />
           <IdentityModelVotes :report="selectedReport.report" />
           <button v-if="isActive(selectedReport)" class="btn btn-secondary" type="button" :disabled="Boolean(actionBusy)" @click="cancelRun(selectedReport)">{{ t('common.cancel') }}</button>
           <details v-for="(probe, index) in selectedReport.probes" :key="index" class="border-b border-gray-200 py-2 dark:border-dark-700"><summary class="min-h-11 cursor-pointer break-words text-sm">{{ probe.probe_id || index + 1 }} · {{ probe.status }}</summary><dl class="space-y-1 text-xs"><div>{{ t('admin.modelIdentity.targetAccount') }}: {{ probe.target_account_id }}</div><div>{{ t('admin.modelIdentity.requestModel') }}: {{ probe.request_model }}</div><div>{{ t('admin.modelIdentity.upstreamModel') }}: {{ probe.evidence?.upstream_model || '—' }}</div><div>{{ t('admin.modelIdentity.requestID') }}: {{ probe.evidence?.request_id || '—' }}</div></dl><pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{{ JSON.stringify(probe.response, null, 2) }}</pre></details>
@@ -132,6 +135,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import IdentityOfficialLink from '@/components/admin/account/IdentityOfficialLink.vue'
 import { Icon } from '@/components/icons'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
@@ -139,10 +143,12 @@ import Pagination from '@/components/common/Pagination.vue'
 import Select from '@/components/common/Select.vue'
 import IdentityRecentRuns from '@/components/admin/account/IdentityRecentRuns.vue'
 import IdentityHistoryTable from '@/components/admin/account/IdentityHistoryTable.vue'
+import IdentityPerformance from '@/components/admin/account/IdentityPerformance.vue'
+import IdentityScopeSummary from '@/components/admin/account/IdentityScopeSummary.vue'
 import IdentityModelVotes from '@/components/admin/account/IdentityModelVotes.vue'
 import { adminAPI } from '@/api/admin'
 import * as identityAPI from '@/api/admin/modelIdentity'
-import { identityRunStatus, identityStatusClass, isActive, type IdentityStatus } from '@/utils/modelIdentity'
+import { identityDetectedModel, identityRunStatus, identityStatusClass, isActive, type IdentityStatus } from '@/utils/modelIdentity'
 import type { Account, AccountListItem, AdminUser, Group } from '@/types'
 
 type IdentityRow = { account: AccountListItem; config: identityAPI.IdentityConfig | null; plans: identityAPI.IdentityPlan[]; history: identityAPI.IdentityRun[]; latest?: identityAPI.IdentityRun; status: IdentityStatus; error: string }
@@ -160,7 +166,7 @@ const page = ref(1), total = ref(0), pageSize = 20
 const expandedRows = ref(new Set<number>()), actionBusy = ref(0)
 const reportOpen = ref(false), reportLoading = ref(false), reportError = ref(''), selectedReport = ref<identityAPI.IdentityRun | null>(null)
 let loadVersion = 0, reportVersion = 0, queryTimer: ReturnType<typeof setTimeout> | undefined, poll: ReturnType<typeof setInterval> | undefined
-const filterStatuses: IdentityStatus[] = ['matched', 'mismatched', 'inconclusive', 'running', 'queued', 'configuration_error', 'request_error', 'service_error', 'notConfigured', 'untested']
+const filterStatuses: IdentityStatus[] = ['matched', 'mismatched', 'flagshipClass', 'inconclusive', 'running', 'queued', 'configuration_error', 'request_error', 'service_error', 'notConfigured', 'untested']
 const planRows = computed(() => rows.value.flatMap(row => row.plans.map(plan => {
   const history = row.history.filter(run => run.plan_id === plan.id)
   return { ...row, plan, history, latest: history[0], status: row.status === 'service_error' ? 'service_error' as IdentityStatus : row.config?.configuration_error ? 'configuration_error' as IdentityStatus : history[0] ? identityRunStatus(history[0]) : 'untested' as IdentityStatus }
@@ -174,7 +180,7 @@ const scheduleNext = computed(() => enabledPlans.value.map(plan => plan.next_run
 const stats = computed(() => [
   { label: t('admin.modelIdentity.totalPlans'), value: planRows.value.length },
   { label: t('admin.modelIdentity.matchedAccounts'), value: planRows.value.filter(row => row.status === 'matched').length },
-  { label: t('admin.modelIdentity.attentionNeeded'), value: planRows.value.filter(row => ['mismatched', 'inconclusive', 'configuration_error', 'request_error', 'service_error', 'timed_out'].includes(row.status)).length },
+  { label: t('admin.modelIdentity.attentionNeeded'), value: planRows.value.filter(row => ['mismatched', 'flagshipClass', 'inconclusive', 'configuration_error', 'request_error', 'service_error', 'timed_out'].includes(row.status)).length },
   { label: t('admin.modelIdentity.enabledPlans'), value: enabledPlans.value.length },
 ])
 const events = computed(() => planRows.value.flatMap(row => row.history.map(run => ({ name: row.account.name, run }))).sort((a, b) => +new Date(b.run.created_at) - +new Date(a.run.created_at)).slice(0, 5))
@@ -325,11 +331,17 @@ async function openReport(run: identityAPI.IdentityRun) {
   catch (error) { if (version === reportVersion) reportError.value = message(error) }
   finally { if (version === reportVersion) reportLoading.value = false }
 }
+async function refreshActiveReport() {
+  const selected = selectedReport.value, version = reportVersion
+  if (!selected || !isActive(selected)) return
+  try { const result = await identityAPI.runStatus(selected.id); if (version === reportVersion && selectedReport.value?.id === selected.id) selectedReport.value = result }
+  catch (error) { if (version === reportVersion) reportError.value = message(error) }
+}
 function closeReport() { reportVersion++; reportOpen.value = false; selectedReport.value = null }
 watch(query, () => { clearTimeout(queryTimer); queryTimer = setTimeout(() => { page.value = 1; void loadRows() }, 300) })
 onMounted(async () => {
   await Promise.allSettled([loadConnectionSettings(), loadRows(), adminAPI.groups.getAll().then(result => { groups.value = result }).catch(error => { loadError.value = message(error) })])
-  poll = setInterval(() => { if (!document.hidden && !loading.value && !addPlanOpen.value && planRows.value.some(row => isActive(row.latest))) void loadRows() }, 5000)
+  poll = setInterval(() => { if (!document.hidden) void refreshActiveReport(); if (!document.hidden && !loading.value && !addPlanOpen.value && planRows.value.some(row => isActive(row.latest))) void loadRows() }, 5000)
 })
 onUnmounted(() => { accountSearchVersion++; addFormVersion++; userSearchVersion++; loadVersion++; reportVersion++; clearInterval(poll); clearTimeout(queryTimer) })
 </script>

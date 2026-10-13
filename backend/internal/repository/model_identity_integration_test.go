@@ -4,6 +4,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
@@ -122,6 +123,13 @@ func TestIdentityRepositoryLifecycleAndAtomicClaims(t *testing.T) {
 	}
 	require.Error(t, repo.ProbeSlot(ctx, run.ID, true))
 	require.NoError(t, repo.ProbeSlot(ctx, run.ID, false))
+	require.NoError(t, repo.SetRemoteRunID(ctx, run.ID, "hosted-task-live"))
+	live, e := repo.Run(ctx, run.ID)
+	require.NoError(t, e)
+	require.JSONEq(t, `{"remote_run_id":"hosted-task-live"}`, string(live.Report))
+	liveHistory, e := repo.History(ctx, run.PlanID)
+	require.NoError(t, e)
+	require.Contains(t, string(liveHistory[0].Report), `"remote_run_id": "hosted-task-live"`)
 	require.NoError(t, repo.Cancel(ctx, run.ID))
 	_, e = repo.Authorize(ctx, run.ID, service.HashIdentityToken("test-capability"), due)
 	require.Error(t, e)
@@ -129,11 +137,46 @@ func TestIdentityRepositoryLifecycleAndAtomicClaims(t *testing.T) {
 	saved, e := repo.Run(ctx, run.ID)
 	require.NoError(t, e)
 	require.Equal(t, "cancelled", saved.Status)
-	require.JSONEq(t, `{"verdict":"inconclusive"}`, string(saved.Report))
+	require.JSONEq(t, `{"verdict":"inconclusive","remote_run_id":"hosted-task-live"}`, string(saved.Report))
+	// Finalization preserves the link even if the hosted poll fails, and late
+	// updates cannot overwrite the ID of a terminal run.
+	require.NoError(t, repo.SetRemoteRunID(ctx, run.ID, "must-not-overwrite"))
+	saved, e = repo.Run(ctx, run.ID)
+	require.NoError(t, e)
+	require.Contains(t, string(saved.Report), "hosted-task-live")
+	_, e = integrationDB.ExecContext(ctx, `UPDATE account_identity_runs SET report='{"runId":"legacy-task","verdict":"inconclusive"}'::jsonb WHERE id=$1`, run.ID)
+	require.NoError(t, e)
+	legacy, e := repo.History(ctx, run.PlanID)
+	require.NoError(t, e)
+	require.Contains(t, string(legacy[0].Report), `"remote_run_id": "legacy-task"`)
+	// Old stored reports retain the minimal range evidence in history. Exclude
+	// credentials, probe responses and per-probe classifier detail from the list.
+	_, e = integrationDB.ExecContext(ctx, `UPDATE account_identity_runs SET report='{"verdict":"inconclusive","userKey":"must-not-leak","identityAssessment":{"claimedModel":"openai/gpt-6.1-sol","verdict":{"status":"clean_match_family_only","trueFamily":"openai"},"v3h":{"abstained":false,"posteriors":[{"modelId":"openai/gpt-6-astra","score":0.995},{"modelId":"openai/gpt-6.1-sol","score":0.005}],"perProbe":[{"response":"must-not-leak"}]}},"items":[{"group":"identity","status":"done","response":"must-not-leak"},{"group":"submodel","status":"error","error":"must-not-leak"},{"group":"security","status":"error"}]}'::jsonb WHERE id=$1`, run.ID)
+	require.NoError(t, e)
+	rangeHistory, e := repo.History(ctx, run.PlanID)
+	require.NoError(t, e)
+	var rangeReport map[string]any
+	require.NoError(t, json.Unmarshal(rangeHistory[0].Report, &rangeReport))
+	require.Equal(t, "inconclusive", rangeReport["verdict"])
+	assessment := rangeReport["identityAssessment"].(map[string]any)
+	require.Equal(t, "openai/gpt-6.1-sol", assessment["claimedModel"])
+	require.Len(t, assessment["v3h"].(map[string]any)["posteriors"], 2)
+	require.Equal(t, map[string]any{"total": float64(2), "errors": float64(1)}, rangeReport["identity_probe_coverage"])
+	require.NotContains(t, string(rangeHistory[0].Report), "must-not-leak")
+	require.NotContains(t, string(rangeHistory[0].Report), "perProbe")
+	require.NoError(t, repo.SetRemoteRunID(ctx, claimed[1].ID, "hosted-task-timeout"))
 	require.NoError(t, repo.ScanDue(ctx, due.Add(21*time.Minute)))
 	saved, e = repo.Run(ctx, claimed[1].ID)
 	require.NoError(t, e)
 	require.Equal(t, "timed_out", saved.Status)
+	require.Contains(t, string(saved.Report), "hosted-task-timeout")
+	failedRun, e := repo.Claim(ctx, service.HashIdentityToken("failed-run-capability"), due.Add(22*time.Minute))
+	require.NoError(t, e)
+	require.NoError(t, repo.SetRemoteRunID(ctx, failedRun.ID, "hosted-task-failed"))
+	require.NoError(t, repo.Finish(ctx, failedRun.ID, "request_error", []byte(`{"error":"poll failed"}`)))
+	failed, e := repo.Run(ctx, failedRun.ID)
+	require.NoError(t, e)
+	require.JSONEq(t, `{"error":"poll failed","remote_run_id":"hosted-task-failed"}`, string(failed.Report))
 	manual, e := repo.Enqueue(ctx, plans[0].ID)
 	require.NoError(t, e)
 	require.NotNil(t, manual)
