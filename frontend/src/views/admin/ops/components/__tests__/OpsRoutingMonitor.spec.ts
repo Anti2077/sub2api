@@ -21,21 +21,92 @@ function makeSource(initial: OpsRoutingEvent[] = []) {
   return {source,stop,send:(item:OpsRoutingEvent)=>receive({type:'routing_event',data:item})}
 }
 const wrappers: ReturnType<typeof mount>[] = []
-afterEach(() => { for (const wrapper of wrappers.splice(0)) wrapper.unmount(); vi.useRealTimers() })
+afterEach(() => { for (const wrapper of wrappers.splice(0)) wrapper.unmount(); localStorage.clear(); vi.restoreAllMocks(); vi.useRealTimers() })
 function panel(source: RoutingSource) {
-  const wrapper = mount(OpsRoutingMonitor,{props:{source},global:{plugins:[createI18n({legacy:false,locale:'zh',messageCompiler: message => ctx => String(message).replace(/\{(\w+)\}/g, (_, key: string) => String(ctx.named(key))),messages:{zh:{admin:zh}}})]}})
+  const wrapper = mount(OpsRoutingMonitor,{props:{source},global:{stubs:{TransitionGroup:true},plugins:[createI18n({legacy:false,locale:'zh',messageCompiler: message => ctx => String(message).replace(/\{(\w+)\}/g, (_, key: string) => String(ctx.named(key))),messages:{zh:{admin:zh}}})]}})
   wrappers.push(wrapper)
   return wrapper
 }
 
 describe('routing monitor interactions', () => {
+  it('toggles key names across the graph, routes and details, clears selection, and remembers the choice', async () => {
+    const mock = makeSource([event({ api_key_id: 10, api_key_name: '开发密钥' }), event({ route_key: 'request-2', api_key_id: 11, api_key_name: '开发密钥' })])
+    const wrapper = panel(mock.source); await flushPromises()
+    expect(wrapper.findAll('.routing-node-apiKey')).toHaveLength(0)
+    expect(wrapper.findAll('.routing-row')).toHaveLength(1)
+    expect(wrapper.text()).not.toContain('开发密钥')
+    const toggle = wrapper.get('input[type="checkbox"]')
+    await toggle.setValue(true)
+    expect(wrapper.findAll('svg > text').map(node => node.text())).toEqual(['用户', 'API 密钥名称', '请求模型', '实际账号 / 上游'])
+    expect(wrapper.findAll('.routing-node-apiKey')).toHaveLength(2)
+    expect(wrapper.findAll('.routing-row')).toHaveLength(2)
+    await wrapper.find('.routing-node-apiKey').trigger('keydown', { key: 'Enter' })
+    expect(wrapper.findAll('.routing-row')).toHaveLength(1)
+    await wrapper.find('.routing-route-details').trigger('click')
+    expect(wrapper.get('dl').text()).toContain('开发密钥 · #10')
+    await toggle.setValue(false)
+    expect(wrapper.find('dl').exists()).toBe(false)
+    expect(wrapper.findAll('.routing-row')).toHaveLength(1)
+    expect(wrapper.text()).not.toContain('开发密钥')
+    await toggle.setValue(true)
+    await wrapper.get('select.input.w-auto').setValue('25')
+    const restored = panel(mock.source); await flushPromises()
+    expect((restored.get('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true)
+    expect(restored.findAll('.routing-node-apiKey')).toHaveLength(2)
+    expect((restored.get('select.input.w-auto').element as HTMLSelectElement).value).toBe('25')
+    expect(restored.get('input[type="checkbox"]').element.parentElement?.parentElement).toBe(restored.get('select.input.w-auto').element.parentElement?.parentElement)
+  })
+
+  it('expands only the clicked user without filtering other users, and collapses from the list', async () => {
+    const wrapper = panel(makeSource([
+      event({ api_key_id: 10, api_key_name: 'Ada key A' }),
+      event({ route_key: 'request-2', api_key_id: 11, api_key_name: 'Ada key B' }),
+      event({ route_key: 'request-3', user_id: 2, user_label: 'Grace', api_key_id: 12, api_key_name: 'Grace key' })
+    ]).source)
+    await flushPromises()
+    expect(wrapper.findAll('.routing-row')).toHaveLength(2)
+    const ada = () => wrapper.findAll('.routing-node-user').find(node => node.text().includes('Ada'))!
+    await ada().trigger('keydown', { key: 'Enter' })
+    expect(ada().attributes('aria-expanded')).toBe('true')
+    expect(wrapper.findAll('.routing-node-apiKey')).toHaveLength(2)
+    expect(wrapper.findAll('.routing-node-user')).toHaveLength(2)
+    expect(wrapper.findAll('.routing-row')).toHaveLength(3)
+    expect(wrapper.text()).not.toContain('Grace key')
+    await wrapper.find('.routing-route-details').trigger('click')
+    expect(wrapper.get('dl').text()).toContain('Ada key')
+    await wrapper.findAll('.routing-row').find(row => row.text().includes('Ada'))!.get('button').trigger('click')
+    expect(wrapper.findAll('.routing-node-apiKey')).toHaveLength(0)
+    expect(wrapper.findAll('.routing-row')).toHaveLength(2)
+    expect(wrapper.find('dl').exists()).toBe(false)
+    await ada().trigger('keydown', { key: ' ' })
+    expect(wrapper.findAll('.routing-node-apiKey')).toHaveLength(2)
+    await wrapper.get('input[type="checkbox"]').setValue(true)
+    expect(wrapper.findAll('.routing-node-apiKey')).toHaveLength(3)
+    await wrapper.get('input[type="checkbox"]').setValue(false)
+    expect(wrapper.findAll('.routing-node-apiKey')).toHaveLength(0)
+  })
+
+  it('ignores unsupported stored graph limits', async () => {
+    localStorage.setItem('ops-routing-monitor-graph-limit', '1000')
+    const wrapper = panel(makeSource([event()]).source); await flushPromises()
+    expect((wrapper.get('select.input.w-auto').element as HTMLSelectElement).value).toBe('10')
+  })
+
+  it('keeps the toggle usable when browser storage is unavailable', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })
+    const wrapper = panel(makeSource([event({ api_key_name: 'test-key' })]).source); await flushPromises()
+    await wrapper.get('input[type="checkbox"]').setValue(true)
+    expect(wrapper.find('.routing-node-apiKey').text()).toContain('test-key')
+  })
+
   it('always exposes routes and request-specific failover details, including keyboard selection', async () => {
     const mock=makeSource([event({hops:[{account_id:1,account_name:'first',occurred_at:new Date().toISOString()},{account_id:2,account_name:'last',occurred_at:new Date().toISOString()}],attempt_count:2})])
     const wrapper=panel(mock.source); await flushPromises()
     expect(wrapper.findAll('.routing-row')).toHaveLength(1)
-    await wrapper.find('.routing-node').trigger('keydown',{key:'Enter'})
-    expect(wrapper.find('.routing-node').attributes('aria-pressed')).toBe('true')
-    await wrapper.find('.routing-row').trigger('click')
+    await wrapper.find('.routing-node-model').trigger('keydown',{key:'Enter'})
+    expect(wrapper.find('.routing-node-model').attributes('aria-pressed')).toBe('true')
+    await wrapper.find('.routing-route-details').trigger('click')
     expect(wrapper.text()).toContain('first · #1')
     expect(wrapper.text()).toContain('last · #2')
     expect(wrapper.findAll('.routing-edge.is-highlighted')).toHaveLength(2)
@@ -61,7 +132,7 @@ describe('routing monitor interactions', () => {
   it('expires terminal events and selected details while idle', async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-08T00:00:00Z'))
     const mock=makeSource([event({event_type:'completed',status:'OK'})]); const wrapper=panel(mock.source); await flushPromises()
-    await wrapper.find('.routing-row').trigger('click')
+    await wrapper.find('.routing-route-details').trigger('click')
     await vi.advanceTimersByTimeAsync(61_000)
     expect(wrapper.findAll('.routing-row')).toHaveLength(0)
     expect(wrapper.text()).toContain('最近 1 分钟暂无路由事件')

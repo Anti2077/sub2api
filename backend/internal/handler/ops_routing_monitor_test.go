@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -24,6 +25,7 @@ func TestOpsRoutingMonitorWebSocketTurnsUseIndependentRouteKeys(t *testing.T) {
 	ctx := context.WithValue(req.Context(), ctxkey.RequestID, "req-ws")
 	ctx = context.WithValue(ctx, ctxkey.ClientRequestID, "client-ws")
 	c.Request = req.WithContext(ctx)
+	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{ID: 42, Name: "development", Key: "sk-test-secret", User: &service.User{ID: 9, Username: "alice"}})
 
 	ops := &service.OpsService{}
 	ops.SetRoutingMonitor(monitor)
@@ -37,6 +39,8 @@ func TestOpsRoutingMonitorWebSocketTurnsUseIndependentRouteKeys(t *testing.T) {
 	require.Equal(t, "req-ws:turn:2", started.RouteKey)
 	require.Equal(t, 2, started.Turn)
 	require.Equal(t, "model-a", started.RequestedModel)
+	require.Equal(t, int64(42), started.APIKeyID)
+	require.Equal(t, "development", started.APIKeyName)
 
 	recordOpsRoutingTurnCompletion(c, 2, "model-a", "gpt-5.5", &service.OpenAIForwardResult{
 		UpstreamModel: "gpt-5.5",
@@ -46,7 +50,28 @@ func TestOpsRoutingMonitorWebSocketTurnsUseIndependentRouteKeys(t *testing.T) {
 	requireRoutingEvent(t, <-updates, &completed)
 	require.Equal(t, service.OpsRoutingEventCompleted, completed.EventType)
 	require.Equal(t, "gpt-5.5", completed.UpstreamModel)
+	require.Equal(t, started.APIKeyID, completed.APIKeyID)
+	require.Equal(t, started.APIKeyName, completed.APIKeyName)
 	require.GreaterOrEqual(t, completed.DurationMs, int64(0))
+}
+
+func TestOpsRoutingMonitorKeyMetadataWithoutLoadedUser(t *testing.T) {
+	monitor := service.NewOpsRoutingMonitorService(nil, nil)
+	updates, cancel := monitor.Subscribe(context.Background())
+	defer cancel()
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/v1/messages", nil).WithContext(context.WithValue(context.Background(), ctxkey.RequestID, "req-key"))
+	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{ID: 43, Name: "automation", Key: "sk-test-do-not-serialize"})
+	ops := &service.OpsService{}
+	ops.SetRoutingMonitor(monitor)
+	setOpsRoutingMonitor(c, ops)
+	setOpsSelectedAccount(c, 7, service.PlatformOpenAI, "primary")
+	payload := <-updates
+	require.NotContains(t, string(payload), "sk-test-do-not-serialize")
+	var event service.OpsRoutingEvent
+	requireRoutingEvent(t, payload, &event)
+	require.Equal(t, int64(43), event.APIKeyID)
+	require.Equal(t, "automation", event.APIKeyName)
 }
 
 func requireRoutingEvent(t *testing.T, payload []byte, event *service.OpsRoutingEvent) {

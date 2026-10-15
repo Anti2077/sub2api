@@ -17,7 +17,8 @@ function scenario(count: number) {
   fixtures = Array.from({ length: count }, (_, i): OpsRoutingEvent => ({
     route_key: `demo-${i}`, event_id: `demo-event-${i}`, request_id: `req-local-${String(i + 1).padStart(3, '0')}`,
     event_type: i % 5 === 0 ? 'failed' : i % 3 === 0 ? 'completed' : 'started', status: i % 5 === 0 ? 'Bad Gateway' : i % 3 === 0 ? 'OK' : 'active',
-    user_id: i + 1, user_label: i < 2 ? '同名用户' : `开发团队 ${i + 1}`,
+    user_id: Math.floor(i / 3) + 1, user_label: i < 6 ? '同名用户' : `开发团队 ${Math.floor(i / 3) + 1}`,
+    api_key_id: i + 200, api_key_name: i < 2 ? '同名开发密钥' : `项目密钥 ${i + 1} · 长名称显示测试`,
     requested_model: ['gpt-5.6-sol', 'claude-sonnet-5', 'gemini-3-pro'][i % 3], upstream_model: `upstream-model-${i % 3}`,
     platform: ['openai', 'anthropic', 'gemini'][i % 3], account_id: i + 100,
     account_name: i < 2 ? '同名上游账号' : `主力渠道 / ${i + 1} · 长名称显示测试`,

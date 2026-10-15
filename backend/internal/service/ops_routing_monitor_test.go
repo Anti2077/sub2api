@@ -14,6 +14,7 @@ import (
 func routingInfo(requestID string, accountID int64) OpsRoutingRequestInfo {
 	return OpsRoutingRequestInfo{
 		RequestID: requestID, ClientRequestID: "client-" + requestID, UserLabel: "alice",
+		APIKeyID: 42, APIKeyName: "development",
 		RequestedModel: "claude-3-7-sonnet", UpstreamModel: "claude-3-7-sonnet-20250219",
 		Platform: PlatformAnthropic, AccountID: accountID, AccountName: "account-" + string(rune('0'+accountID)), AccountPlatform: PlatformAnthropic,
 	}
@@ -45,6 +46,8 @@ func TestOpsRoutingMonitorLifecycleAndFailover(t *testing.T) {
 	switched, ok := switchedEnvelope["data"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "switched", switched["event_type"])
+	require.Equal(t, float64(42), switched["api_key_id"])
+	require.Equal(t, "development", switched["api_key_name"])
 
 	monitor.Finish(routingInfo("req-1", 2), "200", 125*time.Millisecond, false, "")
 	var completedEnvelope map[string]any
@@ -52,6 +55,8 @@ func TestOpsRoutingMonitorLifecycleAndFailover(t *testing.T) {
 	completed, ok := completedEnvelope["data"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "completed", completed["event_type"])
+	require.Equal(t, float64(42), completed["api_key_id"])
+	require.Equal(t, "development", completed["api_key_name"])
 	require.Equal(t, float64(2), completed["attempt_count"])
 	require.Len(t, completed["hops"], 2)
 
@@ -59,6 +64,7 @@ func TestOpsRoutingMonitorLifecycleAndFailover(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, snapshot.Active)
 	require.Len(t, snapshot.Recent, 1)
+	require.Equal(t, "development", snapshot.Recent[0].APIKeyName)
 }
 
 func TestOpsRoutingMonitorRecentWindowIsOneMinute(t *testing.T) {
@@ -116,6 +122,8 @@ func TestOpsRoutingMonitorRedisSnapshotAndPubSub(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, snapshot.Active, 1)
 	require.Equal(t, int64(3), snapshot.Active[0].AccountID)
+	require.Equal(t, int64(42), snapshot.Active[0].APIKeyID)
+	require.Equal(t, "development", snapshot.Active[0].APIKeyName)
 }
 
 func TestOpsRoutingMonitorRedisSnapshotFiltersExpiredEvents(t *testing.T) {

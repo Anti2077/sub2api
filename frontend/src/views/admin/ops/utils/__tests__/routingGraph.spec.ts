@@ -8,6 +8,54 @@ const event = (i: number, overrides: Partial<OpsRoutingEvent> = {}): OpsRoutingE
 })
 
 describe('routing graph geometry and identity', () => {
+  it('splits same-name keys by ID only when enabled and connects all four columns', () => {
+    const events = [event(1, { api_key_id: 10, api_key_name: 'shared' }), event(2, { user_id: 1, user_label: 'User 1', account_id: 101, account_name: 'Account 1', api_key_id: 11, api_key_name: 'shared' })]
+    expect(groupRoutingEvents(events)).toHaveLength(1)
+    const routes = groupRoutingEvents(events, true)
+    expect(routes).toHaveLength(2)
+    expect(routes.map(route => route.apiKey).sort()).toEqual(['shared · #10', 'shared · #11'])
+    const graph = buildRoutingGraph(routes)
+    expect(graph.columns.map(column => column.type)).toEqual(['user', 'apiKey', 'model', 'account'])
+    expect(graph.nodes.filter(node => node.type === 'apiKey')).toHaveLength(2)
+    for (const type of ['user', 'apiKey', 'model']) {
+      expect(graph.edges.filter(edge => edge.source.type === type).reduce((count, edge) => count + edge.count, 0)).toBe(2)
+    }
+    for (const edge of graph.edges) {
+      expect(edge.path.startsWith(`M ${edge.source.x + edge.source.width} ${edge.source.y + edge.source.height / 2} C`)).toBe(true)
+      expect(edge.path.endsWith(`${edge.target.x} ${edge.target.y + edge.target.height / 2}`)).toBe(true)
+    }
+    expect(graph.nodes.every(node => node.x + node.width <= graph.width && node.y + node.height <= graph.height)).toBe(true)
+  })
+
+  it('splits expanded users by key and routes collapsed users directly to models', () => {
+    const events = [
+      event(1, { api_key_id: 10, api_key_name: 'first' }),
+      event(2, { user_id: 1, user_label: 'User 1', account_id: 101, api_key_id: 11, api_key_name: 'second' }),
+      event(3, { api_key_id: 12 }),
+      event(4, { user_id: 3, user_label: 'User 3', account_id: 103, api_key_id: 13 })
+    ]
+    const userKey = groupRoutingEvents(events)[0].userKey
+    // Pick by identity rather than route ranking.
+    const expandedKey = groupRoutingEvents(events).find(route => route.user.startsWith('User 1'))!.userKey
+    const routes = groupRoutingEvents(events, false, new Set([expandedKey]))
+    expect(routes).toHaveLength(3)
+    const graph = buildRoutingGraph(routes)
+    expect(graph.nodes.filter(node => node.type === 'user')).toHaveLength(2)
+    expect(graph.nodes.filter(node => node.type === 'apiKey')).toHaveLength(2)
+    const collapsedUser = graph.nodes.find(node => node.type === 'user' && node.key !== expandedKey)!
+    expect(graph.nodes.filter(node => node.type === 'apiKey').every(node => Math.abs(node.y - collapsedUser.y) >= 68)).toBe(true)
+    expect(graph.edges.filter(edge => edge.source.type === 'user' && edge.target.type === 'model').map(edge => edge.count)).toEqual([2])
+    expect(graph.edges.filter(edge => edge.source.type === 'user' && edge.target.type === 'apiKey').reduce((sum, edge) => sum + edge.count, 0)).toBe(2)
+    expect(graph.edges.filter(edge => edge.source.type === 'model').reduce((sum, edge) => sum + edge.count, 0)).toBe(4)
+    expect(buildRoutingGraph(groupRoutingEvents(events, false, new Set([userKey + '-missing']))).columns).toHaveLength(3)
+  })
+
+  it('handles old events and unnamed keys without merging different users', () => {
+    const routes = groupRoutingEvents([event(1), event(2), event(3, { api_key_id: 9, api_key_name: '   ' })], true)
+    expect(routes.map(route => route.apiKey).sort()).toEqual(['#9', '—', '—'])
+    expect(buildRoutingGraph(routes).nodes.filter(node => node.type === 'apiKey')).toHaveLength(3)
+  })
+
   it('connects actual node boundaries in all three columns, including the tenth row', () => {
     const graph = buildRoutingGraph(groupRoutingEvents(Array.from({length:10}, (_, i) => event(i + 1))))
     for (const edge of graph.edges) {

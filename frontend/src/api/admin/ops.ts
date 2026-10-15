@@ -477,6 +477,8 @@ export interface OpsRoutingEvent {
   turn?: number
   user_id?: number
   user_label?: string
+  api_key_id?: number
+  api_key_name?: string
   requested_model?: string
   upstream_model?: string
   platform?: string

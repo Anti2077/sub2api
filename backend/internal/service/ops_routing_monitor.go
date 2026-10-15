@@ -54,6 +54,8 @@ type OpsRoutingEvent struct {
 	Turn            int                 `json:"turn,omitempty"`
 	UserID          int64               `json:"user_id,omitempty"`
 	UserLabel       string              `json:"user_label,omitempty"`
+	APIKeyID        int64               `json:"api_key_id,omitempty"`
+	APIKeyName      string              `json:"api_key_name,omitempty"`
 	RequestedModel  string              `json:"requested_model,omitempty"`
 	UpstreamModel   string              `json:"upstream_model,omitempty"`
 	Platform        string              `json:"platform,omitempty"`
@@ -78,6 +80,8 @@ type OpsRoutingRequestInfo struct {
 	ClientRequestID string
 	UserID          int64
 	UserLabel       string
+	APIKeyID        int64
+	APIKeyName      string
 	RequestedModel  string
 	UpstreamModel   string
 	Platform        string
@@ -353,6 +357,7 @@ func (s *OpsRoutingMonitorService) ObserveSelection(info OpsRoutingRequestInfo) 
 			EventID: s.nextEventID(), EventType: OpsRoutingEventStarted, OccurredAt: now,
 			RequestID: info.RequestID, ClientRequestID: info.ClientRequestID, RouteKey: routeKey,
 			Turn: info.Turn, UserID: info.UserID, UserLabel: trimField(info.UserLabel, 128), RequestedModel: trimField(info.RequestedModel, 256),
+			APIKeyID: info.APIKeyID, APIKeyName: trimField(info.APIKeyName, 128),
 			UpstreamModel: trimField(info.UpstreamModel, 256), Platform: trimField(info.Platform, 64), Status: "active",
 		}
 	}
