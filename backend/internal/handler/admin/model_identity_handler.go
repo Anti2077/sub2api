@@ -49,9 +49,13 @@ func (h *ModelIdentityHandler) SaveSettings(c *gin.Context) {
 		response.BadRequest(c, "invalid model identity settings")
 		return
 	}
-	settings, err := h.svc.SaveSettings(c.Request.Context(), req.PublicBaseURL)
+	if err := req.ValidateConcurrency(); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	settings, err := h.svc.SaveSettings(c.Request.Context(), req)
 	if err != nil {
-		response.BadRequest(c, "Could not save Base URL; use a public HTTPS URL without credentials, query parameters or fragments")
+		response.BadRequest(c, "Could not save detection settings; use a public HTTPS URL without credentials, query parameters or fragments, and retry")
 		return
 	}
 	c.JSON(http.StatusOK, settings)

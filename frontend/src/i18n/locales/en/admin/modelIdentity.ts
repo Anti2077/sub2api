@@ -1,5 +1,8 @@
 export default {
   modelIdentity: {
+  scheduleOn: 'On',
+  scheduleOff: 'Off',
+  scheduleToggleLabel: 'Scheduled testing for plan #{id}',
   flagshipClass: 'Flagship · unresolved',
   flagshipRange: 'GPT-6 flagship (Astra / 6.1 Sol unresolved)',
   flagshipHint: 'The official report identifies the GPT-6 flagship range, but cannot confirm the specific model. This does not count as an exact match or a mismatch.',
@@ -26,11 +29,18 @@ export default {
   performanceStatus_unknown: 'Unknown status',
 
   settingsConfigured: 'Configured', chooseAccount: 'Filter accounts (optional)', selectAccount: 'Select account', addPlanHint: 'Configure the account, test user, billing group, and detection model on this page.', emptyPlans: 'No detection plans yet. Add a plan to choose an account to test.',
+  settingsTitle: 'Settings',
+  settingsHint: 'Configure the public callback URL and detection concurrency. Click Save to apply changes to newly started detections.',
+  concurrentAccounts: 'Concurrent accounts',
+  concurrentAccountsHint: 'Range: 1–2. Default: 1. Other runs wait in the queue.',
+  probeConcurrency: 'Probe concurrency per run',
+  probeConcurrencyHint: 'Range: 1–10. Default: 4. Try 1–2 for an unstable upstream.',
+  concurrencyHint: 'Test user and target account concurrency limits still apply. Higher concurrency increases upstream load; lower concurrency may take longer. Running detections keep their original concurrency.',
   connectionSettings: 'Detection connection settings',
   publicBaseURL: 'Public Base URL of this site',
   publicBaseURLHint: 'Enter this site’s public HTTPS address accessible to BazaarLink, without /v1. Include a reverse proxy path prefix if needed. Do not enter the BazaarLink API URL. Saved settings apply to newly started detections.',
   publicBaseURLRequired: 'Save the public Base URL before starting a detection.',
-  settingsSaved: 'Connection settings saved.',
+  settingsSaved: 'Detection settings saved. Newly started detections will use this configuration.',
   settingsUnsaved: 'Unsaved changes',
   manualTrigger: 'Run manually',
   modelVotes: 'Similar model votes',

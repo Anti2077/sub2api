@@ -9,7 +9,13 @@ import (
 
 const IdentityEngineCommit = "5c41136741ca52b5637879cca7bd0cae07404646"
 
-const IdentityProbeConcurrency = 10
+const (
+	DefaultIdentityConcurrentAccounts = 1
+	DefaultIdentityProbeConcurrency   = 4
+	MaxIdentityConcurrentAccounts     = 2
+	MaxIdentityProbeConcurrency       = 10
+	IdentityProbeConcurrency          = DefaultIdentityProbeConcurrency
+)
 
 var ErrIdentityProbeSlotsFull = errors.New("identity probe slots full")
 
@@ -32,21 +38,22 @@ type IdentityPlan struct {
 	NextRunAt       *time.Time `json:"next_run_at"`
 }
 type IdentityRun struct {
-	ID            int64           `json:"id"`
-	PlanID        int64           `json:"plan_id"`
-	AccountID     int64           `json:"account_id"`
-	UserID        int64           `json:"user_id"`
-	GroupID       int64           `json:"group_id"`
-	APIKeyID      int64           `json:"api_key_id"`
-	RequestModel  string          `json:"request_model"`
-	ExpectedModel string          `json:"expected_model"`
-	Status        string          `json:"status"`
-	StartedAt     *time.Time      `json:"started_at"`
-	FinishedAt    *time.Time      `json:"finished_at"`
-	CreatedAt     time.Time       `json:"created_at"`
-	Report        json.RawMessage `json:"report"`
-	Probes        json.RawMessage `json:"probes"`
-	ProbeCount    int             `json:"probe_count"`
+	ID               int64           `json:"id"`
+	PlanID           int64           `json:"plan_id"`
+	AccountID        int64           `json:"account_id"`
+	UserID           int64           `json:"user_id"`
+	GroupID          int64           `json:"group_id"`
+	APIKeyID         int64           `json:"api_key_id"`
+	RequestModel     string          `json:"request_model"`
+	ExpectedModel    string          `json:"expected_model"`
+	Status           string          `json:"status"`
+	StartedAt        *time.Time      `json:"started_at"`
+	FinishedAt       *time.Time      `json:"finished_at"`
+	CreatedAt        time.Time       `json:"created_at"`
+	Report           json.RawMessage `json:"report"`
+	Probes           json.RawMessage `json:"probes"`
+	ProbeCount       int             `json:"probe_count"`
+	ProbeConcurrency int             `json:"probe_concurrency"`
 }
 type IdentityModel struct {
 	ID     string `json:"id"`
@@ -67,7 +74,7 @@ type IdentityRepository interface {
 	DeletePlan(context.Context, int64) error
 	Enqueue(context.Context, int64) (*IdentityRun, error)
 	ScanDue(context.Context, time.Time) error
-	Claim(context.Context, string, time.Time) (*IdentityRun, error)
+	Claim(context.Context, string, time.Time, int, int) (*IdentityRun, error)
 	Authorize(context.Context, int64, string, time.Time) (*IdentityRun, error)
 	SetRemoteRunID(context.Context, int64, string) error
 	Finish(context.Context, int64, string, json.RawMessage) error

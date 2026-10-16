@@ -6,22 +6,39 @@
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('admin.modelIdentity.overviewTitle') }}</h1>
           <p class="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">{{ t('admin.modelIdentity.overviewDescription') }}</p>
         </div>
-        <div class="flex flex-wrap gap-2"><button class="btn btn-primary min-h-11" type="button" @click="openAddPlan"><Icon name="plus" size="sm" />{{ t('admin.modelIdentity.addPlan') }}</button><button class="btn btn-secondary min-h-11" type="button" :disabled="loading" @click="loadRows()"><Icon name="refresh" size="sm" />{{ t('common.refresh') }}</button></div>
+        <div class="flex flex-wrap gap-2"><button data-testid="identity-settings-button" class="btn btn-secondary min-h-11" type="button" @click="openSettings"><Icon name="cog" size="sm" />{{ t('admin.modelIdentity.settingsTitle') }}</button><button class="btn btn-primary min-h-11" type="button" @click="openAddPlan"><Icon name="plus" size="sm" />{{ t('admin.modelIdentity.addPlan') }}</button><button class="btn btn-secondary min-h-11" type="button" :disabled="loading" @click="loadRows()"><Icon name="refresh" size="sm" />{{ t('common.refresh') }}</button></div>
       </header>
-      <details class="card" :open="settingsOpen" @toggle="settingsOpen = ($event.target as HTMLDetailsElement).open">
-        <summary class="flex min-h-12 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-semibold"><span>{{ t('admin.modelIdentity.connectionSettings') }}</span><span class="text-xs font-normal text-gray-500">{{ publicBaseURL !== savedPublicBaseURL ? t('admin.modelIdentity.settingsUnsaved') : savedPublicBaseURL ? t('admin.modelIdentity.settingsConfigured') : '' }}</span></summary>
-        <div class="border-t border-gray-200 p-4 dark:border-dark-700">
-        <form class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end" @submit.prevent="saveConnectionSettings">
-          <div class="min-w-0 flex-1">
-            <label for="identity-base-url" class="text-sm font-medium">{{ t('admin.modelIdentity.publicBaseURL') }}</label>
-            <input id="identity-base-url" v-model="publicBaseURL" type="url" required maxlength="2048" class="input mt-1 min-h-11 w-full" placeholder="https://your-site.example.com" :disabled="settingsLoading || settingsSaving" :aria-invalid="Boolean(settingsError)" aria-describedby="identity-base-url-help identity-base-url-feedback" @input="settingsSaved = false; settingsOpen = true; settingsError = ''" />
+      <p v-if="!settingsLoading && (!savedSettings || !savedSettings.public_base_url || settingsError)" role="status" class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">{{ settingsError || t('admin.modelIdentity.publicBaseURLRequired') }} <button class="underline underline-offset-2" type="button" @click="openSettings">{{ t('admin.modelIdentity.settingsTitle') }}</button></p>
+      <BaseDialog :show="settingsOpen" :title="t('admin.modelIdentity.settingsTitle')" width="normal" :close-on-escape="!settingsSaving" :show-close-button="!settingsSaving" @close="closeSettings">
+        <form id="identity-settings-form" class="space-y-5" :aria-busy="settingsLoading || settingsSaving" @submit.prevent="saveConnectionSettings" @input="settingsSaved = false; settingsError = ''">
+          <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('admin.modelIdentity.settingsHint') }}</p>
+          <p v-if="settingsLoading" role="status" class="text-sm text-gray-500">{{ t('common.loading') }}</p>
+          <div>
+            <label for="identity-base-url" class="input-label">{{ t('admin.modelIdentity.publicBaseURL') }}</label>
+            <input id="identity-base-url" v-model="settingsDraft.public_base_url" type="url" required maxlength="2048" class="input min-h-11 w-full" placeholder="https://your-site.example.com" :disabled="settingsLoading || settingsSaving || !savedSettings" aria-describedby="identity-base-url-help" />
             <p id="identity-base-url-help" class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.modelIdentity.publicBaseURLHint') }}</p>
           </div>
-          <button type="submit" class="btn btn-primary min-h-11 shrink-0" :disabled="settingsLoading || settingsSaving || !publicBaseURL.trim()">{{ settingsSaving ? t('common.saving') : t('common.save') }}</button>
+          <div class="grid gap-5 sm:grid-cols-2">
+            <div>
+              <label for="identity-concurrent-accounts" class="input-label">{{ t('admin.modelIdentity.concurrentAccounts') }}</label>
+              <input id="identity-concurrent-accounts" v-model.number="settingsDraft.concurrent_accounts" type="number" min="1" max="2" step="1" required class="input min-h-11 w-full" :disabled="settingsLoading || settingsSaving || !savedSettings" aria-describedby="identity-concurrent-accounts-help" />
+              <p id="identity-concurrent-accounts-help" class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.modelIdentity.concurrentAccountsHint') }}</p>
+            </div>
+            <div>
+              <label for="identity-probe-concurrency" class="input-label">{{ t('admin.modelIdentity.probeConcurrency') }}</label>
+              <input id="identity-probe-concurrency" v-model.number="settingsDraft.probe_concurrency" type="number" min="1" max="10" step="1" required class="input min-h-11 w-full" :disabled="settingsLoading || settingsSaving || !savedSettings" aria-describedby="identity-probe-concurrency-help" />
+              <p id="identity-probe-concurrency-help" class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.modelIdentity.probeConcurrencyHint') }}</p>
+            </div>
+          </div>
+          <p class="rounded-lg bg-gray-50 p-3 text-sm text-gray-600 dark:bg-dark-900 dark:text-gray-300">{{ t('admin.modelIdentity.concurrencyHint') }}</p>
+          <p id="identity-base-url-feedback" :role="settingsError ? 'alert' : 'status'" class="text-sm" :class="settingsError ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'">{{ settingsError || (settingsSaved ? t('admin.modelIdentity.settingsSaved') : settingsDirty ? t('admin.modelIdentity.settingsUnsaved') : savedSettings?.public_base_url ? t('admin.modelIdentity.settingsConfigured') : '') }}</p>
+          <div class="flex flex-wrap justify-end gap-2">
+            <button v-if="!savedSettings && !settingsLoading" class="btn btn-secondary min-h-11" type="button" @click="loadConnectionSettings">{{ t('common.tryAgain') }}</button>
+            <button class="btn btn-secondary min-h-11" type="button" :disabled="settingsSaving" @click="closeSettings">{{ t('common.cancel') }}</button>
+            <button class="btn btn-primary min-h-11" type="submit" :disabled="settingsLoading || settingsSaving || !savedSettings || !settingsValid || !settingsDirty">{{ settingsSaving ? t('common.saving') : t('common.save') }}</button>
+          </div>
         </form>
-        <p id="identity-base-url-feedback" :role="settingsError ? 'alert' : 'status'" class="mt-2 text-sm" :class="settingsError ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'">{{ settingsError || (settingsSaved ? t('admin.modelIdentity.settingsSaved') : (!settingsLoading && !savedPublicBaseURL ? t('admin.modelIdentity.publicBaseURLRequired') : '')) }}</p>
-        </div>
-      </details>
+      </BaseDialog>
       <p v-if="loadError" role="alert" class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">{{ loadError }}</p>
       <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div v-for="stat in stats" :key="stat.label" class="card p-4">
@@ -64,9 +81,9 @@
                   <td class="px-3 py-2.5"><code class="block break-all text-xs">{{ row.plan.expected_model }}</code><span class="mt-1 block text-xs text-gray-500">{{ row.plan.request_model }}</span></td>
                   <td class="px-3 py-2.5"><span class="inline-flex rounded-full px-2 py-1 text-xs font-medium" :class="identityStatusClass(row.status)">{{ statusLabel(row.status) }}</span><span class="mt-2 block break-all text-xs">{{ identityDetectedModel(row.latest) }}</span><time class="mt-1 block whitespace-nowrap text-xs text-gray-500">{{ formatTime(row.latest?.created_at) }}</time></td>
                   <td class="px-3 py-2.5"><IdentityRecentRuns :runs="row.history.slice(0, 5)" compact @report="openReport" /></td>
-                  <td class="px-3 py-2.5 text-xs"><time>{{ formatTime(nextRun(row)) }}</time><span class="mt-1 block text-gray-500">{{ row.plan.enabled ? t('admin.modelIdentity.scheduled') : t('admin.modelIdentity.paused') }}</span></td>
+                  <td class="px-3 py-2.5 text-xs"><time>{{ formatTime(nextRun(row)) }}</time><IdentityScheduleToggle :plan-id="row.plan.id" :enabled="row.plan.enabled" :busy="scheduleBusy === row.plan.id" :disabled="loading || Boolean(scheduleBusy)" @change="toggleSchedule(row.plan)" /></td>
                   <td class="max-w-48 px-3 py-2.5 text-xs"><span :class="row.config?.configuration_error ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'">{{ row.config ? (row.config.configuration_error ? t('admin.modelIdentity.keyError') : t('admin.modelIdentity.keyReady')) : t('admin.modelIdentity.notConfigured') }}</span><span v-if="row.config" class="mt-1 block break-words" :title="row.config.key_name">#{{ row.config.api_key_id }}</span></td>
-                  <td class="px-3 py-2.5"><div class="flex flex-col gap-1"><IdentityOfficialLink :run="row.latest" /><button class="btn btn-primary min-h-11 text-xs" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" :aria-busy="actionBusy === row.plan.id" type="button" @click="runPlan(row.plan)"><Icon name="play" size="sm" />{{ actionBusy === row.plan.id ? t('common.loading') : t('admin.modelIdentity.manualTrigger') }}</button><button class="btn btn-secondary min-h-11 text-xs" type="button" @click="editPlan(row)">{{ t('common.edit') }}</button><button class="btn btn-ghost min-h-11 text-xs" type="button" :aria-expanded="expandedRows.has(row.plan.id)" :aria-controls="`identity-history-${row.plan.id}`" @click="toggleHistory(row.plan.id)">{{ expandedRows.has(row.plan.id) ? t('common.collapse') : t('admin.modelIdentity.history') }}</button></div></td>
+                  <td class="px-3 py-2.5"><div class="flex flex-col gap-1"><IdentityOfficialLink :run="row.latest" /><button class="btn btn-primary min-h-11 text-xs" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" :aria-busy="actionBusy === row.plan.id" type="button" @click="runPlan(row.plan)"><Icon name="play" size="sm" />{{ actionBusy === row.plan.id ? t('common.loading') : t('admin.modelIdentity.manualTrigger') }}</button><button class="btn btn-secondary min-h-11 text-xs" :disabled="scheduleBusy === row.plan.id" type="button" @click="editPlan(row)">{{ t('common.edit') }}</button><button class="btn btn-ghost min-h-11 text-xs" type="button" :aria-expanded="expandedRows.has(row.plan.id)" :aria-controls="`identity-history-${row.plan.id}`" @click="toggleHistory(row.plan.id)">{{ expandedRows.has(row.plan.id) ? t('common.collapse') : t('admin.modelIdentity.history') }}</button></div></td>
                 </tr>
                 <tr v-if="expandedRows.has(row.plan.id)" :id="`identity-history-${row.plan.id}`"><td colspan="7" class="bg-gray-50/70 px-3 py-2.5 dark:bg-dark-900/30"><div class="space-y-3">
                   <IdentityHistoryTable :runs="row.history" :busy="Boolean(actionBusy)" @report="openReport" @cancel="cancelRun" />
@@ -79,9 +96,9 @@
           <article v-for="row in filteredRows" :key="row.plan.id" class="space-y-4 p-4" :data-plan-id="row.plan.id">
             <div class="flex items-start justify-between gap-3"><div><h3 class="font-semibold text-gray-900 dark:text-white">{{ row.account.name }}</h3><p class="mt-1 text-xs text-gray-500">#{{ row.account.id }} · {{ groupName(row) }} · {{ t('admin.modelIdentity.planNumber', { id: row.plan.id }) }}</p></div><span class="shrink-0 rounded-full px-2 py-1 text-xs" :class="identityStatusClass(row.status)">{{ statusLabel(row.status) }}</span></div>
             <p v-if="row.error" role="alert" class="text-sm text-red-600">{{ row.error }}</p>
-            <dl class="grid grid-cols-2 gap-3 text-xs"><div><dt class="text-gray-500">{{ t('admin.modelIdentity.expectedModel') }}</dt><dd class="mt-1 break-all">{{ row.plan.expected_model }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.detectedModel') }}</dt><dd class="mt-1 break-all">{{ identityDetectedModel(row.latest) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.nextRun') }}</dt><dd class="mt-1">{{ formatTime(nextRun(row)) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.keyStatus') }}</dt><dd class="mt-1">{{ row.config ? (row.config.configuration_error ? t('admin.modelIdentity.keyError') : `#${row.config.api_key_id}`) : t('admin.modelIdentity.notConfigured') }}</dd></div></dl>
+            <dl class="grid grid-cols-2 gap-3 text-xs"><div><dt class="text-gray-500">{{ t('admin.modelIdentity.expectedModel') }}</dt><dd class="mt-1 break-all">{{ row.plan.expected_model }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.detectedModel') }}</dt><dd class="mt-1 break-all">{{ identityDetectedModel(row.latest) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.nextRun') }}</dt><dd class="mt-1">{{ formatTime(nextRun(row)) }}<IdentityScheduleToggle :plan-id="row.plan.id" :enabled="row.plan.enabled" :busy="scheduleBusy === row.plan.id" :disabled="loading || Boolean(scheduleBusy)" @change="toggleSchedule(row.plan)" /></dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.keyStatus') }}</dt><dd class="mt-1">{{ row.config ? (row.config.configuration_error ? t('admin.modelIdentity.keyError') : `#${row.config.api_key_id}`) : t('admin.modelIdentity.notConfigured') }}</dd></div></dl>
             <div><h4 class="mb-2 text-xs text-gray-500">{{ t('admin.modelIdentity.recentRuns') }}</h4><IdentityRecentRuns :runs="row.history.slice(0, 5)" @report="openReport" /></div>
-            <div class="flex flex-wrap gap-2"><IdentityOfficialLink :run="row.latest" /><button class="btn btn-secondary min-h-11" type="button" @click="editPlan(row)">{{ t('common.edit') }}</button><button class="btn btn-primary min-h-11 text-xs" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" :aria-busy="actionBusy === row.plan.id" type="button" @click="runPlan(row.plan)"><Icon name="play" size="sm" />{{ actionBusy === row.plan.id ? t('common.loading') : t('admin.modelIdentity.manualTrigger') }}</button><button v-if="isActive(row.latest)" class="btn btn-secondary min-h-11" :disabled="Boolean(actionBusy)" type="button" @click="cancelRun(row.latest!)">{{ t('common.cancel') }}</button></div>
+            <div class="flex flex-wrap gap-2"><IdentityOfficialLink :run="row.latest" /><button class="btn btn-secondary min-h-11" :disabled="scheduleBusy === row.plan.id" type="button" @click="editPlan(row)">{{ t('common.edit') }}</button><button class="btn btn-primary min-h-11 text-xs" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" :aria-busy="actionBusy === row.plan.id" type="button" @click="runPlan(row.plan)"><Icon name="play" size="sm" />{{ actionBusy === row.plan.id ? t('common.loading') : t('admin.modelIdentity.manualTrigger') }}</button><button v-if="isActive(row.latest)" class="btn btn-secondary min-h-11" :disabled="Boolean(actionBusy)" type="button" @click="cancelRun(row.latest!)">{{ t('common.cancel') }}</button></div>
           </article>
         </div>
         <Pagination v-if="total > pageSize" :page="page" :page-size="pageSize" :total="total" :show-page-size-selector="false" @update:page="changePage" />
@@ -135,6 +152,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import IdentityScheduleToggle from '@/components/admin/account/IdentityScheduleToggle.vue'
 import IdentityOfficialLink from '@/components/admin/account/IdentityOfficialLink.vue'
 import { Icon } from '@/components/icons'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -160,10 +178,17 @@ const addAccount = ref<Account | null>(null), addConfig = ref<identityAPI.Identi
 const addUserID = ref(0), addGroupID = ref(0), addDraft = ref({ request_model: '', expected_model: '', interval_minutes: 120, enabled: false })
 let accountSearchVersion = 0, addFormVersion = 0, userSearchVersion = 0
 const loading = ref(false), loadError = ref(''), query = ref(''), statusFilter = ref('all')
-const publicBaseURL = ref(''), settingsLoading = ref(true), settingsSaving = ref(false), settingsError = ref(''), settingsSaved = ref(false)
-const savedPublicBaseURL = ref(''), settingsOpen = ref(true)
+const settingsLoading = ref(true), settingsSaving = ref(false), settingsError = ref(''), settingsSaved = ref(false), settingsOpen = ref(false)
+const defaultSettings: identityAPI.IdentitySettings = { public_base_url: '', concurrent_accounts: 1, probe_concurrency: 4 }
+const settingsDraft = ref<identityAPI.IdentitySettings>({ ...defaultSettings })
+const savedSettings = ref<identityAPI.IdentitySettings | null>(null)
+const settingsDirty = computed(() => Boolean(savedSettings.value) && JSON.stringify(settingsDraft.value) !== JSON.stringify(savedSettings.value))
+const settingsValid = computed(() => {
+  const value = settingsDraft.value
+  return Boolean(value.public_base_url.trim()) && Number.isInteger(value.concurrent_accounts) && value.concurrent_accounts >= 1 && value.concurrent_accounts <= 2 && Number.isInteger(value.probe_concurrency) && value.probe_concurrency >= 1 && value.probe_concurrency <= 10
+})
 const page = ref(1), total = ref(0), pageSize = 20
-const expandedRows = ref(new Set<number>()), actionBusy = ref(0)
+const expandedRows = ref(new Set<number>()), actionBusy = ref(0), scheduleBusy = ref(0)
 const reportOpen = ref(false), reportLoading = ref(false), reportError = ref(''), selectedReport = ref<identityAPI.IdentityRun | null>(null)
 let loadVersion = 0, reportVersion = 0, queryTimer: ReturnType<typeof setTimeout> | undefined, poll: ReturnType<typeof setInterval> | undefined
 const filterStatuses: IdentityStatus[] = ['matched', 'mismatched', 'flagshipClass', 'inconclusive', 'running', 'queued', 'configuration_error', 'request_error', 'service_error', 'notConfigured', 'untested']
@@ -190,17 +215,37 @@ const reportReason = computed(() => {
 })
 function statusLabel(status: IdentityStatus) { return t(`admin.modelIdentity.${status}`) }
 function message(error: unknown) { return error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error) }
+function openSettings() {
+  if (savedSettings.value) settingsDraft.value = { ...savedSettings.value }
+  settingsSaved.value = false
+  settingsOpen.value = true
+}
+function closeSettings() {
+  if (settingsSaving.value) return
+  settingsOpen.value = false
+  if (savedSettings.value) settingsDraft.value = { ...savedSettings.value }
+  settingsSaved.value = false
+}
 async function loadConnectionSettings() {
   settingsLoading.value = true; settingsError.value = ''
-  try { publicBaseURL.value = savedPublicBaseURL.value = (await identityAPI.settings()).public_base_url; settingsOpen.value = !savedPublicBaseURL.value }
-  catch (error) { settingsError.value = message(error); settingsOpen.value = true }
+  try {
+    const settings = { ...defaultSettings, ...await identityAPI.settings() }
+    savedSettings.value = { ...settings }
+    settingsDraft.value = { ...settings }
+  }
+  catch (error) { settingsError.value = message(error) }
   finally { settingsLoading.value = false }
 }
 async function saveConnectionSettings() {
-  if (settingsLoading.value || settingsSaving.value || !publicBaseURL.value.trim()) return
+  if (settingsLoading.value || settingsSaving.value || !savedSettings.value || !settingsValid.value || !settingsDirty.value) return
   settingsSaving.value = true; settingsError.value = ''; settingsSaved.value = false
-  try { publicBaseURL.value = savedPublicBaseURL.value = (await identityAPI.saveSettings({ public_base_url: publicBaseURL.value.trim() })).public_base_url; settingsSaved.value = true }
-  catch (error) { settingsError.value = message(error); settingsOpen.value = true }
+  try {
+    const settings = await identityAPI.saveSettings({ ...settingsDraft.value, public_base_url: settingsDraft.value.public_base_url.trim() })
+    savedSettings.value = { ...settings }
+    settingsDraft.value = { ...settings }
+    settingsSaved.value = true
+  }
+  catch (error) { settingsError.value = message(error) }
   finally { settingsSaving.value = false }
 }
 function formatTime(value?: string) { return value ? new Date(value).toLocaleString(locale.value === 'zh' ? 'zh-CN' : 'en-US', { hour12: false }) : '—' }
@@ -310,6 +355,16 @@ async function deleteCurrentPlan() {
   finally { addSaving.value = false; addBusy.value = false }
 }
 function accountHasActiveRun(accountID: number) { return rows.value.some(row => row.account.id === accountID && row.history.some(isActive)) }
+async function toggleSchedule(plan: identityAPI.IdentityPlan) {
+  if (loading.value || scheduleBusy.value) return
+  scheduleBusy.value = plan.id
+  loadError.value = ''
+  try {
+    await identityAPI.updatePlan(plan.id, { account_id: plan.account_id, request_model: plan.request_model, expected_model: plan.expected_model, interval_minutes: plan.interval_minutes, enabled: !plan.enabled })
+    await loadRows()
+  } catch (error) { loadError.value = message(error) }
+  finally { scheduleBusy.value = 0 }
+}
 async function runPlan(plan: identityAPI.IdentityPlan) {
   if (actionBusy.value || accountHasActiveRun(plan.account_id)) return
   loadError.value = ''
@@ -341,7 +396,7 @@ function closeReport() { reportVersion++; reportOpen.value = false; selectedRepo
 watch(query, () => { clearTimeout(queryTimer); queryTimer = setTimeout(() => { page.value = 1; void loadRows() }, 300) })
 onMounted(async () => {
   await Promise.allSettled([loadConnectionSettings(), loadRows(), adminAPI.groups.getAll().then(result => { groups.value = result }).catch(error => { loadError.value = message(error) })])
-  poll = setInterval(() => { if (!document.hidden) void refreshActiveReport(); if (!document.hidden && !loading.value && !addPlanOpen.value && planRows.value.some(row => isActive(row.latest))) void loadRows() }, 5000)
+  poll = setInterval(() => { if (!document.hidden) void refreshActiveReport(); if (!document.hidden && !loading.value && !scheduleBusy.value && !addPlanOpen.value && planRows.value.some(row => isActive(row.latest))) void loadRows() }, 5000)
 })
 onUnmounted(() => { accountSearchVersion++; addFormVersion++; userSearchVersion++; loadVersion++; reportVersion++; clearInterval(poll); clearTimeout(queryTimer) })
 </script>

@@ -17,7 +17,7 @@ MODEL_IDENTITY_REMOTE_API_URL=https://bazaarlink.ai/api/probe/run
 ```
 
 The remote API default is injected by the single-image supervisor. Set the public
-Base URL in **Model identity → Detection connection settings**. It is stored in the
+Base URL in **Model identity → Settings**. It is stored in the
 database, not read from an environment variable, and must be your public HTTPS site origin. A path prefix
 is supported when the reverse proxy preserves it. Do not include credentials,
 query parameters, or a fragment. BazaarLink rejects private destinations.
@@ -73,9 +73,14 @@ from the hosted `/api/probe/baselines` catalog merged with fingerprint-supported
 entries in `/api/probe/suggested-models` (V3/V3H), including GPT-6-sol,
 GPT-6.1-sol and GPT-6-luna when supported by that current catalog. Schedules start disabled with a default of
 120 minutes; 15–10080 minutes is supported. Manual runs do not shift cadence.
-Go scans due plans every minute, with database leases/atomic claims for two
-global concurrent accounts. Each run permits ten concurrent probe requests,
-180 seconds per request and 20 minutes in total. Full probe pools wait up to
+Go scans due plans every minute, with database leases/atomic claims. In
+**Model identity → Settings**, configure **Concurrent accounts** (1–2, default 1)
+and **Probe concurrency per run** (1–10, default 4) alongside the public Base URL.
+Changes require an explicit Save and apply to newly started detections; active
+runs keep their original probe limit. Reducing the account limit waits for
+active runs to free capacity. Both limits are enforced in the database across
+application replicas. Each request has a 180-second limit and each run has a
+20-minute total limit. Full probe pools wait up to
 30 seconds. Target accounts use the ordinary gateway wait queue without
 account failover; user and account concurrency limits still apply. Detection
 may use a target whose manual scheduling switch is off, without changing that
@@ -169,3 +174,5 @@ Mock gateway tests verify target-account billing, no failover, callback
 credential/expiry checks, concurrent probe limits, exact-model verdict mapping
 and redaction without real paid probes. Verify one real paid detection after
 separately deploying/configuring the public callback.
+
+计划列表的“下次运行”旁可直接开关该计划的定时检测（桌面和手机均支持）。关闭只停止后续定时触发，不会取消当前检测；重新开启后按该计划的间隔安排下一次运行。
