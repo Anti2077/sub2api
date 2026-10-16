@@ -54,12 +54,16 @@ func (r *ModelIdentityRunner) tick() {
 	r.dispatch()
 }
 func (r *ModelIdentityRunner) dispatch() {
-	for i := 0; i < 2; i++ {
+	settings, err := r.svc.Settings(r.ctx)
+	if err != nil {
+		return
+	}
+	for i := 0; i < settings.ConcurrentAccounts; i++ {
 		token, e := newIdentityToken()
 		if e != nil {
 			return
 		}
-		run, e := r.svc.repo.Claim(r.ctx, HashIdentityToken(token), time.Now())
+		run, e := r.svc.repo.Claim(r.ctx, HashIdentityToken(token), time.Now(), settings.ConcurrentAccounts, settings.ProbeConcurrency)
 		if e != nil {
 			return
 		}

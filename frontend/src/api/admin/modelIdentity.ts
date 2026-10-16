@@ -1,7 +1,7 @@
 import { apiClient } from '../client'
 
 export interface IdentityModel { id: string; name: string; family: string }
-export interface IdentitySettings { public_base_url: string }
+export interface IdentitySettings { public_base_url: string; concurrent_accounts: number; probe_concurrency: number }
 export interface IdentityAccountPage { account_ids: number[]; total: number }
 export async function settings() { const { data } = await apiClient.get<IdentitySettings>('/admin/model-identity/settings'); return data }
 export async function saveSettings(payload:IdentitySettings) { const { data } = await apiClient.put<IdentitySettings>('/admin/model-identity/settings', payload); return data }
@@ -9,7 +9,7 @@ export async function plannedAccounts(page = 1, pageSize = 20, search = '') { co
 export interface IdentityConfig { account_id: number; user_id: number; group_id: number; api_key_id: number; key_name: string; configuration_error?: string }
 export interface IdentityPlan { id: number; account_id: number; request_model: string; expected_model: string; interval_minutes: number; enabled: boolean; last_run_at?: string; next_run_at?: string }
 export interface IdentityProbe { probe_id?: string; status?: number; target_account_id?: number; request_model?: string; prompt?: string; error?: string; evidence?: {upstream_model?: string; request_id?: string}; response?: {usage?: Record<string,unknown>} }
-export interface IdentityRun { id: number; plan_id: number; status: string; expected_model: string; request_model: string; report?: Record<string, unknown>; probes?: IdentityProbe[]; probe_count?: number; created_at: string }
+export interface IdentityRun { id: number; plan_id: number; status: string; expected_model: string; request_model: string; report?: Record<string, unknown>; probes?: IdentityProbe[]; probe_count?: number; probe_concurrency?: number; created_at: string }
 export async function models() { const { data } = await apiClient.get<{engine_commit:string;models:IdentityModel[]}>('/admin/model-identity/models'); return data }
 export async function config(accountId:number) { const { data } = await apiClient.get<IdentityConfig>(`/admin/model-identity/accounts/${accountId}`); return data }
 export async function saveConfig(accountId:number, payload:{user_id:number;group_id:number}) { const { data } = await apiClient.put<IdentityConfig>(`/admin/model-identity/accounts/${accountId}`,payload); return data }

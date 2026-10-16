@@ -46,20 +46,50 @@ func identityRemoteCatalogClient() *http.Client {
 }
 
 const identityPublicURLSetting = "model_identity_public_base_url"
+const identitySettingsSetting = "model_identity_settings"
 
 type IdentitySettings struct {
-	PublicBaseURL string `json:"public_base_url"`
+	PublicBaseURL      string `json:"public_base_url"`
+	ConcurrentAccounts int    `json:"concurrent_accounts"`
+	ProbeConcurrency   int    `json:"probe_concurrency"`
+}
+
+func DefaultIdentitySettings() IdentitySettings {
+	return IdentitySettings{ConcurrentAccounts: DefaultIdentityConcurrentAccounts, ProbeConcurrency: DefaultIdentityProbeConcurrency}
+}
+
+func (settings IdentitySettings) ValidateConcurrency() error {
+	if settings.ConcurrentAccounts < 1 || settings.ConcurrentAccounts > MaxIdentityConcurrentAccounts {
+		return fmt.Errorf("concurrent accounts must be between 1 and %d", MaxIdentityConcurrentAccounts)
+	}
+	if settings.ProbeConcurrency < 1 || settings.ProbeConcurrency > MaxIdentityProbeConcurrency {
+		return fmt.Errorf("probe concurrency must be between 1 and %d", MaxIdentityProbeConcurrency)
+	}
+	return nil
 }
 
 func (s *ModelIdentityService) Settings(ctx context.Context) (*IdentitySettings, error) {
 	if s.settings == nil {
 		return nil, errors.New("identity settings storage unavailable")
 	}
+	settings := DefaultIdentitySettings()
+	encoded, err := s.settings.GetValue(ctx, identitySettingsSetting)
+	if err == nil {
+		if json.Unmarshal([]byte(encoded), &settings) != nil {
+			return nil, errors.New("invalid stored identity settings")
+		}
+		return &settings, settings.ValidateConcurrency()
+	}
+	if !errors.Is(err, ErrSettingNotFound) {
+		return nil, err
+	}
+	// Preserve the Base URL saved before concurrency controls were introduced.
 	value, err := s.settings.GetValue(ctx, identityPublicURLSetting)
 	if errors.Is(err, ErrSettingNotFound) {
 		err = nil
 	}
-	return &IdentitySettings{PublicBaseURL: value}, err
+	settings.PublicBaseURL = value
+	return &settings, err
 }
 
 func normalizeIdentityPublicURL(value string) (string, error) {
@@ -86,18 +116,27 @@ func (s *ModelIdentityService) PlannedAccounts(ctx context.Context, page, size i
 	return s.repo.PlannedAccounts(ctx, page, size, strings.TrimSpace(search))
 }
 
-func (s *ModelIdentityService) SaveSettings(ctx context.Context, value string) (*IdentitySettings, error) {
-	value, err := normalizeIdentityPublicURL(value)
+func (s *ModelIdentityService) SaveSettings(ctx context.Context, settings IdentitySettings) (*IdentitySettings, error) {
+	value, err := normalizeIdentityPublicURL(settings.PublicBaseURL)
 	if err != nil {
+		return nil, err
+	}
+	if err := settings.ValidateConcurrency(); err != nil {
 		return nil, err
 	}
 	if s.settings == nil {
 		return nil, errors.New("identity settings storage unavailable")
 	}
-	if err := s.settings.Set(ctx, identityPublicURLSetting, value); err != nil {
+	settings.PublicBaseURL = value
+	encoded, err := json.Marshal(settings)
+	if err != nil {
 		return nil, err
 	}
-	return &IdentitySettings{PublicBaseURL: value}, nil
+	// A single settings row prevents partial saves of the URL and limits.
+	if err := s.settings.Set(ctx, identitySettingsSetting, string(encoded)); err != nil {
+		return nil, err
+	}
+	return &settings, nil
 }
 
 func (s *ModelIdentityService) publicBaseURL(ctx context.Context) (string, error) {

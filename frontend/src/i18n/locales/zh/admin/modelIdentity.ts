@@ -1,5 +1,8 @@
 export default {
   modelIdentity: {
+  scheduleOn: '已开启',
+  scheduleOff: '已关闭',
+  scheduleToggleLabel: '计划 #{id} 的定时检测',
   flagshipClass: '旗舰级待细分',
   flagshipRange: 'GPT-6 旗舰级（Astra / 6.1 Sol 无法区分）',
   flagshipHint: '官网确认到 GPT-6 旗舰模型范围，尚未确认具体型号。此结果不计为身份相符，也不表示模型不符。',
@@ -26,11 +29,18 @@ export default {
   performanceStatus_unknown: '未知状态',
 
   settingsConfigured: '已配置', chooseAccount: '筛选账号（可选）', selectAccount: '选择账号', addPlanHint: '在此页面完成账号、测试用户、计费分组和检测模型的设置。', emptyPlans: '暂无检测计划，点击添加计划选择要测试的账号。',
+  settingsTitle: '设置',
+  settingsHint: '设置公网回调地址和检测并发。修改后点击保存，仅对新启动的检测生效。',
+  concurrentAccounts: '同时检测账号数',
+  concurrentAccountsHint: '范围 1–2，默认 1。其他任务排队等待。',
+  probeConcurrency: '每次检测探针并发',
+  probeConcurrencyHint: '范围 1–10，默认 4。上游不稳定时可降至 1–2。',
+  concurrencyHint: '实际请求仍受测试用户和目标账号的并发限额约束。并发越高，对上游压力越大；降低并发可能延长检测时间。正在运行的任务保留原有并发。',
   connectionSettings: '检测连接设置',
   publicBaseURL: '本站公网 Base URL',
   publicBaseURLHint: '填写 BazaarLink 能访问的本站 HTTPS 地址，不要填写官网 API 地址或 /v1。反向代理有路径前缀时请保留。保存后用于新启动的检测。',
   publicBaseURLRequired: '请先保存本站公网 Base URL，再启动检测。',
-  settingsSaved: '连接设置已保存。',
+  settingsSaved: '检测设置已保存，新启动的检测将使用此配置。',
   settingsUnsaved: '未保存',
   manualTrigger: '手动触发',
   modelVotes: '相似模型票数',

@@ -4,6 +4,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -99,7 +100,7 @@ func TestIdentityRepositoryLifecycleAndAtomicClaims(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r, e := repo.Claim(ctx, service.HashIdentityToken("test-capability"), due)
+			r, e := repo.Claim(ctx, service.HashIdentityToken("test-capability"), due, 2, service.DefaultIdentityProbeConcurrency)
 			if e == nil {
 				mu.Lock()
 				claimed = append(claimed, r)
@@ -111,6 +112,17 @@ func TestIdentityRepositoryLifecycleAndAtomicClaims(t *testing.T) {
 	}
 	wg.Wait()
 	require.Len(t, claimed, 2)
+	// Claim completion order need not match slot allocation order.
+	var firstSlot int
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT worker_slot FROM account_identity_runs WHERE id=$1", claimed[0].ID).Scan(&firstSlot))
+	if firstSlot == 2 {
+		claimed[0], claimed[1] = claimed[1], claimed[0]
+	}
+	for _, activeRun := range claimed {
+		require.Equal(t, 4, activeRun.ProbeConcurrency)
+	}
+	_, err = repo.Claim(ctx, service.HashIdentityToken("lowered-limit"), due, 1, 2)
+	require.ErrorIs(t, err, sql.ErrNoRows)
 	run := claimed[0]
 	_, e = repo.Authorize(ctx, run.ID, service.HashIdentityToken("wrong"), due)
 	require.Error(t, e)
@@ -164,14 +176,45 @@ func TestIdentityRepositoryLifecycleAndAtomicClaims(t *testing.T) {
 	require.Equal(t, map[string]any{"total": float64(2), "errors": float64(1)}, rangeReport["identity_probe_coverage"])
 	require.NotContains(t, string(rangeHistory[0].Report), "must-not-leak")
 	require.NotContains(t, string(rangeHistory[0].Report), "perProbe")
+	// Slot 2 is still occupied: a free slot 1 cannot bypass the new limit.
+	var remainingSlot int
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT worker_slot FROM account_identity_runs WHERE id=$1", claimed[1].ID).Scan(&remainingSlot))
+	require.Equal(t, 2, remainingSlot)
+	_, err = repo.Claim(ctx, service.HashIdentityToken("single-account-limit"), due, 1, 2)
+	require.ErrorIs(t, err, sql.ErrNoRows)
+	stillRunning, err := repo.Run(ctx, claimed[1].ID)
+	require.NoError(t, err)
+	require.Equal(t, 4, stillRunning.ProbeConcurrency, "new settings do not mutate running limits")
 	require.NoError(t, repo.SetRemoteRunID(ctx, claimed[1].ID, "hosted-task-timeout"))
 	require.NoError(t, repo.ScanDue(ctx, due.Add(21*time.Minute)))
 	saved, e = repo.Run(ctx, claimed[1].ID)
 	require.NoError(t, e)
 	require.Equal(t, "timed_out", saved.Status)
 	require.Contains(t, string(saved.Report), "hosted-task-timeout")
-	failedRun, e := repo.Claim(ctx, service.HashIdentityToken("failed-run-capability"), due.Add(22*time.Minute))
+	failedRun, e := repo.Claim(ctx, service.HashIdentityToken("failed-run-capability"), due.Add(22*time.Minute), 1, 2)
 	require.NoError(t, e)
+	require.Equal(t, 2, failedRun.ProbeConcurrency, "new runs snapshot the configured concurrency")
+	var probeWG sync.WaitGroup
+	var acquired int
+	for i := 0; i < 12; i++ {
+		probeWG.Add(1)
+		go func() {
+			defer probeWG.Done()
+			err := repo.ProbeSlot(ctx, failedRun.ID, true)
+			if err == nil {
+				mu.Lock()
+				acquired++
+				mu.Unlock()
+			} else {
+				require.ErrorIs(t, err, service.ErrIdentityProbeSlotsFull)
+			}
+		}()
+	}
+	probeWG.Wait()
+	require.Equal(t, 2, acquired, "replicas share the per-run counter")
+	for i := 0; i < acquired; i++ {
+		require.NoError(t, repo.ProbeSlot(ctx, failedRun.ID, false))
+	}
 	require.NoError(t, repo.SetRemoteRunID(ctx, failedRun.ID, "hosted-task-failed"))
 	require.NoError(t, repo.Finish(ctx, failedRun.ID, "request_error", []byte(`{"error":"poll failed"}`)))
 	failed, e := repo.Run(ctx, failedRun.ID)

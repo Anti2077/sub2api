@@ -198,15 +198,26 @@ func (r *identityRepository) ScanDue(ctx context.Context, now time.Time) error {
 	}
 	return tx.Commit()
 }
-func (r *identityRepository) Claim(ctx context.Context, hash string, now time.Time) (*service.IdentityRun, error) {
+func (r *identityRepository) Claim(ctx context.Context, hash string, now time.Time, concurrentAccounts, probeConcurrency int) (*service.IdentityRun, error) {
+	if err := (service.IdentitySettings{ConcurrentAccounts: concurrentAccounts, ProbeConcurrency: probeConcurrency}).ValidateConcurrency(); err != nil {
+		return nil, err
+	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	// A single short DB lock makes the global two-slot claim atomic across instances.
+	// Serialize slot allocation and count active runs across all instances.
+	// Count all slots when reducing the limit: slot 2 may still be occupied.
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(244,0)`); err != nil {
 		return nil, err
+	}
+	var active int
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM account_identity_runs WHERE status IN ('running','cancelling')`).Scan(&active); err != nil {
+		return nil, err
+	}
+	if active >= concurrentAccounts {
+		return nil, sql.ErrNoRows
 	}
 	var slot int
 	err = tx.QueryRowContext(ctx, `SELECT s FROM generate_series(1,2) s WHERE NOT EXISTS(SELECT 1 FROM account_identity_runs WHERE worker_slot=s AND status IN ('running','cancelling')) LIMIT 1`).Scan(&slot)
@@ -214,7 +225,7 @@ func (r *identityRepository) Claim(ctx context.Context, hash string, now time.Ti
 		return nil, err
 	}
 	var id, planID int64
-	err = tx.QueryRowContext(ctx, `UPDATE account_identity_runs SET status='running',started_at=$1::timestamptz,lease_until=$1::timestamptz+INTERVAL '20 minutes',token_hash=$2,worker_slot=$3 WHERE id=(SELECT q.id FROM account_identity_runs q WHERE q.status='queued' AND NOT EXISTS(SELECT 1 FROM account_identity_runs a WHERE a.account_id=q.account_id AND a.status IN ('running','cancelling')) ORDER BY q.id FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING id,plan_id`, now, hash, slot).Scan(&id, &planID)
+	err = tx.QueryRowContext(ctx, `UPDATE account_identity_runs SET status='running',started_at=$1::timestamptz,lease_until=$1::timestamptz+INTERVAL '20 minutes',token_hash=$2,worker_slot=$3,probe_concurrency=$4 WHERE id=(SELECT q.id FROM account_identity_runs q WHERE q.status='queued' AND NOT EXISTS(SELECT 1 FROM account_identity_runs a WHERE a.account_id=q.account_id AND a.status IN ('running','cancelling')) ORDER BY q.id FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING id,plan_id`, now, hash, slot, probeConcurrency).Scan(&id, &planID)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +238,7 @@ func (r *identityRepository) Claim(ctx context.Context, hash string, now time.Ti
 	return r.Run(ctx, id)
 }
 
-const identityRunColumns = `id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,report,probes`
+const identityRunColumns = `id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,report,probes,probe_concurrency`
 
 // Include cancellations and expired leases, which may never reach Finish.
 const pruneIdentityReportsSQL = `DELETE FROM account_identity_runs WHERE id IN (
@@ -237,7 +248,7 @@ const pruneIdentityReportsSQL = `DELETE FROM account_identity_runs WHERE id IN (
 
 func scanIdentityRun(row scannable) (*service.IdentityRun, error) {
 	r := &service.IdentityRun{}
-	err := row.Scan(&r.ID, &r.PlanID, &r.AccountID, &r.UserID, &r.GroupID, &r.APIKeyID, &r.RequestModel, &r.ExpectedModel, &r.Status, &r.StartedAt, &r.FinishedAt, &r.CreatedAt, &r.Report, &r.Probes)
+	err := row.Scan(&r.ID, &r.PlanID, &r.AccountID, &r.UserID, &r.GroupID, &r.APIKeyID, &r.RequestModel, &r.ExpectedModel, &r.Status, &r.StartedAt, &r.FinishedAt, &r.CreatedAt, &r.Report, &r.Probes, &r.ProbeConcurrency)
 	if err == nil {
 		var probes []json.RawMessage
 		if json.Unmarshal(r.Probes, &probes) == nil {
@@ -250,7 +261,7 @@ func (r *identityRepository) Run(ctx context.Context, id int64) (*service.Identi
 	return scanIdentityRun(r.db.QueryRowContext(ctx, `SELECT `+identityRunColumns+` FROM account_identity_runs WHERE id=$1`, id))
 }
 func (r *identityRepository) Authorize(ctx context.Context, id int64, hash string, now time.Time) (*service.IdentityRun, error) {
-	return scanIdentityRun(r.db.QueryRowContext(ctx, `SELECT id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,'{}'::jsonb,'[]'::jsonb FROM account_identity_runs WHERE id=$1 AND token_hash=$2 AND status='running' AND lease_until>$3`, id, hash, now))
+	return scanIdentityRun(r.db.QueryRowContext(ctx, `SELECT id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,'{}'::jsonb,'[]'::jsonb,probe_concurrency FROM account_identity_runs WHERE id=$1 AND token_hash=$2 AND status='running' AND lease_until>$3`, id, hash, now))
 }
 
 // Persist only the hosted task ID before polling. Never store the acknowledgement
@@ -287,7 +298,7 @@ func (r *identityRepository) History(ctx context.Context, id int64) ([]service.I
   'v3',jsonb_build_object('candidates',report#>'{identityAssessment,v3,candidates}')
  ),
  'identity_probe_coverage',(SELECT jsonb_build_object('total',COUNT(*),'errors',COUNT(*) FILTER (WHERE item->>'status'='error')) FROM jsonb_array_elements(CASE WHEN jsonb_typeof(report->'items')='array' THEN report->'items' ELSE '[]'::jsonb END) item WHERE item->>'group' IN ('identity','submodel'))
-),'[]'::jsonb,jsonb_array_length(probes) FROM account_identity_runs WHERE plan_id=$1 ORDER BY id DESC LIMIT 50`, id)
+),'[]'::jsonb,jsonb_array_length(probes),probe_concurrency FROM account_identity_runs WHERE plan_id=$1 ORDER BY id DESC LIMIT 50`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +306,7 @@ func (r *identityRepository) History(ctx context.Context, id int64) ([]service.I
 	out := []service.IdentityRun{}
 	for rows.Next() {
 		run := &service.IdentityRun{}
-		e := rows.Scan(&run.ID, &run.PlanID, &run.AccountID, &run.UserID, &run.GroupID, &run.APIKeyID, &run.RequestModel, &run.ExpectedModel, &run.Status, &run.StartedAt, &run.FinishedAt, &run.CreatedAt, &run.Report, &run.Probes, &run.ProbeCount)
+		e := rows.Scan(&run.ID, &run.PlanID, &run.AccountID, &run.UserID, &run.GroupID, &run.APIKeyID, &run.RequestModel, &run.ExpectedModel, &run.Status, &run.StartedAt, &run.FinishedAt, &run.CreatedAt, &run.Report, &run.Probes, &run.ProbeCount, &run.ProbeConcurrency)
 		if e != nil {
 			return nil, e
 		}
@@ -310,7 +321,7 @@ func (r *identityRepository) AppendProbe(ctx context.Context, id int64, probe js
 func (r *identityRepository) ProbeSlot(ctx context.Context, id int64, acquire bool) error {
 	query := `UPDATE account_identity_runs SET probe_inflight=GREATEST(0,probe_inflight-1) WHERE id=$1`
 	if acquire {
-		query = `UPDATE account_identity_runs SET probe_inflight=probe_inflight+1 WHERE id=$1 AND status='running' AND lease_until>NOW() AND probe_inflight<10 AND jsonb_array_length(probes)+probe_inflight<500`
+		query = `UPDATE account_identity_runs SET probe_inflight=probe_inflight+1 WHERE id=$1 AND status='running' AND lease_until>NOW() AND probe_inflight<probe_concurrency AND jsonb_array_length(probes)+probe_inflight<500`
 	}
 	result, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
