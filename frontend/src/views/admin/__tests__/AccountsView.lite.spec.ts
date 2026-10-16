@@ -4,6 +4,9 @@ import { defineComponent } from 'vue'
 
 import AccountsView from '../AccountsView.vue'
 import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
+import AccountFolderSidebar from '@/components/admin/account/AccountFolderSidebar.vue'
+import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
+import Select from '@/components/common/Select.vue'
 
 const {
   listAccounts,
@@ -93,7 +96,7 @@ const AccountStatsModalStub = defineComponent({
   template: '<div data-test="stats-account">{{ show ? account?.name : "" }}</div>'
 })
 
-function mountView(stubActionMenu = true) {
+function mountView(stubActionMenu = true, stubFilters = true) {
   return mount(AccountsView, {
     attachTo: document.body,
     global: {
@@ -103,7 +106,7 @@ function mountView(stubActionMenu = true) {
         TablePageLayout: { template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>' },
         DataTable: DataTableStub,
         AccountTableActions: { template: '<div><slot name="after" /></div>' },
-        AccountTableFilters: true,
+        AccountTableFilters: stubFilters,
         AccountBulkActionsBar: true,
         Pagination: true,
         ConfirmDialog: true,
@@ -187,6 +190,35 @@ describe('admin AccountsView lite account list', () => {
       expect.objectContaining({ lite: '1' }),
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
+    wrapper.unmount()
+  })
+
+  it('keeps inline filters usable with folder selection above the full-width table', async () => {
+    const wrapper = mountView(true, false)
+    await flushPromises()
+
+    const toolbar = wrapper.get('[data-testid="account-toolbar"]')
+    const filters = toolbar.getComponent(AccountTableFilters)
+    const selects = filters.findAllComponents(Select)
+    expect(selects).toHaveLength(5)
+    expect(selects.every(select => select.isVisible())).toBe(true)
+    expect(filters.classes()).not.toContain('lg:max-w-md')
+    expect(toolbar.element.contains(wrapper.getComponent(DataTableStub).element)).toBe(false)
+
+    toolbar.getComponent(AccountFolderSidebar).vm.$emit('select', '12')
+    await flushPromises()
+    expect(filters.props('filters')).toEqual(expect.objectContaining({ folder: '12' }))
+
+    selects[1]!.vm.$emit('update:modelValue', 'apikey')
+    selects[1]!.vm.$emit('change', 'apikey')
+    await flushPromises()
+    expect(listAccounts).toHaveBeenLastCalledWith(
+      1,
+      20,
+      expect.objectContaining({ folder: '12', type: 'apikey', lite: '1' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+    expect(localStorage.getItem('account-selected-folder')).toBe('12')
     wrapper.unmount()
   })
 

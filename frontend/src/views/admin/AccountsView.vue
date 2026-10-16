@@ -6,7 +6,6 @@
           <AccountFolderSidebar ref="folderSidebar" :model-value="params.folder" @select="selectFolder" @moved="handleFolderMoved" @changed="reload" />
           <div class="flex min-w-0 flex-wrap-reverse items-end justify-between gap-3 lg:min-h-48 lg:flex-col lg:flex-nowrap lg:items-stretch" data-testid="account-toolbar-controls">
           <AccountTableFilters
-            class="self-start lg:max-w-md"
             v-model:searchQuery="params.search"
             :filters="params"
             :groups="groups"
