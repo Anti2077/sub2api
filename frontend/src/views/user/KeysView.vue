@@ -2094,6 +2094,8 @@ const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType, model?: s
 
   const usageScript = CC_SWITCH_USAGE_SCRIPT
   const providerName = (publicSettings.value?.site_name || 'sub2api').trim() || 'sub2api'
+  const siteLogo = publicSettings.value?.site_logo?.trim()
+  const iconUrl = siteLogo ? new URL(siteLogo, window.location.origin).toString() : undefined
   const deeplink = buildCcSwitchImportDeeplink({
     baseUrl,
     platform,
@@ -2101,6 +2103,7 @@ const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType, model?: s
     providerName,
     apiKey: row.key,
     usageScript,
+    iconUrl,
     model
   })
 
