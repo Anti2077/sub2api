@@ -10,7 +10,7 @@ should not appear before a new user can complete a first request.
 | Getting started | 获取 API Key 与接口地址 | Reader knows which values are needed and how to store them safely | P0 |
 | Clients | 使用 CC Switch 接入 Codex | Reader creates a key, imports a Codex provider, and completes one verified request | P0 |
 | Clients | 使用 Open Minis 接入 Sub2API | Reader configures a mobile agent, fetches models, and completes one verified request | P0 |
-| Clients | 修复 Codex 的 gpt-image-2 调用 | Reader asks Codex to install the Skill, bind the current CC Switch provider, and verify one image request | P0 |
+| Clients | 使用 codex-image-gen++ 在 Codex 中生成和编辑图片 | Reader installs the MCP, configures it with init, and lets Codex choose a visible model and save images in the workspace | P0 |
 | Clients | 使用 CC Switch 接入 Claude Code | Reader imports a Claude provider and verifies a real Messages API request | P0 |
 | Clients | 使用 CC Switch 接入 Grok Build | Reader installs the open-source agent, imports a Grok provider, and verifies models and a real request | P0 |
 | Clients | 使用本站服务器配置 RustDesk | Reader downloads an official RustDesk installer via Lanzou, imports the provided ID/relay server config, and shares their local ID with trusted support | P0 |

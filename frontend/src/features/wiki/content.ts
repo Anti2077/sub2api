@@ -1,6 +1,6 @@
 import ccSwitchSource from '@/content/wiki/zh/clients/cc-switch.md?raw'
 import claudeCodeSource from '@/content/wiki/zh/clients/claude-code.md?raw'
-import codexImage2Source from '@/content/wiki/zh/clients/codex-image2.md?raw'
+import codexImageGenSource from '@/content/wiki/zh/clients/codex-image2.md?raw'
 import dailyUseSource from '@/content/wiki/zh/getting-started/daily-use.md?raw'
 import firstRequestSource from '@/content/wiki/zh/getting-started/first-request.md?raw'
 import grokBuildSource from '@/content/wiki/zh/clients/grok-build.md?raw'
@@ -105,14 +105,14 @@ export const wikiArticles: readonly WikiArticle[] = [
   {
     slug: 'codex-image2',
     section: 'clients',
-    title: '修复 Codex 的 gpt-image-2 调用',
-    summary: '把完整提示词交给 Codex，自动安装 Skill 并安全复用 CC Switch 当前 provider。',
+    title: '使用 codex-image-gen++ 在 Codex 中生成和编辑图片',
+    summary: '安装 MCP、用 init 导入 CC Switch 或手动配置，交给 Codex 选择模型并保存图片。',
     order: 30,
-    tags: ['Codex', 'gpt-image-2', 'Skill', 'CC Switch', '生图'],
+    tags: ['Codex', 'codex-image-gen++', 'MCP', 'CC Switch', '生图', '图片编辑'],
     status: 'verified',
-    lastVerified: '2026-09-05',
-    verifiedWith: 'codex-image2 上游仓库、本地 Skill 与 CC Switch 动态 provider 适配提示词',
-    source: codexImage2Source,
+    lastVerified: '2026-10-18',
+    verifiedWith: 'codex-image-gen++ v0.2.0 源码、发布安装包与 Windows/macOS/Linux Node.js 22/24 CI；权限以真实请求为准',
+    source: codexImageGenSource,
   },
   {
     slug: 'claude-code',
