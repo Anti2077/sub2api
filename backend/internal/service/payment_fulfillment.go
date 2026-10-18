@@ -18,6 +18,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/servertiming"
 )
 
 // ErrOrderNotFound is returned by HandlePaymentNotification when the webhook
@@ -54,6 +55,33 @@ func (s *PaymentService) HandlePaymentNotification(ctx context.Context, n *payme
 		return fmt.Errorf("lookup order failed for out_trade_no %s: %w", n.OrderID, err)
 	}
 	return s.confirmPayment(ctx, order.ID, n.TradeNo, n.Amount, pk, n.Metadata)
+}
+
+// ConfirmNotificationUpstream asks providers that implement
+// payment.NotificationConfirmer to confirm a verified success notification
+// against the upstream order, using the same instance that verified it.
+// Failures are recorded on the order's audit trail and returned so the webhook
+// answers non-success and the gateway retries.
+func (s *PaymentService) ConfirmNotificationUpstream(ctx context.Context, prov payment.Provider, n *payment.PaymentNotification) error {
+	confirmer, ok := prov.(payment.NotificationConfirmer)
+	if !ok || n == nil || n.Status != payment.NotificationStatusSuccess {
+		return nil
+	}
+	notifiedTradeNo := n.TradeNo
+	finishProviderCall := servertiming.ObserveDependency(ctx, "payment")
+	err := confirmer.ConfirmNotification(ctx, n)
+	finishProviderCall()
+	if err == nil {
+		return nil
+	}
+	if order, lookupErr := s.entClient.PaymentOrder.Query().Where(paymentorder.OutTradeNo(n.OrderID)).Only(ctx); lookupErr == nil {
+		s.writeAuditLog(ctx, order.ID, "PAYMENT_UPSTREAM_UNCONFIRMED", prov.ProviderKey(), map[string]any{
+			"detail":  err.Error(),
+			"tradeNo": notifiedTradeNo,
+			"amount":  n.Amount,
+		})
+	}
+	return err
 }
 
 func parseLegacyPaymentOrderID(orderID string, lookupErr error) (int64, bool) {
