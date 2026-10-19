@@ -1,44 +1,33 @@
 'use strict';
 const http = require('node:http');
-const { COMMIT, models, runIdentity } = require('./identity.cjs');
-const callbackOrigin = process.env.MODEL_IDENTITY_CALLBACK_ORIGIN;
-if (!callbackOrigin) throw new Error('MODEL_IDENTITY_CALLBACK_ORIGIN is required');
+const { COMMIT, SOURCE, models, runFingerprint } = require('./engine.cjs');
 let active = 0;
+const send = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
+const callbackOrigin = process.env.MODEL_IDENTITY_CALLBACK_ORIGIN || 'http://127.0.0.1:8080';
 const server = http.createServer(async (req, res) => {
-  const send = (status, body) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
-  if (req.method === 'GET' && req.url === '/models') return send(200, { engine_commit: COMMIT, models });
-  if (req.method !== 'POST' || req.url !== '/run') return send(404, { error: 'not found' });
-  if (active >= 2) return send(503, { error: 'worker capacity reached' });
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20 * 60 * 1000);
-  res.on('close', () => { if (!res.writableEnded) controller.abort(); });
+  if (req.method === 'GET' && req.url === '/models') return send(res, 200, { engine: 'lm-fingerpoint-detector', engine_commit: COMMIT, source: SOURCE, models });
+  if (req.method !== 'POST' || req.url !== '/run') return send(res, 404, { error: 'not found' });
+  if (active >= 2) return send(res, 503, { error: 'worker capacity reached' });
+  let body = '';
   try {
-    let body = '';
     for await (const chunk of req) { body += chunk; if (body.length > 16384) throw new Error('request too large'); }
-    const options = JSON.parse(body);
-    const url = new URL(options.probe_url);
-    if (url.origin !== new URL(callbackOrigin).origin || url.pathname !== `/internal/model-identity/${options.run_id}/probe` || url.search || url.username || url.password ||
-        !/^[a-f0-9]{64}$/.test(options.token)) return send(400, { error: 'invalid capability or callback' });
-    const capabilityURL = new URL(url);capabilityURL.pathname = `/internal/model-identity/${options.run_id}/capability`;
+    const options = JSON.parse(body), url = new URL(options.probe_url);
+    const origin = new URL(callbackOrigin);
+    if (!['127.0.0.1', '[::1]'].includes(origin.hostname) || origin.protocol !== 'http:' || url.origin !== origin.origin || url.pathname !== `/internal/model-identity/${options.run_id}/v1` || url.search || url.hash || url.username || url.password || !/^[a-f0-9]{64}$/.test(options.token) || !/^\d+$/.test(String(options.run_id))) return send(res, 400, { error: 'invalid capability or callback' });
+    const capabilityURL = new URL(url); capabilityURL.pathname = `/internal/model-identity/${options.run_id}/capability`;
     const capability = await fetch(capabilityURL, { headers: { Authorization: `Bearer ${options.token}` }, signal: AbortSignal.timeout(10000), redirect: 'error' });
-    if (!capability.ok) return send(401, { error: 'invalid or expired capability' });
+    if (!capability.ok) return send(res, 401, { error: 'invalid or expired capability' });
     const binding = await capability.json();
-    options.expected_model = binding.expected_model;options.model = binding.request_model;
-    if (active >= 2) return send(503, { error: 'worker capacity reached' });
+    const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 20 * 60 * 1000);
+    res.on('close', () => { if (!res.writableEnded) controller.abort(); });
+    if (active >= 2) { clearTimeout(timeout); return send(res, 503, { error: 'worker capacity reached' }); }
     active++;
-    try {
-      const report = await runIdentity({ expected_model: binding.expected_model, signal: controller.signal }, async probe => {
-        const response = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${options.token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(probe), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(180000)]), redirect: 'error' });
-        if (!response.ok) throw new Error(`probe request failed (${response.status})`);
-        const text = await response.text();
-        if (text.length > 2 * 1024 * 1024) throw new Error('probe response too large');
-        return JSON.parse(text);
-      });
-      send(200, report);
-    } finally { active--; }
-  } catch { if (!res.writableEnded) send(500, { error: 'identity execution interrupted' }); }
-  finally { clearTimeout(timeout); }
+    res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
+    const emit = event => { if (!res.writableEnded) res.write(JSON.stringify(event) + '\n'); };
+    try { emit({ type: 'started', engine_commit: COMMIT }); const report = await runFingerprint({ ...binding,  probeURL: url.href, token: options.token, signal: controller.signal, emit }); emit({ type: 'complete', report }); }
+    catch (error) { emit({ type: 'error', error: error?.message?.replaceAll(options.token, '[REDACTED]') || 'identity execution interrupted', code: error?.code || 'service_error' }); }
+    finally { clearTimeout(timeout); active--; if (!res.writableEnded) res.end(); }
+  } catch { if (!res.writableEnded) send(res, 400, { error: 'invalid request' }); }
 });
 server.requestTimeout = 20 * 60 * 1000;
-server.listen(Number(process.env.PORT || 8081), process.env.MODEL_IDENTITY_HOST || '0.0.0.0');
+server.listen(Number(process.env.PORT || 8081), '127.0.0.1');

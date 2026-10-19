@@ -55,7 +55,7 @@ func (h *ModelIdentityHandler) SaveSettings(c *gin.Context) {
 	}
 	settings, err := h.svc.SaveSettings(c.Request.Context(), req)
 	if err != nil {
-		response.BadRequest(c, "Could not save detection settings; use a public HTTPS URL without credentials, query parameters or fragments, and retry")
+		response.BadRequest(c, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, settings)
@@ -67,6 +67,16 @@ func (h *ModelIdentityHandler) PlannedAccounts(c *gin.Context) {
 	result, err := h.svc.PlannedAccounts(c.Request.Context(), page, size, c.Query("search"))
 	if err != nil {
 		response.InternalError(c, "could not read detection accounts")
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+func (h *ModelIdentityHandler) Overview(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	result, err := h.svc.Overview(c.Request.Context(), page, size, c.Query("search"))
+	if err != nil {
+		response.InternalError(c, "could not read model identity plans")
 		return
 	}
 	c.JSON(http.StatusOK, result)
@@ -89,7 +99,7 @@ func (h *ModelIdentityHandler) Config(c *gin.Context) {
 }
 
 type identityConfigReq struct {
-	UserID  int64 `json:"user_id" binding:"required"`
+	UserID  int64 `json:"user_id"`
 	GroupID int64 `json:"group_id" binding:"required"`
 }
 
@@ -124,11 +134,12 @@ func (h *ModelIdentityHandler) Plans(c *gin.Context) {
 }
 
 type identityPlanReq struct {
-	AccountID       int64  `json:"account_id"`
-	RequestModel    string `json:"request_model"`
-	ExpectedModel   string `json:"expected_model"`
-	IntervalMinutes int    `json:"interval_minutes"`
-	Enabled         bool   `json:"enabled"`
+	AccountID       int64                        `json:"account_id"`
+	RequestModel    string                       `json:"request_model"`
+	ExpectedModel   string                       `json:"expected_model"`
+	IntervalMinutes int                          `json:"interval_minutes"`
+	Enabled         bool                         `json:"enabled"`
+	Options         *service.IdentityPlanOptions `json:"options"`
 }
 
 func (h *ModelIdentityHandler) SavePlan(c *gin.Context) {
@@ -137,7 +148,7 @@ func (h *ModelIdentityHandler) SavePlan(c *gin.Context) {
 		response.BadRequest(c, e.Error())
 		return
 	}
-	p := &service.IdentityPlan{ID: 0, AccountID: req.AccountID, RequestModel: req.RequestModel, ExpectedModel: req.ExpectedModel, IntervalMinutes: req.IntervalMinutes, Enabled: req.Enabled}
+	p := &service.IdentityPlan{ID: 0, AccountID: req.AccountID, RequestModel: req.RequestModel, ExpectedModel: req.ExpectedModel, IntervalMinutes: req.IntervalMinutes, Enabled: req.Enabled, Options: req.Options}
 	if e := h.svc.SavePlan(c, p); e != nil {
 		response.BadRequest(c, e.Error())
 		return
@@ -154,7 +165,7 @@ func (h *ModelIdentityHandler) UpdatePlan(c *gin.Context) {
 		response.BadRequest(c, e.Error())
 		return
 	}
-	p := &service.IdentityPlan{ID: v, AccountID: req.AccountID, RequestModel: req.RequestModel, ExpectedModel: req.ExpectedModel, IntervalMinutes: req.IntervalMinutes, Enabled: req.Enabled}
+	p := &service.IdentityPlan{ID: v, AccountID: req.AccountID, RequestModel: req.RequestModel, ExpectedModel: req.ExpectedModel, IntervalMinutes: req.IntervalMinutes, Enabled: req.Enabled, Options: req.Options}
 	if e := h.svc.SavePlan(c, p); e != nil {
 		response.BadRequest(c, e.Error())
 		return

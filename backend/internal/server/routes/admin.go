@@ -146,6 +146,7 @@ func RegisterAdminRoutes(
 }
 
 func registerModelIdentityRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	admin.GET("/model-identity/plans", h.Admin.ModelIdentity.Overview)
 	r := admin.Group("/model-identity")
 	r.GET("/models", h.Admin.ModelIdentity.Models)
 	r.GET("/settings", h.Admin.ModelIdentity.Settings)

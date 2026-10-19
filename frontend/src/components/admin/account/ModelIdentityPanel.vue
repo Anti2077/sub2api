@@ -4,10 +4,10 @@
       <p class="rounded-lg bg-blue-50 p-3 text-sm text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">{{ t('admin.modelIdentity.remoteConsent') }}</p>
       <p v-if="error" role="alert" class="break-words text-sm text-red-600">{{ error }}</p>
       <form class="grid grid-cols-1 gap-3 border-b border-gray-200 pb-5 dark:border-dark-600 sm:grid-cols-2" @submit.prevent="saveConfiguration">
-        <label class="text-sm">{{ t('admin.modelIdentity.testUser') }}
-          <input v-model="search" type="search" class="input mt-1 w-full" :placeholder="t('admin.modelIdentity.searchUser')" @input="searchUsers" />
-          <select v-model="userID" required class="input mt-2 w-full"><option :value="0" disabled>{{ t('common.select') }}</option><option v-for="u in users" :key="u.id" :value="u.id">{{ u.username || u.email }} (#{{ u.id }})</option></select>
-        </label>
+        <div class="text-sm sm:col-span-2">
+          <p>{{ t('admin.modelIdentity.fixedTestUser') }} · {{ userLabel }}</p>
+          <a href="/admin/model-identity" class="mt-1 inline-flex min-h-11 items-center text-primary-600 dark:text-primary-400">{{ t('admin.modelIdentity.configureFixedTestUser') }}</a>
+        </div>
         <label class="text-sm">{{ t('admin.modelIdentity.billingGroup') }}
           <select v-model="groupID" required class="input mt-1 w-full"><option :value="0" disabled>{{ t('common.select') }}</option><option v-for="g in compatibleGroups" :key="g.id" :value="g.id">{{ g.name }}</option></select>
         </label>
@@ -19,6 +19,7 @@
         <label class="text-sm">{{ t('admin.modelIdentity.expectedModel') }}<select v-model="draft.expected_model" required class="input mt-1 w-full"><option value="" disabled>{{ t('common.select') }}</option><option v-for="m in catalog" :key="m.id" :value="m.id">{{ m.name }}</option></select></label>
         <label class="text-sm">{{ t('admin.modelIdentity.interval') }}<input v-model.number="draft.interval_minutes" type="number" min="15" max="10080" required class="input mt-1 w-full" /></label>
         <label class="flex items-center gap-2 text-sm"><input v-model="draft.enabled" type="checkbox" />{{ t('admin.modelIdentity.scheduled') }}</label>
+        <IdentityOptionsForm v-model="draft.options" class="sm:col-span-2" />
         <div class="flex flex-wrap gap-2 sm:col-span-2"><button type="submit" class="btn btn-primary" :disabled="busy || !configuration || !catalog.length">{{ editingID ? t('common.save') : t('admin.scheduledTests.addPlan') }}</button><button v-if="editingID" type="button" class="btn btn-secondary" @click="resetDraft">{{ t('common.cancel') }}</button></div>
       </form>
       <div v-for="p in plans" :key="p.id" class="border-b border-gray-200 pb-4 dark:border-dark-600">
@@ -66,6 +67,7 @@
 </template>
 
 <script setup lang="ts">
+import IdentityOptionsForm from '@/components/model-identity/IdentityOptionsForm.vue'
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import IdentityOfficialLink from './IdentityOfficialLink.vue'
@@ -75,32 +77,28 @@ import { identityDetectedModel, identityRunStatus } from '@/utils/modelIdentity'
 import IdentityScopeSummary from './IdentityScopeSummary.vue'
 import IdentityModelVotes from './IdentityModelVotes.vue'
 import { Icon } from '@/components/icons'
-import type { Account, AdminUser, Group } from '@/types'
+import type { Account, Group } from '@/types'
 import * as api from '@/api/admin/modelIdentity'
 import * as usersAPI from '@/api/admin/users'
 
 const props = defineProps<{show:boolean;account:Account|null;groups:Group[]}>()
 const emit = defineEmits<{(e:'close'):void;(e:'changed'):void}>()
 const { t } = useI18n()
-const userID = ref(0), groupID = ref(0), search = ref(''), error = ref(''), busy = ref(false), editingID = ref(0)
-const users = ref<AdminUser[]>([]), catalog = ref<api.IdentityModel[]>([]), plans = ref<api.IdentityPlan[]>([]), runs = ref<api.IdentityRun[]>([])
+const userID = ref(0), userLabel = ref(''), groupID = ref(0), error = ref(''), busy = ref(false), editingID = ref(0)
+const catalog = ref<api.IdentityModel[]>([]), plans = ref<api.IdentityPlan[]>([]), runs = ref<api.IdentityRun[]>([])
 const configuration = ref<api.IdentityConfig|null>(null), selectedReport = ref<api.IdentityRun|null>(null), historyPlanID = ref(0)
-const draft = reactive({request_model:'',expected_model:'',interval_minutes:120,enabled:false})
+const draft = reactive({request_model:'',expected_model:'',interval_minutes:120,enabled:false,options:api.defaultIdentityOptions()})
 const compatibleGroups = computed(() => props.groups.filter(g => props.account?.group_ids?.includes(g.id) && g.platform === props.account?.platform && !g.claude_code_only))
-let searchTimer:ReturnType<typeof setTimeout>|undefined
 let poll:ReturnType<typeof setInterval>|undefined
-let searchVersion = 0
 let viewVersion = 0
 let historyVersion = 0
 function time(value?:string) { return value ? new Date(value).toLocaleString() : '-' }
 function message(e:unknown) { return typeof e === 'object' && e !== null && 'message' in e ? String(e.message) : String(e) }
 async function action(fn:()=>Promise<void>) { busy.value=true;error.value='';try {await fn()} catch(e) {error.value=message(e)} finally {busy.value=false} }
-async function fetchUsers() { const version=++searchVersion; const view=viewVersion;const result=await usersAPI.list(1,20,{search:search.value,status:'active'});if(version===searchVersion&&view===viewVersion)users.value=result.items }
-function searchUsers() { clearTimeout(searchTimer);searchTimer=setTimeout(()=>{void fetchUsers().catch(e=>{error.value=message(e)})},300) }
 async function refreshPlans() { if(props.account)plans.value=await api.plans(props.account.id) }
-async function saveConfiguration() { await action(async()=>{if(!props.account)return;configuration.value=await api.saveConfig(props.account.id,{user_id:userID.value,group_id:groupID.value});await refreshPlans();emit('changed')}) }
-function resetDraft() { editingID.value=0;Object.assign(draft,{request_model:'',expected_model:'',interval_minutes:120,enabled:false}) }
-function editPlan(p:api.IdentityPlan) { editingID.value=p.id;Object.assign(draft,p) }
+async function saveConfiguration() { await action(async()=>{if(!props.account)return;configuration.value=await api.saveConfig(props.account.id,{group_id:groupID.value});await refreshPlans();emit('changed')}) }
+function resetDraft() { editingID.value=0;Object.assign(draft,{request_model:'',expected_model:'',interval_minutes:120,enabled:false,options:api.defaultIdentityOptions()}) }
+function editPlan(p:api.IdentityPlan) { editingID.value=p.id;Object.assign(draft,p,{options:{...api.defaultIdentityOptions(),...p.options}}) }
 async function savePlan() { await action(async()=>{if(!props.account)return;const body={...draft,account_id:props.account.id};if(editingID.value)await api.updatePlan(editingID.value,body);else await api.savePlan(body);resetDraft();await refreshPlans();emit('changed')}) }
 async function pausePlan(p:api.IdentityPlan) { await action(async()=>{await api.updatePlan(p.id,{...p,enabled:false});await refreshPlans();emit('changed')}) }
 async function deletePlan(p:api.IdentityPlan) { await action(async()=>{await api.deletePlan(p.id);await refreshPlans();emit('changed')}) }
@@ -115,18 +113,20 @@ async function refreshActiveReport(version:number) {
   catch(e){if(version===viewVersion)error.value=message(e)}
 }
 watch(()=>[props.show,props.account?.id],async()=>{
-  const version=++viewVersion;historyVersion++;searchVersion++;clearInterval(poll);clearTimeout(searchTimer);selectedReport.value=null;runs.value=[];plans.value=[];configuration.value=null;catalog.value=[];users.value=[];userID.value=0;groupID.value=0;search.value='';historyPlanID.value=0;resetDraft();error.value=''
+  const version=++viewVersion;historyVersion++;clearInterval(poll);selectedReport.value=null;runs.value=[];plans.value=[];configuration.value=null;catalog.value=[];userID.value=0;userLabel.value=t('admin.modelIdentity.fixedTestUserRequired');groupID.value=0;historyPlanID.value=0;resetDraft();error.value=''
   if(!props.show||!props.account)return
   const accountID=props.account.id
   await action(async()=>{
-    await fetchUsers();if(version!==viewVersion)return
+    const settings=await api.settings();if(version!==viewVersion)return
+    userID.value=settings.test_user_id
+    if(userID.value){const user=await usersAPI.getById(userID.value);if(version!==viewVersion)return;userLabel.value=`${user.username || user.email} (#${user.id})`}
     const loadedPlans=await api.plans(accountID);if(version!==viewVersion)return;plans.value=loadedPlans
-    try{const config=await api.config(accountID);if(version!==viewVersion)return;configuration.value=config;userID.value=config.user_id;groupID.value=config.group_id;const u=await usersAPI.getById(config.user_id);if(version!==viewVersion)return;if(!users.value.some(x=>x.id===u.id))users.value.push(u)}catch(e){const failure=e as {status?:number;response?:{status:number}};if((failure.status??failure.response?.status)!==404)throw e}
+    try{const config=await api.config(accountID);if(version!==viewVersion)return;configuration.value=config;groupID.value=config.group_id}catch(e){const failure=e as {status?:number;response?:{status:number}};if((failure.status??failure.response?.status)!==404)throw e}
     const result=await api.models();if(version!==viewVersion)return;catalog.value=result.models
     if(plans.value.length){historyPlanID.value=plans.value[0].id;const history=await api.history(historyPlanID.value);if(version===viewVersion)runs.value=history}
   })
   if(version!==viewVersion)return
   poll=setInterval(()=>{const plan=historyPlanID.value;if(props.show&&plan)void Promise.all([api.history(plan),api.plans(accountID)]).then(([history,latestPlans])=>{if(version===viewVersion&&plan===historyPlanID.value){runs.value=history;plans.value=latestPlans;void refreshActiveReport(version)}}).catch(e=>{if(version===viewVersion)error.value=message(e)})},3000)
 },{immediate:true})
-onUnmounted(()=>{clearInterval(poll);clearTimeout(searchTimer);searchVersion++;viewVersion++;historyVersion++})
+onUnmounted(()=>{clearInterval(poll);viewVersion++;historyVersion++})
 </script>

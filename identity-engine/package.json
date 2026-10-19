@@ -4,12 +4,14 @@
   "version": "1.0.0",
   "license": "AGPL-3.0-only",
   "packageManager": "pnpm@9.15.9",
-  "engines": { "node": "24.x" },
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
-    "build": "tsc -p vendor/bazaarlink/tsconfig.json",
+    "build": "node build.cjs",
     "start": "node server.cjs",
     "test": "node --test identity.test.cjs",
-    "test:engine": "vitest run --root vendor/bazaarlink"
+    "test:engine": "node --test identity.test.cjs"
   },
   "devDependencies": {
     "commander": "12.1.0",
