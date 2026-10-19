@@ -60,3 +60,34 @@ func TestIdentityOpenAIProbesUsePinnedAccountModelMappingAndNormalBilling(t *tes
 	require.Error(t, e)
 	require.Nil(t, selected)
 }
+
+func TestIdentityOpenAIProbesRespectSubscriptionRetirementWithoutFailover(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		accountType string
+		upstream    string
+		allowed     bool
+	}{
+		{"retired subscription target", AccountTypeOAuth, "gpt-5.5", false},
+		{"API key target remains supported", AccountTypeAPIKey, "gpt-5.5", true},
+		{"subscription replacement remains supported", AccountTypeOAuth, "gpt-6.1-sol", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			groupID := int64(7)
+			target := &Account{ID: 42, Platform: PlatformOpenAI, Type: tc.accountType, Status: StatusActive, Schedulable: false, Concurrency: 4, GroupIDs: []int64{groupID}, Credentials: map[string]any{"model_mapping": map[string]any{"public-probe": tc.upstream}}, Extra: map[string]any{"privacy_mode": PrivacyModeTrainingOff}}
+			other := &Account{ID: 43, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, GroupIDs: []int64{groupID}}
+			svc := &OpenAIGatewayService{cfg: testConfig(), accountRepo: &mockAccountRepoForPlatform{accounts: []Account{*target, *other}, accountsByID: map[int64]*Account{42: target, 43: other}}}
+			ctx := WithIdentityTarget(context.Background(), target.ID, groupID)
+			selected, _, err := svc.SelectAccountWithSchedulerForCapability(ctx, &groupID, "", "", "public-probe", nil, OpenAIUpstreamTransportHTTPSSE, OpenAIEndpointCapabilityResponses, false, false, true)
+			if !tc.allowed {
+				require.Error(t, err)
+				require.Nil(t, selected, "a retired pinned target must not fall back to the healthy API-key account")
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, target.ID, selected.Account.ID)
+				selected.ReleaseFunc()
+			}
+			require.False(t, target.Schedulable, "identity probes must not resume ordinary scheduling")
+		})
+	}
+}

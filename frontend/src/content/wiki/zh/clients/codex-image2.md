@@ -1,153 +1,118 @@
-# 修复 Codex 的 gpt-image-2 调用
+# 使用 codex-image-gen++ 在 Codex 中生成和编辑图片
 
-本站当前所有分组都已提供生图模型 `gpt-image-2`。本文中提到的 Image2，指的就是模型 ID `gpt-image-2`。
+安装 [codex-image-gen++](https://github.com/Anti2077/codex-image-gen-plus-plus) MCP，在终端用 `init` 配好接口地址和 API Key，之后直接在 Codex 对话里提出图片需求。模型选择、提示词、参数和保存位置交给 Codex。
 
-不过，Codex 能正常使用聊天模型，不代表它一定会自动通过当前的 CC Switch 供应商调用图片接口。`codex-image2` Skill 可以直接调用 OpenAI 兼容的图片生成接口，但它需要获得正确的 API 地址和密钥。最省事的解决方法，是让你自己的 Codex 完成安装和适配，并在每次生图时动态读取 CC Switch 当前启用的 Codex provider。
+本文替换原来的 `codex-image2` Skill 教程，原页面链接继续可用。已有 Skill 不需要重新适配，按下列步骤安装 MCP 即可。
 
-你不需要手动寻找配置文件，也不要把 API Key 粘贴到聊天中。把下面的完整提示词发给 Codex，让它自主完成即可。
+## 准备工作
 
-> 这段提示词允许 Codex 在安全检查和 dry-run 通过后，生成一张测试图。真实请求只允许生成一张图片，可能产生少量模型用量。
+- Windows、macOS 或 Linux；
+- Node.js 22.13 或更新版本，推荐 Node.js 24 LTS，安装时包含 npm；
+- Codex CLI，用于自动注册 MCP；Codex 桌面版也可以使用注册后的 MCP；
+- 一把本站 API Key，绑定已开启生图且有可用图片模型的 GPT 分组。聊天可用不代表图片权限也可用；
+- 如果准备从 CC Switch 导入，先在 CC Switch 中启用本站的 Codex 供应商。可参考[使用 CC Switch 接入 Codex](/wiki/clients/cc-switch)。
 
-## 复制下面的提示词给 Codex
+不要把 API Key 发到 Codex 聊天里；手动配置时只在终端的隐藏输入中填写。初始化只读取模型列表，不会自动生成测试图；真实生成或编辑会按本站计费规则消耗额度。
 
-```text
-请帮我安装、配置并测试这个 Skill：
+## 第一步：安装
 
-https://github.com/fengfengzhidao/codex-image2-skill
+打开终端执行：
 
-目标：让 codex-image2 自动使用 CC Switch 的“当前 Codex provider”，读取 API 地址和密钥，并生成一张测试图。
-
-请自主完成整个流程，不要要求我把 API Key 粘贴到聊天中。
-
-具体要求：
-
-1. 首先识别当前环境：
-
-   - 操作系统；
-   - CPU 架构；
-   - 当前 Codex 客户端及 Codex Home；
-   - CC Switch 是否安装；
-   - CC Switch 的实际配置或数据库位置；
-   - codex-image2 是否已经安装。
-
-   不要照搬其他用户的路径，也不要假设一定是 macOS。
-
-2. 安装 Skill：
-
-   https://github.com/fengfengzhidao/codex-image2-skill
-
-   安装仓库中的 codex-image2 目录。若已安装，先检查现有内容和本地修改，只补充缺失配置，不要盲目覆盖。
-
-3. 完整阅读 SKILL.md 和相关源码，确认其实际需要的配置。预期环境变量为：
-
-   - CODEX_API_URL
-   - CODEX_API_KEY
-
-4. 只读检查 CC Switch 的当前 Codex provider。根据实际版本和数据结构寻找：
-
-   - 当前 provider 标记；
-   - API base URL；
-   - OPENAI_API_KEY 或等价认证字段。
-
-   某些版本可能使用 SQLite，某些版本或平台可能使用其他配置形式。请先检查实际结构，再选择可靠的读取方法。
-
-5. 建立平台适配的安全启动方式：
-
-   - macOS：使用适合当前架构的 Darwin 可执行文件和 Zsh/Bash 启动器；
-   - Windows：使用对应的 EXE 和 PowerShell 启动器；
-   - 其他系统：先检查仓库是否提供兼容二进制；没有时检查源码和现有工具链，再选择风险最低的方式。不要伪装成已支持。
-   - 每次调用时重新读取 CC Switch 当前 provider，以便切换 provider 后自动生效。
-   - 将 API 地址临时映射为 CODEX_API_URL。
-   - 将密钥临时映射为 CODEX_API_KEY。
-   - 环境变量只传给本次 codex-image2 子进程，执行结束后不保留。
-
-6. 安全要求：
-
-   - 不得在聊天、日志、命令参数或错误报告中显示密钥；
-   - 不得把密钥写入 Skill、项目文件、shell profile、PowerShell profile 或 Codex 全局配置；
-   - 不得打印包含密钥的完整数据库记录；
-   - 不得启用可能输出变量的 shell tracing；
-   - 不得修改 CC Switch 数据库；
-   - 不得切换 provider；
-   - 不得改变 Codex 的模型、路由、权限、记忆或其他无关配置；
-   - 当前 provider 缺失、不唯一或配置不完整时，明确报错并停止，不能擅自选择其他 provider。
-
-7. 更新本地 SKILL.md，使 Codex 后续调用 $codex-image2 时优先使用上述动态启动方式，同时保留原始环境变量配置作为兼容方案。
-
-8. 验证配置：
-
-   - 检查启动器语法；
-   - 运行 Codex Skill 的 quick_validate；
-   - 验证缺失配置时能够安全失败；
-   - 先执行一次 --dry-run，确认模型、参数和最终图片接口正确；
-   - 确认 dry-run 不联网、不生成图片、不消耗额度。
-
-9. dry-run 通过后，我授权你直接进行一次真实测试生图请求。无需再次询问，但仅允许生成一张，不要批量生成，也不要改用其他收费服务。
-
-   测试图要求：
-
-   一只透明玻璃瓶放在安静的深色摄影棚中，瓶内悬浮着明亮的蓝色星云，电影感产品摄影，玻璃边缘清晰，构图居中，无人物、无文字、无 Logo、无水印。
-
-   参数：
-
-   - model：gpt-image-2
-   - size：1024x1024
-   - quality：auto
-   - n：1
-
-10. 将图片保存到当前项目合适的用户输出目录，不要覆盖已有文件。生成后：
-
-   - 检查实际文件格式；
-   - 检查实际像素尺寸，不要只相信请求参数；
-   - 目视检查主体、构图、水印、文字和明显伪影；
-   - 在最终回复中直接展示图片；
-   - 报告模型、质量、请求尺寸、实际尺寸和输出文件；
-   - 不得显示 API Key。
-
-执行过程中请简要解释关键命令及参数的作用。遇到可以安全处理的问题时自行处理，只有涉及密钥暴露、破坏性操作或需要改动无关配置时才停下来询问。
+```sh
+npm install -g https://github.com/Anti2077/codex-image-gen-plus-plus/releases/latest/download/codex-image-gen-plus-plus.tgz
 ```
 
-## Codex 会替你完成什么
+`npm install` 安装发布包，`-g` 让当前系统可以直接使用命令；链接指向 GitHub 最新正式版安装包。
 
-正常情况下，Codex 会依次完成：
+然后启动配置向导：
 
-1. 识别操作系统、CPU 架构、Codex Home 和 CC Switch 的实际安装位置；
-2. 安装或检查 `codex-image2` Skill，而不是直接覆盖现有本地修改；
-3. 只读获取 CC Switch 当前启用的 Codex provider；
-4. 将当前 provider 的 API 地址和密钥仅传给本次生图子进程；
-5. 运行语法检查、`quick_validate` 和不联网的 `--dry-run`；
-6. 使用 `gpt-image-2` 生成一张 `1024x1024` 测试图；
-7. 检查实际图片格式、尺寸和画面质量，并直接展示结果。
-
-如果动态启动方式配置成功，CC Switch 切换到其他 Codex provider 后，后续调用也会重新读取当前 provider，不需要重复把 API Key 写入环境变量或配置文件。
-
-## 后续如何生图
-
-配置成功后，可以直接对 Codex 说：
-
-```text
-使用 $codex-image2 生成一张图片：
-一只橘猫坐在月球表面，远处可以看到地球，电影感灯光，无文字、无 Logo、无水印。
+```sh
+codex-image-gen-plus-plus init
 ```
 
-Codex 会根据当前系统选择对应的原生可执行文件，并把图片保存到当前项目合适的输出目录中。
+`init` 用来设置接口、检查模型列表并选择是否注册到 Codex。Windows PowerShell 如果提示脚本执行受限，可改用 `codex-image-gen-plus-plus.cmd init`。
 
-## 如果 Codex 停止并要求处理
+## 第二步：完成初始化
 
-以下情况应当停止，而不是让 Codex 猜测或擅自选择：
+1. 选择“中文”。
+2. 选择“导入 CC Switch 当前 Codex 提供商”，确认 CC Switch 数据目录；不使用 CC Switch 时选择手动输入。
+3. 手动输入时，API 地址填写 `https://cdn-api.anti2077.xyz/v1`，API Key 填写本站创建的用户密钥。根地址 `https://cdn-api.anti2077.xyz` 也会自动补为 `/v1`，不要填写 `/images/generations` 等完整端点。
+4. 选择密钥保存位置：本地私有配置文件为默认兼容模式；也可选择系统密钥库。密钥库模式会在 MCP 进程内缓存密钥，每次生图无需重新读取，但新进程、密钥库锁定等情况仍可能触发系统授权。
+5. 按需开启工作区保护，填写一个已存在目录的绝对路径。开启后图片只能保存到此目录内；这是此 MCP 的固定输出范围，不会随 Codex 聊天自动切换，使用其他项目时可重新运行 `init` 修改。
+6. 等待 `/models` 检查成功并显示模型列表。这只确认连接、认证和可见模型，实际生图能力需通过真实请求确认。
+7. 在“现在注册到 Codex？”中选择“是”。找不到 Codex CLI 时，向导会显示手动配置用的 TOML，按提示合并，保留已有配置。
+8. 完全退出后重新打开 Codex，让 MCP 配置重新加载。
 
-- 找不到 CC Switch；
-- 当前 Codex provider 缺失或同时存在多个“当前”provider；
-- 当前 provider 缺少 API 地址或认证字段；
-- 当前系统没有兼容的二进制，也没有安全可用的构建工具链；
-- 继续操作可能暴露 API Key、覆盖本地修改或改变无关配置。
+CC Switch 导入是**一次性复制**。之后在 CC Switch 切换供应商，不会自动切换 MCP 使用的图片接口；需要重新运行 `init` 导入。不支持导入 ChatGPT OAuth 登录令牌或代理占位密钥，导入失败时可选择手动配置。
 
-如果只是权限、可执行文件标记或输出目录不存在等可安全处理的问题，可以让 Codex 自行修复并继续。
+## 第三步：添加一句推荐提示词
+
+将下面这句复制到 Codex 的个性化提示词：
+
+```text
+需要生成或编辑图片时，优先使用 codex-image-gen-plus-plus MCP。
+```
+
+初始化会打印这句建议，但不会自动修改你的个性化设置。
+
+## 第四步：检查连接与生成图片
+
+先在终端检查连接：
+
+```sh
+codex-image-gen-plus-plus doctor
+```
+
+`doctor` 读取模型列表，不发起收费生图。接着在 Codex 对话里发送：
+
+```text
+查看当前可用的图片模型，选一个生成一张方形水彩狐狸插画，保存到当前工作区的 output/imagegen/，生成后展示给我。
+```
+
+这一步会发起真实生图并消耗额度。可用模型以当前密钥返回的列表为准，不要固定假设存在 `gpt-image-2` 或 `gpt-image-2.5`。如果列表里只有 `gpt-image-2.5-flare`、`gpt-image-2.5-sunburst` 等名称，应使用完整模型 ID，名称本身不能证明质量、速度或价格差异。
+
+图片由 MCP 直接保存到 Codex 指定的绝对路径，不覆盖已有文件。没有指定位置时，推荐使用当前工作区的 `output/imagegen/`；若开启工作区保护，该位置还必须位于配置的根目录内。
+
+生图较慢时会返回任务编号，由 Codex 使用 `get_job` 继续查询。不要因暂时没有图片就重复提交，以免重复计费。
+
+## 如何编辑图片
+
+把参考图交给 Codex，或告诉它当前工作区内的参考图路径，例如：
+
+```text
+把这张图片的背景改成傍晚海边，保留主体和构图，另存到当前工作区的 output/imagegen/，完成后展示结果。
+```
+
+Codex 会调用 `edit_image` 上传参考图。能否编辑、支持哪些尺寸及参数，取决于所选模型和接口支持情况；参考图和提示词会发送到配置的图片服务。
+
+## 常见问题
+
+| 问题 | 处理方式 |
+| --- | --- |
+| Codex 里看不到 MCP | 确认 `init` 已完成注册，完全重启 Codex；终端可运行 `codex mcp list` 检查是否存在 `codex-image-gen-plus-plus`。 |
+| 显示已注册，但工具启动失败 | 检查安装目录或 Node 路径是否发生变化，重新运行 `init` 注册。 |
+| CC Switch 导入失败 | 确认当前启用的是 API Key 方式的 Codex 供应商；自定义数据目录需在向导中填写。也可改为手动输入。 |
+| 返回 `401` 或 `403` | 检查 Key 状态、余额和分组生图权限；地址或 Key 更换后重新运行 `init`。 |
+| 模型不存在或没有权限 | 重新获取模型列表，使用准确的完整 ID，并确认 Key 绑定的分组支持该模型。 |
+| 输出路径被拒绝 | 使用工作区内的绝对路径；开启保护时，目标必须在配置的根目录内，输出目录不能通过符号链接指向外部。 |
+| 超时或任务中断 | 先查已有任务、输出文件和本站使用记录，再决定是否重新生成；MCP 不会自动重试或切换模型。 |
+
+## 升级与任务记录
+
+升级时重新执行上面的安装命令。需要更改地址、密钥、导入配置或工作区范围时，再运行 `init`，完成后重启 Codex。
+
+MCP 启动时默认清理 7 天前已完成或失败的任务记录，保留图片和运行中的任务。也可手动预览或清理：
+
+```sh
+codex-image-gen-plus-plus jobs clean --days 30 --dry-run
+codex-image-gen-plus-plus jobs clean --days 30
+```
+
+`--days 30` 只选择 30 天前的已完成或失败记录；`--dry-run` 只显示可清理数量，不删除。清理的是包含提示词和路径的任务记录，不是生成图片。
 
 ## 本文核对范围
 
-- 本站当前所有分组均提供 `gpt-image-2`；
-- `codex-image2` 上游仓库包含 Skill 源码以及 Windows x64、Windows ARM64、macOS Intel 和 macOS Apple Silicon 原生可执行文件；
-- 上游 Skill 使用 `CODEX_API_URL` 和 `CODEX_API_KEY` 调用 OpenAI 兼容图片接口；
-- CC Switch 动态 provider 读取方式由用户的 Codex 根据实际系统、版本和数据结构建立，不假设固定路径；
-- 核对日期：2026-09-05。
+- 依据 [codex-image-gen++ v0.2.0](https://github.com/Anti2077/codex-image-gen-plus-plus/releases/tag/v0.2.0) 的源码、安装包和中英文说明更新；
+- Windows、macOS、Linux 的 Node.js 22/24 构建与命令检查已通过；这不代表每个平台的系统密钥库授权和所有上游图片模型都已实测；
+- 当前密钥的模型可见性、分组权限和真实生图结果，以实际请求为准；
+- 核对日期：2026-10-18。

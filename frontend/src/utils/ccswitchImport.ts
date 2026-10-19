@@ -18,6 +18,7 @@ export interface CcSwitchImportDeeplinkInput {
   providerName: string
   apiKey: string
   usageScript: string
+  iconUrl?: string
   model?: string
 }
 
@@ -89,6 +90,22 @@ function withoutTrailingSlashes(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '')
 }
 
+function resolveCcSwitchIconUrl(iconUrl?: string): string | null {
+  if (!iconUrl) return null
+
+  try {
+    const url = new URL(iconUrl)
+    const hostname = url.hostname.replace(/^\[|\]$/g, '')
+    const isIpAddress = hostname.includes(':') || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)
+    if (url.protocol !== 'https:' || url.username || url.password || url.port || isIpAddress || !hostname.includes('.')) {
+      return null
+    }
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
 export function resolveCcSwitchImportConfig(
   platform: GroupPlatform | undefined | null,
   clientType: CcSwitchClientType,
@@ -142,6 +159,9 @@ export function buildCcSwitchImportDeeplink(input: CcSwitchImportDeeplinkInput):
     ['usageScript', btoa(input.usageScript)],
     ['usageAutoInterval', '30']
   ]
+
+  const iconUrl = resolveCcSwitchIconUrl(input.iconUrl)
+  if (iconUrl) entries.push(['iconUrl', iconUrl])
 
   if (model) {
     entries.splice(2, 0, ['model', model])
