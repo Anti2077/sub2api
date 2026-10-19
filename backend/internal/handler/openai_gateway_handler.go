@@ -912,6 +912,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}
+					if _, _, pinned := service.IdentityTargetFromContext(c.Request.Context()); pinned {
+						if c.Writer.Size() == writerSizeBeforeForward && service.RetryIdentityProbe(c.Request.Context(), failoverErr.StatusCode) {
+							continue
+						}
+						h.handleFailoverExhausted(c, failoverErr, streamStarted)
+						return
+					}
 					// 池模式：同账号重试
 					if failoverErr.RetryableOnSameAccount {
 						retryLimit := effectiveSameAccountRetryLimit(failoverErr, account)
@@ -1477,6 +1484,13 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 						h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, currentRoutingModel, false, nil), false, nil, err)
 					}
 					if !failoverErr.ShouldRetryNextAccount() {
+						h.handleAnthropicFailoverExhausted(c, failoverErr, streamStarted)
+						return
+					}
+					if _, _, pinned := service.IdentityTargetFromContext(c.Request.Context()); pinned {
+						if c.Writer.Size() == writerSizeBeforeForward && service.RetryIdentityProbe(c.Request.Context(), failoverErr.StatusCode) {
+							continue
+						}
 						h.handleAnthropicFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}

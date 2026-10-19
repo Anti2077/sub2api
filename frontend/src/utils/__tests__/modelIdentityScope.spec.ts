@@ -70,3 +70,25 @@ describe('hosted flagship range presentation', () => {
     expect(identityFlagshipClass(r)).toBe(true)
   })
 })
+
+
+describe('Fingerpoint confirmation threshold', () => {
+  const fingerprint = (probability: unknown, detected = 'gpt-6-astra', extra: Record<string, unknown> = {}): IdentityRun => ({
+    id: 2, plan_id: 1, status: 'completed', created_at: '', request_model: 'gpt-6.1-sol', expected_model: 'openai/gpt-6.1-sol',
+    report: { engine: 'lm-fingerpoint-detector', detected_model: detected, confidence: probability,
+      analysis: { probability, probability_status: 'reference_calibrated', used_outputs: 3, ...extra } },
+  })
+  it('confirms at 90 percent, compares shared classes and flags a different candidate', () => {
+    expect(identityRunStatus(fingerprint(0.9))).toBe('matched')
+    expect(identityRunStatus(fingerprint(0.9999, 'gpt-5.6-luna'))).toBe('mismatched')
+    expect(identityRunStatus(fingerprint(0.89999))).toBe('ranked')
+    const summary = fingerprint(0.9)
+    delete (summary.report!.analysis as Record<string, unknown>).probability
+    expect(identityRunStatus(summary)).toBe('matched')
+  })
+  it('does not confirm partial, uncalibrated or invalid confidence', () => {
+    expect(identityRunStatus(fingerprint(0.99, 'gpt-6-astra', { decision: 'partial' }))).toBe('partial')
+    expect(identityRunStatus(fingerprint(0.99, 'gpt-6-astra', { probability_status: 'unavailable' }))).toBe('ranked')
+    for (const probability of [null, '0.99', NaN, Infinity, 1.1]) expect(identityRunStatus(fingerprint(probability))).toBe('ranked')
+  })
+})

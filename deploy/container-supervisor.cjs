@@ -53,7 +53,7 @@ async function supervise({
       try {
         const response = await fetch(`${engine}/models`, { signal: AbortSignal.timeout(1000) });
         const catalog = await response.json();
-        ready = response.ok && catalog.engine_commit === '5c41136741ca52b5637879cca7bd0cae07404646' && Array.isArray(catalog.models);
+        ready = response.ok && catalog.engine_commit === '654c8334bb53951aaf04cbd61252d163649e1369' && Array.isArray(catalog.models);
         if (ready) break;
       } catch { /* The worker may still be loading its baselines. */ }
       await delay(100);
@@ -64,7 +64,7 @@ async function supervise({
         ...env,
         MODEL_IDENTITY_ENGINE_URL: env.MODEL_IDENTITY_ENGINE_URL || engine,
         MODEL_IDENTITY_CALLBACK_URL: env.MODEL_IDENTITY_CALLBACK_URL || callback,
-        MODEL_IDENTITY_REMOTE_API_URL: env.MODEL_IDENTITY_REMOTE_API_URL || 'https://bazaarlink.ai/api/probe/run',
+        MODEL_IDENTITY_REMOTE_API_URL: '',
       });
     }
     return await finished;

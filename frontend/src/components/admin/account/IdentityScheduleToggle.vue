@@ -12,13 +12,13 @@
     <span class="inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors" :class="enabled ? 'bg-primary-600' : 'bg-gray-300 dark:bg-dark-600'" aria-hidden="true">
       <span class="h-5 w-5 rounded-full bg-white shadow transition-transform motion-reduce:transition-none" :class="enabled ? 'translate-x-5' : 'translate-x-0'" />
     </span>
-    <span class="whitespace-nowrap text-gray-600 dark:text-gray-300">{{ busy ? t('common.saving') : t(enabled ? 'admin.modelIdentity.scheduleOn' : 'admin.modelIdentity.scheduleOff') }}</span>
+    <span :class="compact ? 'sr-only' : 'whitespace-nowrap text-gray-600 dark:text-gray-300'">{{ busy ? t('common.saving') : t(enabled ? 'admin.modelIdentity.scheduleOn' : 'admin.modelIdentity.scheduleOff') }}</span>
   </button>
 </template>
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-defineProps<{ planId: number; enabled: boolean; busy: boolean; disabled: boolean }>()
+defineProps<{ planId: number; enabled: boolean; busy: boolean; disabled: boolean; compact?: boolean }>()
 defineEmits<{ change: [] }>()
 const { t } = useI18n()
 </script>

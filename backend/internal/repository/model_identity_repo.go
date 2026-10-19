@@ -15,6 +15,102 @@ type identityRepository struct{ db *sql.DB }
 
 func NewIdentityRepository(db *sql.DB) service.IdentityRepository { return &identityRepository{db: db} }
 
+// Settings, Key ownership and account bindings must change together. All queue
+// writers take the same lock so a run cannot snapshot a half-updated binding.
+func (r *identityRepository) SaveTestUserSettings(ctx context.Context, userID int64, settings string) ([]string, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(244,0)`); err != nil {
+		return nil, err
+	}
+	var active bool
+	err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM account_identity_runs WHERE status IN ('queued','running','cancelling')) AND (
+ EXISTS(SELECT 1 FROM account_identity_configs WHERE user_id<>$1) OR
+ EXISTS(SELECT 1 FROM settings WHERE key='model_identity_settings' AND COALESCE((value::jsonb->>'test_user_id')::bigint,0)<>$1))`, userID).Scan(&active)
+	if err != nil {
+		return nil, err
+	}
+	if active {
+		return nil, errors.New("cancel or finish active detections before changing the fixed test user")
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT k.key FROM api_keys k JOIN account_identity_configs c ON c.api_key_id=k.id WHERE c.user_id<>$1 OR k.user_id<>$1`, userID)
+	if err != nil {
+		return nil, err
+	}
+	keys := []string{}
+	for rows.Next() {
+		var key string
+		if err = rows.Scan(&key); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		keys = append(keys, key)
+	}
+	err = rows.Err()
+	closeErr := rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE api_keys k SET user_id=$1,updated_at=NOW() FROM account_identity_configs c WHERE c.api_key_id=k.id AND k.user_id<>$1`, userID); err != nil {
+		return nil, err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE account_identity_configs SET user_id=$1,updated_at=NOW() WHERE user_id<>$1`, userID); err != nil {
+		return nil, err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO settings(key,value,updated_at) VALUES('model_identity_settings',$1,NOW()) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=NOW()`, settings); err != nil {
+		return nil, err
+	}
+	return keys, tx.Commit()
+}
+
+// A page is two bounded queries: count, then plans with five compact reports each.
+// No per-account or per-report fetch is needed to render the plan matrix.
+func (r *identityRepository) Overview(ctx context.Context, page, size int, search string) (*service.IdentityPlanPage, error) {
+	const filter = ` FROM account_identity_plans p JOIN account_identity_configs c ON c.account_id=p.account_id JOIN accounts a ON a.id=p.account_id JOIN groups g ON g.id=c.group_id JOIN api_keys k ON k.id=c.api_key_id WHERE a.deleted_at IS NULL AND ($1='' OR a.name ILIKE '%'||$1||'%' OR p.request_model ILIKE '%'||$1||'%')`
+	out := &service.IdentityPlanPage{Items: []service.IdentityPlanCard{}}
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*)`+filter, search).Scan(&out.Total); err != nil {
+		return nil, err
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT to_jsonb(p),a.name,g.name,jsonb_build_object('account_id',c.account_id,'user_id',c.user_id,'group_id',c.group_id,'api_key_id',c.api_key_id,'key_name',k.name),
+ COALESCE((SELECT jsonb_agg(summary ORDER BY id DESC) FROM (
+ SELECT r.id,jsonb_build_object('id',r.id,'plan_id',r.plan_id,'account_id',r.account_id,'status',r.status,'request_model',r.request_model,'expected_model',r.expected_model,'created_at',r.created_at,'started_at',r.started_at,'finished_at',r.finished_at,'probe_count',jsonb_array_length(r.probes),'engine_commit',r.engine_commit,
+ 'report',`+identityReportSummarySQL+`) AS summary
+ FROM account_identity_runs r WHERE r.plan_id=p.id ORDER BY r.id DESC LIMIT 5) latest),'[]'::jsonb)`+filter+` ORDER BY p.id DESC LIMIT $2 OFFSET $3`, search, size, (page-1)*size)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var card service.IdentityPlanCard
+		var plan, config, runs []byte
+		if err := rows.Scan(&plan, &card.AccountName, &card.GroupName, &config, &runs); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(plan, &card.Plan); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(config, &card.Config); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(runs, &card.RecentRuns); err != nil {
+			return nil, err
+		}
+		out.Items = append(out.Items, card)
+	}
+	return out, rows.Err()
+}
+
+func (r *identityRepository) Progress(ctx context.Context, id int64, report json.RawMessage) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE account_identity_runs SET report=$2::jsonb WHERE id=$1 AND status='running' AND engine_commit=$3 AND lease_until>NOW()`, id, report, service.IdentityEngineCommit)
+	return err
+}
+
 func (r *identityRepository) PlannedAccounts(ctx context.Context, page, size int, search string) (*service.IdentityAccountPage, error) {
 	const filter = ` FROM account_identity_configs c JOIN accounts a ON a.id=c.account_id WHERE a.deleted_at IS NULL AND EXISTS(SELECT 1 FROM account_identity_plans p WHERE p.account_id=c.account_id) AND ($1='' OR a.name ILIKE '%' || $1 || '%')`
 	result := &service.IdentityAccountPage{AccountIDs: []int64{}}
@@ -48,6 +144,17 @@ func (r *identityRepository) Configure(ctx context.Context, c *service.IdentityC
 	}
 	defer func() { _ = tx.Rollback() }()
 	// Serialize provisioning across replicas; Key and binding commit together.
+	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(244,0)`); err != nil {
+		return err
+	}
+	var fixedUserID int64
+	err = tx.QueryRowContext(ctx, `SELECT COALESCE((value::jsonb->>'test_user_id')::bigint,0) FROM settings WHERE key='model_identity_settings'`).Scan(&fixedUserID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if fixedUserID > 0 && c.UserID != fixedUserID {
+		return errors.New("fixed test user changed; reload detection settings and retry")
+	}
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(244, $1::integer)`, c.AccountID); err != nil {
 		return err
 	}
@@ -86,11 +193,16 @@ func (r *identityRepository) Configure(ctx context.Context, c *service.IdentityC
 	return tx.Commit()
 }
 
-const identityPlanColumns = `id,account_id,request_model,expected_model,interval_minutes,enabled,last_run_at,next_run_at`
+const identityPlanColumns = `id,account_id,request_model,expected_model,interval_minutes,enabled,last_run_at,next_run_at,options`
 
 func scanIdentityPlan(row scannable) (*service.IdentityPlan, error) {
 	p := &service.IdentityPlan{}
-	err := row.Scan(&p.ID, &p.AccountID, &p.RequestModel, &p.ExpectedModel, &p.IntervalMinutes, &p.Enabled, &p.LastRunAt, &p.NextRunAt)
+	var options []byte
+	err := row.Scan(&p.ID, &p.AccountID, &p.RequestModel, &p.ExpectedModel, &p.IntervalMinutes, &p.Enabled, &p.LastRunAt, &p.NextRunAt, &options)
+	if err == nil {
+		p.Options = new(service.IdentityPlanOptions)
+		err = json.Unmarshal(options, p.Options)
+	}
 	return p, err
 }
 func (r *identityRepository) Plans(ctx context.Context, id int64) ([]service.IdentityPlan, error) {
@@ -113,15 +225,23 @@ func (r *identityRepository) Plan(ctx context.Context, id int64) (*service.Ident
 	return scanIdentityPlan(r.db.QueryRowContext(ctx, `SELECT `+identityPlanColumns+` FROM account_identity_plans WHERE id=$1`, id))
 }
 func (r *identityRepository) SavePlan(ctx context.Context, p *service.IdentityPlan, now time.Time) error {
+	if p.Options == nil {
+		options := service.DefaultIdentityPlanOptions()
+		p.Options = &options
+	}
+	options, err := json.Marshal(p.Options)
+	if err != nil {
+		return err
+	}
 	if p.ID == 0 {
 		if p.Enabled {
 			next := now.Add(time.Duration(p.IntervalMinutes) * time.Minute)
 			p.NextRunAt = &next
 		}
-		return r.db.QueryRowContext(ctx, `INSERT INTO account_identity_plans(account_id,request_model,expected_model,interval_minutes,enabled,next_run_at) VALUES($1,$2,$3,$4,$5,$6) RETURNING id`, p.AccountID, p.RequestModel, p.ExpectedModel, p.IntervalMinutes, p.Enabled, p.NextRunAt).Scan(&p.ID)
+		return r.db.QueryRowContext(ctx, `INSERT INTO account_identity_plans(account_id,request_model,expected_model,interval_minutes,enabled,next_run_at,options) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id`, p.AccountID, p.RequestModel, p.ExpectedModel, p.IntervalMinutes, p.Enabled, p.NextRunAt, options).Scan(&p.ID)
 	}
 	// Keep cadence for model edits; reset only when enabling or changing interval.
-	_, err := r.db.ExecContext(ctx, `UPDATE account_identity_plans SET request_model=$2,expected_model=$3,next_run_at=CASE WHEN NOT $5 THEN NULL WHEN NOT enabled OR interval_minutes<>$4 THEN $6::timestamptz+($4*INTERVAL '1 minute') ELSE next_run_at END,interval_minutes=$4,enabled=$5 WHERE id=$1`, p.ID, p.RequestModel, p.ExpectedModel, p.IntervalMinutes, p.Enabled, now)
+	_, err = r.db.ExecContext(ctx, `UPDATE account_identity_plans SET request_model=$2,expected_model=$3,options=$7,next_run_at=CASE WHEN NOT $5 THEN NULL WHEN NOT enabled OR interval_minutes<>$4 THEN $6::timestamptz+($4*INTERVAL '1 minute') ELSE next_run_at END,interval_minutes=$4,enabled=$5 WHERE id=$1`, p.ID, p.RequestModel, p.ExpectedModel, p.IntervalMinutes, p.Enabled, now, options)
 	return err
 }
 func (r *identityRepository) DeletePlan(ctx context.Context, id int64) error {
@@ -136,13 +256,24 @@ func (r *identityRepository) DeletePlan(ctx context.Context, id int64) error {
 	return nil
 }
 
-const enqueueIdentitySQL = `INSERT INTO account_identity_runs(plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model) SELECT p.id,p.account_id,c.user_id,c.group_id,c.api_key_id,p.request_model,p.expected_model FROM account_identity_plans p JOIN account_identity_configs c ON c.account_id=p.account_id WHERE p.id=$1 ON CONFLICT DO NOTHING RETURNING id`
+const enqueueIdentitySQL = `INSERT INTO account_identity_runs(plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,options,engine_commit) SELECT p.id,p.account_id,c.user_id,c.group_id,c.api_key_id,p.request_model,p.expected_model,p.options,'654c8334bb53951aaf04cbd61252d163649e1369' FROM account_identity_plans p JOIN account_identity_configs c ON c.account_id=p.account_id WHERE p.id=$1 AND c.user_id=COALESCE((SELECT NULLIF((value::jsonb->>'test_user_id')::bigint,0) FROM settings WHERE key='model_identity_settings'),c.user_id) ON CONFLICT DO NOTHING RETURNING id`
 
 func (r *identityRepository) Enqueue(ctx context.Context, id int64) (*service.IdentityRun, error) {
-	var runID int64
-	err := r.db.QueryRowContext(ctx, enqueueIdentitySQL, id).Scan(&runID)
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, errors.New("account already has an active detection or plan does not exist")
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(244,0)`); err != nil {
+		return nil, err
+	}
+	var runID int64
+	err = tx.QueryRowContext(ctx, enqueueIdentitySQL, id).Scan(&runID)
+	if err != nil {
+		return nil, errors.New("account already has an active detection, fixed test user is not configured, or plan does not exist")
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
 	}
 	return r.Run(ctx, runID)
 }
@@ -152,6 +283,9 @@ func (r *identityRepository) ScanDue(ctx context.Context, now time.Time) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(244,0)`); err != nil {
+		return err
+	}
 	_, err = tx.ExecContext(ctx, `UPDATE account_identity_runs SET status=CASE WHEN status='cancelling' THEN 'cancelled' ELSE 'timed_out' END,finished_at=$1,token_hash=NULL,worker_slot=NULL WHERE status IN ('running','cancelling') AND lease_until<=$1`, now)
 	if err != nil {
 		return err
@@ -238,7 +372,7 @@ func (r *identityRepository) Claim(ctx context.Context, hash string, now time.Ti
 	return r.Run(ctx, id)
 }
 
-const identityRunColumns = `id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,report,probes,probe_concurrency`
+const identityRunColumns = `id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,report,probes,probe_concurrency,options,engine_commit`
 
 // Include cancellations and expired leases, which may never reach Finish.
 const pruneIdentityReportsSQL = `DELETE FROM account_identity_runs WHERE id IN (
@@ -248,7 +382,11 @@ const pruneIdentityReportsSQL = `DELETE FROM account_identity_runs WHERE id IN (
 
 func scanIdentityRun(row scannable) (*service.IdentityRun, error) {
 	r := &service.IdentityRun{}
-	err := row.Scan(&r.ID, &r.PlanID, &r.AccountID, &r.UserID, &r.GroupID, &r.APIKeyID, &r.RequestModel, &r.ExpectedModel, &r.Status, &r.StartedAt, &r.FinishedAt, &r.CreatedAt, &r.Report, &r.Probes, &r.ProbeConcurrency)
+	var options []byte
+	err := row.Scan(&r.ID, &r.PlanID, &r.AccountID, &r.UserID, &r.GroupID, &r.APIKeyID, &r.RequestModel, &r.ExpectedModel, &r.Status, &r.StartedAt, &r.FinishedAt, &r.CreatedAt, &r.Report, &r.Probes, &r.ProbeConcurrency, &options, &r.EngineCommit)
+	if err == nil {
+		err = json.Unmarshal(options, &r.Options)
+	}
 	if err == nil {
 		var probes []json.RawMessage
 		if json.Unmarshal(r.Probes, &probes) == nil {
@@ -261,7 +399,7 @@ func (r *identityRepository) Run(ctx context.Context, id int64) (*service.Identi
 	return scanIdentityRun(r.db.QueryRowContext(ctx, `SELECT `+identityRunColumns+` FROM account_identity_runs WHERE id=$1`, id))
 }
 func (r *identityRepository) Authorize(ctx context.Context, id int64, hash string, now time.Time) (*service.IdentityRun, error) {
-	return scanIdentityRun(r.db.QueryRowContext(ctx, `SELECT id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,'{}'::jsonb,'[]'::jsonb,probe_concurrency FROM account_identity_runs WHERE id=$1 AND token_hash=$2 AND status='running' AND lease_until>$3`, id, hash, now))
+	return scanIdentityRun(r.db.QueryRowContext(ctx, `SELECT id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,'{}'::jsonb,'[]'::jsonb,probe_concurrency,options,engine_commit FROM account_identity_runs WHERE id=$1 AND token_hash=$2 AND status='running' AND lease_until>$3`, id, hash, now))
 }
 
 // Persist only the hosted task ID before polling. Never store the acknowledgement
@@ -286,8 +424,10 @@ func (r *identityRepository) Cancel(ctx context.Context, id int64) error {
 	_, err = r.db.ExecContext(ctx, pruneIdentityReportsSQL)
 	return err
 }
-func (r *identityRepository) History(ctx context.Context, id int64) ([]service.IdentityRun, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,jsonb_build_object('verdict',report->'verdict','detected_model',report->'detected_model','expected_model',report->'expected_model','remote_run_id',COALESCE(report->'remote_run_id',report->'runId',report->'run_id'),
+
+// Keep history and overview projections identical, including historical BazaarLink evidence.
+const identityReportSummarySQL = `jsonb_build_object('verdict',report->'verdict','detected_model',report->'detected_model','expected_model',report->'expected_model','remote_run_id',COALESCE(report->'remote_run_id',report->'runId',report->'run_id'),
+ 'engine',report->'engine','engine_commit',report->'engine_commit','confidence',report->'confidence','analysis',jsonb_build_object('decision',report#>'{analysis,decision}','prediction',report#>'{analysis,prediction}','prediction_name',report#>'{analysis,prediction_name}','probability_status',report#>'{analysis,probability_status}','used_outputs',report#>'{analysis,used_outputs}'),
  'identityAssessment',jsonb_build_object(
   'claimedModel',report#>'{identityAssessment,claimedModel}',
   'predictedFamily',report#>'{identityAssessment,predictedFamily}',
@@ -298,7 +438,10 @@ func (r *identityRepository) History(ctx context.Context, id int64) ([]service.I
   'v3',jsonb_build_object('candidates',report#>'{identityAssessment,v3,candidates}')
  ),
  'identity_probe_coverage',(SELECT jsonb_build_object('total',COUNT(*),'errors',COUNT(*) FILTER (WHERE item->>'status'='error')) FROM jsonb_array_elements(CASE WHEN jsonb_typeof(report->'items')='array' THEN report->'items' ELSE '[]'::jsonb END) item WHERE item->>'group' IN ('identity','submodel'))
-),'[]'::jsonb,jsonb_array_length(probes),probe_concurrency FROM account_identity_runs WHERE plan_id=$1 ORDER BY id DESC LIMIT 50`, id)
+)`
+
+func (r *identityRepository) History(ctx context.Context, id int64) ([]service.IdentityRun, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id,plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,status,started_at,finished_at,created_at,`+identityReportSummarySQL+`,'[]'::jsonb,jsonb_array_length(probes),probe_concurrency,options,engine_commit FROM account_identity_runs WHERE plan_id=$1 ORDER BY id DESC LIMIT 50`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +449,11 @@ func (r *identityRepository) History(ctx context.Context, id int64) ([]service.I
 	out := []service.IdentityRun{}
 	for rows.Next() {
 		run := &service.IdentityRun{}
-		e := rows.Scan(&run.ID, &run.PlanID, &run.AccountID, &run.UserID, &run.GroupID, &run.APIKeyID, &run.RequestModel, &run.ExpectedModel, &run.Status, &run.StartedAt, &run.FinishedAt, &run.CreatedAt, &run.Report, &run.Probes, &run.ProbeCount, &run.ProbeConcurrency)
+		var options []byte
+		e := rows.Scan(&run.ID, &run.PlanID, &run.AccountID, &run.UserID, &run.GroupID, &run.APIKeyID, &run.RequestModel, &run.ExpectedModel, &run.Status, &run.StartedAt, &run.FinishedAt, &run.CreatedAt, &run.Report, &run.Probes, &run.ProbeCount, &run.ProbeConcurrency, &options, &run.EngineCommit)
+		if e == nil {
+			e = json.Unmarshal(options, &run.Options)
+		}
 		if e != nil {
 			return nil, e
 		}
@@ -319,26 +466,44 @@ func (r *identityRepository) AppendProbe(ctx context.Context, id int64, probe js
 	return err
 }
 func (r *identityRepository) ProbeSlot(ctx context.Context, id int64, acquire bool) error {
-	query := `UPDATE account_identity_runs SET probe_inflight=GREATEST(0,probe_inflight-1) WHERE id=$1`
 	if acquire {
-		query = `UPDATE account_identity_runs SET probe_inflight=probe_inflight+1 WHERE id=$1 AND status='running' AND lease_until>NOW() AND probe_inflight<probe_concurrency AND jsonb_array_length(probes)+probe_inflight<500`
+		tx, err := r.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback() }()
+		// Read the global usage only after taking the lock, so simultaneous
+		// replicas cannot each consume the last slot from an old snapshot.
+		if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(244,1)`); err != nil {
+			return err
+		}
+		result, err := tx.ExecContext(ctx, `UPDATE account_identity_runs SET probe_inflight=probe_inflight+1 WHERE id=$1 AND status='running' AND lease_until>NOW() AND jsonb_array_length(probes)+probe_inflight<500 AND (SELECT COALESCE(SUM(probe_inflight),0) FROM account_identity_runs WHERE status IN ('running','cancelling')) < (SELECT COALESCE(MIN(probe_concurrency),1) FROM account_identity_runs WHERE status IN ('running','cancelling'))`, id)
+		if err != nil {
+			return err
+		}
+		n, _ := result.RowsAffected()
+		if n == 0 {
+			var live bool
+			if err = tx.QueryRowContext(ctx, `SELECT status='running' AND lease_until>NOW() AND jsonb_array_length(probes)+probe_inflight<500 FROM account_identity_runs WHERE id=$1`, id).Scan(&live); err != nil {
+				return err
+			}
+			if live {
+				return service.ErrIdentityProbeSlotsFull
+			}
+			return errors.New("identity run inactive, expired or probe limit reached")
+		}
+		return tx.Commit()
 	}
-	result, err := r.db.ExecContext(ctx, query, id)
+	result, err := r.db.ExecContext(ctx, `UPDATE account_identity_runs SET probe_inflight=GREATEST(0,probe_inflight-1) WHERE id=$1`, id)
 	if err != nil {
 		return err
 	}
-	n, _ := result.RowsAffected()
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
 	if n == 0 {
-		if acquire {
-			var canWait bool
-			if err := r.db.QueryRowContext(ctx, `SELECT status='running' AND lease_until>NOW() AND jsonb_array_length(probes)+probe_inflight<500 FROM account_identity_runs WHERE id=$1`, id).Scan(&canWait); err != nil {
-				return err
-			}
-			if canWait {
-				return service.ErrIdentityProbeSlotsFull
-			}
-		}
-		return errors.New("identity run inactive, expired or probe budget exhausted")
+		return errors.New("identity run does not exist")
 	}
 	return nil
 }

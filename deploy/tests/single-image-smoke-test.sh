@@ -40,10 +40,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 (async () => {
   const worker = await fetch('http://127.0.0.1:8081/models').then(r => r.json());
-  assert.equal(worker.engine_commit, '5c41136741ca52b5637879cca7bd0cae07404646');
+  assert.equal(worker.engine_commit, '654c8334bb53951aaf04cbd61252d163649e1369');
   assert.ok(worker.models.length > 0);
   // Embedded frontend middleware must not turn protected callbacks into HTML.
-  for (const path of ['/internal/model-identity/0/remote/v1/chat/completions', '/internal/model-identity/0/probe']) {
+  for (const path of ['/internal/model-identity/0/remote/v1/chat/completions', '/internal/model-identity/0/probe', '/internal/model-identity/0/v1/chat/completions', '/internal/model-identity/0/v1/responses', '/internal/model-identity/0/v1/messages']) {
     const callback = await fetch(`http://127.0.0.1:8080${path}`, {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}',
     });
@@ -66,6 +66,13 @@ const fs = require('node:fs');
   if (response.status !== 200) throw new Error(`admin model catalog returned ${response.status}: ${await response.text()}`);
   const catalog = await response.json();
   assert.ok(Array.isArray(catalog.models) && catalog.models.length > 0);
+  const overviewResponse = await fetch('http://127.0.0.1:8080/api/v1/admin/model-identity/plans', {
+    headers: {Authorization: `Bearer ${login.data.access_token}`},
+  });
+  assert.equal(overviewResponse.status, 200, 'plan overview query must execute against the migrated database');
+  const overview = await overviewResponse.json();
+  assert.deepEqual(overview.items, []);
+  assert.equal(overview.total, 0);
   for (const pid of fs.readdirSync('/proc').filter(p => /^\d+$/.test(p))) {
     try {
       const cmd = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8');
@@ -74,7 +81,8 @@ const fs = require('node:fs');
       }
     } catch (e) { if (e.code !== 'ENOENT' && e.code !== 'ESRCH') throw e; }
   }
-  assert.ok(fs.existsSync('/app/identity-engine/vendor/bazaarlink/LICENSE'));
+  assert.ok(fs.existsSync('/app/identity-engine/vendor/lm-detector/LICENSE'));
+  assert.ok(!fs.existsSync('/app/identity-engine/vendor/bazaarlink'), 'runtime must contain only the local detector');
   console.log(`single image: admin catalog has ${catalog.models.length} models; worker and backend run as UID 1000`);
 })().catch(e => { console.error(`single image API or runtime assertion failed: ${e.message}`); process.exitCode = 1; });
 JS

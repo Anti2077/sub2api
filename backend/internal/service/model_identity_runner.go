@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -24,7 +23,7 @@ type ModelIdentityRunner struct {
 func ProvideModelIdentityRunner(svc *ModelIdentityService) *ModelIdentityRunner {
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &ModelIdentityRunner{svc: svc, ctx: ctx, cancel: cancel}
-	if svc.engineURL != "" || svc.remoteURL != "" {
+	if svc.engineURL != "" {
 		r.wg.Add(1)
 		go r.loop()
 	}
@@ -102,20 +101,22 @@ func (r *ModelIdentityRunner) execute(run *IdentityRun, token string) {
 		defer saveCancel()
 		_ = r.svc.Finish(saveCtx, run.ID, status, report)
 	}
+	if run.EngineCommit != "" && run.EngineCommit != IdentityEngineCommit {
+		finish("interrupted", map[string]string{"error": "run belongs to a previous identity engine"})
+		return
+	}
 	if _, e := r.svc.ValidateRun(ctx, run); e != nil {
 		finish("configuration_error", map[string]string{"error": e.Error()})
 		return
 	}
-	if r.svc.remoteURL != "" {
-		r.executeRemote(ctx, run, finish)
-		return
-	}
+	// All new runs use the pinned self-hosted Fingerpoint worker. Legacy
+	// report parsing helpers remain for historical records only.
 	callback := strings.TrimRight(os.Getenv("MODEL_IDENTITY_CALLBACK_URL"), "/")
 	if callback == "" {
 		finish("service_error", map[string]string{"error": "MODEL_IDENTITY_CALLBACK_URL is not configured"})
 		return
 	}
-	body, _ := json.Marshal(map[string]any{"run_id": run.ID, "model": run.RequestModel, "expected_model": run.ExpectedModel, "token": token, "probe_url": callback + "/internal/model-identity/" + fmtIdentityID(run.ID) + "/probe"})
+	body, _ := json.Marshal(map[string]any{"run_id": run.ID, "model": run.RequestModel, "expected_model": run.ExpectedModel, "options": run.Options, "token": token, "probe_url": callback + "/internal/model-identity/" + fmtIdentityID(run.ID) + "/v1"})
 	req, e := http.NewRequestWithContext(ctx, http.MethodPost, r.svc.engineURL+"/run", bytes.NewReader(body))
 	if e != nil {
 		finish("service_error", map[string]string{"error": "invalid engine URL"})
@@ -136,17 +137,74 @@ func (r *ModelIdentityRunner) execute(run *IdentityRun, token string) {
 		return
 	}
 	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK {
+		finish("service_error", map[string]string{"error": "identity engine rejected the run"})
+		return
+	}
 	var report map[string]any
-	if res.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(res.Body, 8<<20)).Decode(&report) != nil || report["engine_commit"] != IdentityEngineCommit {
+	var progress map[string]any
+	lastSave := time.Time{}
+	decoder := json.NewDecoder(io.LimitReader(res.Body, 64<<20))
+	for {
+		var event map[string]any
+		if decoder.Decode(&event) != nil {
+			break
+		}
+		if event["type"] == "complete" {
+			report, _ = event["report"].(map[string]any)
+			break
+		}
+		if event["type"] == "progress" {
+			current, ok := event["report"].(map[string]any)
+			if !ok || current["engine_commit"] != IdentityEngineCommit {
+				finish("service_error", map[string]string{"error": "invalid identity progress version"})
+				return
+			}
+			progress = current
+			if time.Since(lastSave) >= time.Second {
+				encoded, _ := json.Marshal(current)
+				if r.svc.repo.Progress(ctx, run.ID, encoded) != nil {
+					finish("service_error", map[string]string{"error": "could not persist identity progress"})
+					return
+				}
+				lastSave = time.Now()
+			}
+		}
+		if event["type"] == "error" {
+			if progress == nil {
+				progress = map[string]any{"engine": "lm-fingerpoint-detector", "engine_commit": IdentityEngineCommit}
+			}
+			progress["error"] = event["error"]
+			status := "request_error"
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				status = "timed_out"
+			}
+			if errors.Is(ctx.Err(), context.Canceled) {
+				status = "cancelled"
+			}
+			finish(status, progress)
+			return
+		}
+	}
+	if ctx.Err() != nil {
+		if progress == nil {
+			progress = map[string]any{}
+		}
+		status := "cancelled"
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			status = "timed_out"
+		}
+		finish(status, progress)
+		return
+	}
+	if report == nil || report["engine_commit"] != IdentityEngineCommit {
 		finish("service_error", map[string]string{"error": "invalid response or version from identity engine"})
 		return
 	}
 	status := "completed"
-	if evidence, ok := report["evidence"].(map[string]any); ok {
-		if coverage, ok := evidence["coverage"].(map[string]any); ok {
-			if errors, ok := coverage["errors"].(float64); ok && errors > 0 {
-				status = "request_error"
-			}
+	if analysis, ok := report["analysis"].(map[string]any); ok {
+		if used, ok := analysis["used_outputs"].(float64); ok && used == 0 {
+			status = "request_error"
 		}
 	}
 	if current, e := r.svc.repo.Run(ctx, run.ID); e == nil {
@@ -163,208 +221,6 @@ func (r *ModelIdentityRunner) execute(run *IdentityRun, token string) {
 			}
 		}
 	}
-	if status != "completed" {
-		report["verdict"] = "inconclusive"
-	}
-	finish(status, report)
-}
-
-func (r *ModelIdentityRunner) executeRemote(ctx context.Context, run *IdentityRun, finish func(string, any)) {
-	key, err := r.svc.ValidateRun(ctx, run)
-	if err != nil {
-		finish("configuration_error", map[string]string{"error": err.Error()})
-		return
-	}
-	public, err := r.svc.publicBaseURL(ctx)
-	if err != nil {
-		finish("configuration_error", map[string]string{"error": err.Error()})
-		return
-	}
-	baseURL := public + "/internal/model-identity/" + fmtIdentityID(run.ID) + "/remote/v1"
-	body, _ := json.Marshal(map[string]any{
-		"baseUrl": baseURL, "apiKey": key.Key, "modelId": run.RequestModel,
-		"claimedModel": run.ExpectedModel, "runContextCheck": false, "biasFingerprint": true, "sync": false,
-	})
-	client := identityRunHTTPClient()
-	var acknowledgement map[string]any
-	for attempt := 0; attempt <= IdentityProbeMaxRetries; attempt++ {
-		req, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, r.svc.remoteURL, bytes.NewReader(body))
-		if requestErr != nil {
-			finish("service_error", map[string]string{"error": "invalid BazaarLink Probe API URL"})
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-		res, requestErr := client.Do(req)
-		if requestErr != nil {
-			if ctx.Err() != nil {
-				finishRemoteRequestContext(ctx, finish)
-				return
-			}
-			// The POST may have been accepted before the connection failed. Do not
-			// replay a paid run when its outcome is unknown.
-			finish("service_error", map[string]string{"error": "BazaarLink Probe API request outcome is unknown"})
-			return
-		}
-		var response map[string]any
-		decodeErr := json.NewDecoder(io.LimitReader(res.Body, 2<<20)).Decode(&response)
-		statusCode := res.StatusCode
-		_ = res.Body.Close()
-		if statusCode >= 200 && statusCode < 300 && decodeErr == nil {
-			if runID := remoteRunID(response); runID != "" {
-				acknowledgement = response
-				break
-			}
-			finish("service_error", map[string]any{"error": "BazaarLink Probe API returned an invalid response", "status": statusCode})
-			return
-		}
-		if IdentityProbeRetryableStatus(statusCode) && attempt < IdentityProbeMaxRetries {
-			if !waitIdentityRetry(ctx, attempt+1) {
-				return
-			}
-			continue
-		}
-		finish("service_error", map[string]any{"error": "BazaarLink Probe API returned an invalid response", "status": statusCode})
-		return
-	}
-	runID := remoteRunID(acknowledgement)
-	if runID == "" {
-		finish("service_error", map[string]string{"error": "BazaarLink Probe API did not return a run id"})
-		return
-	}
-	// Save immediately so admin history can link to the live hosted run, and
-	// retain the ID even if subsequent polling fails or the local run is cancelled.
-	if err := r.svc.repo.SetRemoteRunID(ctx, run.ID, runID); err != nil {
-		finish("service_error", map[string]any{"error": "could not save BazaarLink task ID", "remote_run_id": runID})
-		return
-	}
-	remoteEndpoint, parseErr := url.Parse(r.svc.remoteURL)
-	if parseErr != nil {
-		finish("service_error", map[string]string{"error": "invalid BazaarLink Probe API URL"})
-		return
-	}
-	remoteEndpoint.Path = strings.TrimRight(remoteEndpoint.Path, "/") + "/" + url.PathEscape(runID)
-	remoteEndpoint.RawQuery = ""
-	reportURL := remoteEndpoint.String()
-	var report map[string]any
-	transientFailures := 0
-	for {
-		if ctx.Err() != nil {
-			finishRemoteRequestContext(ctx, finish)
-			return
-		}
-		pollReq, requestErr := http.NewRequestWithContext(ctx, http.MethodGet, reportURL, nil)
-		if requestErr != nil {
-			finish("service_error", map[string]string{"error": "invalid BazaarLink Probe report URL"})
-			return
-		}
-		res, requestErr := client.Do(pollReq)
-		if requestErr != nil {
-			if ctx.Err() != nil {
-				finishRemoteRequestContext(ctx, finish)
-				return
-			}
-			transientFailures++
-			if transientFailures > IdentityProbeMaxRetries {
-				finish("service_error", map[string]string{"error": "BazaarLink Probe report request failed after retries"})
-				return
-			}
-			if !waitIdentityRetry(ctx, transientFailures) {
-				return
-			}
-			continue
-		}
-		var current map[string]any
-		decodeErr := json.NewDecoder(io.LimitReader(res.Body, 16<<20)).Decode(&current)
-		statusCode := res.StatusCode
-		_ = res.Body.Close()
-		if IdentityProbeRetryableStatus(statusCode) {
-			transientFailures++
-			if transientFailures > IdentityProbeMaxRetries {
-				finish("service_error", map[string]any{"error": "BazaarLink Probe report failed after retries", "status": statusCode})
-				return
-			}
-			if !waitIdentityRetry(ctx, transientFailures) {
-				return
-			}
-			continue
-		}
-		if statusCode < 200 || statusCode >= 300 || decodeErr != nil {
-			finish("service_error", map[string]any{"error": "BazaarLink Probe API returned an invalid report", "status": statusCode})
-			return
-		}
-		transientFailures = 0
-		report = current
-		status, _ := report["status"].(string)
-		if status == "completed" || status == "failed" || status == "aborted" || status == "cancelled" {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			finishRemoteRequestContext(ctx, finish)
-			return
-		case <-time.After(2 * time.Second):
-		}
-	}
-	redactRemoteSecrets(report)
-	encoded, _ := json.Marshal(report)
-	encoded = bytes.ReplaceAll(encoded, []byte(key.Key), []byte("[redacted]"))
-	_ = json.Unmarshal(encoded, &report)
-	report["engine_commit"] = "bazaarlink-online"
-	report["engine_version"] = "Probe API"
-	status := remoteRunStatus(report)
-	assessment, _ := report["identityAssessment"].(map[string]any)
-	verdict, _ := assessment["verdict"].(map[string]any)
-	detected := remoteDetectedModel(assessment, verdict)
-	report["detected_model"] = detected
-	verdictStatus := verdict["status"]
-	if verdictStatus == nil {
-		verdictStatus = assessment["status"]
-	}
-	report["verdict"] = remoteIdentityVerdict(verdictStatus, detected, run.ExpectedModel)
-	report["expected_model"] = run.ExpectedModel
-	probeWarnings := 0
-	if items, ok := report["items"].([]any); ok {
-		for _, item := range items {
-			if entry, ok := item.(map[string]any); ok {
-				entry["target_account_id"] = run.AccountID
-				entry["request_model"] = run.RequestModel
-				if entry["status"] == "error" && status == "completed" {
-					probeWarnings++
-				}
-			}
-		}
-	}
-	if probeWarnings > 0 {
-		report["probe_warnings"] = probeWarnings
-	}
-	current, err := r.svc.repo.Run(ctx, run.ID)
-	if err != nil || current == nil {
-		finish("service_error", map[string]string{"error": "could not verify local probe evidence"})
-		return
-	}
-	{
-		var probes []struct {
-			Status             int  `json:"status"`
-			ConfigurationError bool `json:"configuration_error"`
-		}
-		if json.Unmarshal(current.Probes, &probes) == nil {
-			for _, probe := range probes {
-				if probe.ConfigurationError {
-					status = "configuration_error"
-					break
-				}
-				if probe.Status >= 400 && status == "completed" {
-					probeWarnings++
-				}
-			}
-		}
-	}
-	if probeWarnings > 0 {
-		report["probe_warnings"] = probeWarnings
-	}
-	if status != "completed" {
-		report["verdict"] = "inconclusive"
-	}
 	finish(status, report)
 }
 
@@ -377,27 +233,6 @@ func identityRunHTTPClient() *http.Client {
 			return http.ErrUseLastResponse
 		},
 	}
-}
-
-func waitIdentityRetry(ctx context.Context, attempt int) bool {
-	timer := time.NewTimer(IdentityProbeRetryDelay(attempt))
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
-	}
-}
-
-func finishRemoteRequestContext(ctx context.Context, finish func(string, any)) {
-	status := "service_error"
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		status = "timed_out"
-	} else if errors.Is(ctx.Err(), context.Canceled) {
-		status = "cancelled"
-	}
-	finish(status, map[string]string{"error": "BazaarLink Probe API request interrupted"})
 }
 
 func remoteRunID(response map[string]any) string {

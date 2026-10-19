@@ -1,16 +1,14 @@
-# Model identity worker
+# LM Fingerpoint Detector notice
 
-This worker vendors BazaarLink/LLMprobe-engine at commit
-`5c41136741ca52b5637879cca7bd0cae07404646` (version 0.11.0).
-Source: https://github.com/BazaarLink/LLMprobe-engine
+This worker vendors the MIT licensed `Ikaleio/lm-detector` source at commit
+`654c8334bb53951aaf04cbd61252d163649e1369`:
+https://github.com/Ikaleio/lm-detector
 
-The engine is licensed under AGPL-3.0-only. Its complete source, tests,
-documentation and license are in `vendor/bazaarlink`. The adapter in this
-directory is also distributed under AGPL-3.0-only. Publish the corresponding
-source of the deployed build to users of the service.
+The vendored source, detector, reference bank and calibration data are kept
+under `vendor/lm-detector`. `manifest.json` records SHA-256 checksums and the
+build verifies them before compiling. The local HTTP adapter and Sub2API
+integration are original modifications; they run on Node 24 and only bind the
+worker to loopback.
 
-The adapter only runs text identity and submodel probes. Self-declarations
-and response model names are auxiliary evidence. IKP abstains because the
-public engine does not include its raw baseline corpus. This integration
-adds a conservative product gate: stale baselines cannot produce a positive
-identity verdict, even though the pinned engine retains their scoring authority.
+Historical BazaarLink reports and their official links remain readable in the
+database/UI. New runs never call BazaarLink or require a public Base URL.

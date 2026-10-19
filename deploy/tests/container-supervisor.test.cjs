@@ -10,7 +10,7 @@ const workerScript = `
   const http = require('node:http');
   const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({engine_commit:'5c41136741ca52b5637879cca7bd0cae07404646', models:[]}));
+    res.end(JSON.stringify({engine_commit:'654c8334bb53951aaf04cbd61252d163649e1369', models:[]}));
   });
   server.listen(Number(process.env.PORT), process.env.MODEL_IDENTITY_HOST, () => console.log('worker-ready ' + JSON.stringify({ secret: process.env.JWT_SECRET || null, host: process.env.MODEL_IDENTITY_HOST })));
   process.on('SIGTERM', () => { console.log('worker-stopped'); server.close(); });

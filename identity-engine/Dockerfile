@@ -7,8 +7,9 @@ COPY . .
 RUN pnpm build && pnpm test && pnpm test:engine
 FROM node:24-alpine
 WORKDIR /app
-COPY --from=build /app/server.cjs /app/identity.cjs ./
-COPY --from=build /app/vendor ./vendor
+COPY --from=build /app/server.cjs /app/engine.cjs /app/verify.cjs ./
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/vendor/lm-detector ./vendor/lm-detector
 USER node
 EXPOSE 8081
 CMD ["node", "server.cjs"]

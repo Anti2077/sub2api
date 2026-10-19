@@ -48,7 +48,7 @@ RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 COPY identity-engine/package.json identity-engine/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY identity-engine/ ./
-RUN pnpm build && pnpm test && pnpm test:engine && rm -rf node_modules vendor/bazaarlink/node_modules
+RUN pnpm build && pnpm test && pnpm test:engine && rm -rf node_modules
 
 # -----------------------------------------------------------------------------
 # Stage 2: Backend Builder
@@ -150,7 +150,9 @@ WORKDIR /app
 # Copy binary/resources with ownership to avoid extra full-layer chown copy
 COPY --from=backend-builder --chown=sub2api:sub2api /app/sub2api /app/sub2api
 COPY --from=backend-builder --chown=sub2api:sub2api /app/backend/resources /app/resources
-COPY --from=identity-builder /app/identity-engine /app/identity-engine
+COPY --from=identity-builder /app/identity-engine/server.cjs /app/identity-engine/engine.cjs /app/identity-engine/verify.cjs /app/identity-engine/package.json /app/identity-engine/
+COPY --from=identity-builder /app/identity-engine/dist /app/identity-engine/dist
+COPY --from=identity-builder /app/identity-engine/vendor/lm-detector /app/identity-engine/vendor/lm-detector
 
 # Create data directory
 RUN mkdir -p /app/data && chown sub2api:sub2api /app/data

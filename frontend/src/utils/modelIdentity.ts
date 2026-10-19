@@ -1,6 +1,6 @@
 import type { IdentityRun } from '@/api/admin/modelIdentity'
 
-export type IdentityStatus = 'matched' | 'mismatched' | 'inconclusive' | 'flagshipClass' | 'configuration_error' | 'queued' | 'running' | 'cancelling' | 'cancelled' | 'timed_out' | 'service_error' | 'request_error' | 'notConfigured' | 'untested'
+export type IdentityStatus = 'ranked' | 'partial' | 'not_model' | 'unscorable' | 'interrupted' | 'matched' | 'mismatched' | 'inconclusive' | 'flagshipClass' | 'configuration_error' | 'queued' | 'running' | 'cancelling' | 'cancelled' | 'timed_out' | 'service_error' | 'request_error' | 'notConfigured' | 'untested'
 
 export interface IdentityModelVote { model: string; votes: number }
 
@@ -65,22 +65,41 @@ export function identityFlagshipClass(run?: IdentityRun | null): boolean {
 export function identityDetectedModel(run?: IdentityRun | null): string {
   if (identityFlagshipClass(run)) return 'GPT-6 Astra / GPT-6.1 Sol'
   const model = run?.report?.detected_model
+  if (model === 'gpt-6-astra' && run?.report?.engine === 'lm-fingerpoint-detector') return 'gpt-6-astra/6.1-sol'
   return typeof model === 'string' && model.trim() ? model : '—'
 }
 
+export function identityFingerprintClass(model: string) {
+  const id = model.trim().toLowerCase().replace(/^openai\//, '')
+  return ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-astra/6.1-sol'].includes(id) ? 'gpt-6-astra' : id
+}
+
 export function identityRunStatus(run: IdentityRun): IdentityStatus {
+  if (run.report?.engine === 'lm-fingerpoint-detector' && run.status === 'completed') {
+    const analysis = record(run.report.analysis)
+    if (['partial', 'not_model', 'unscorable'].includes(String(analysis?.decision))) return analysis?.decision as IdentityStatus
+    const detected = run.report.detected_model
+    if (typeof detected !== 'string' || !detected.trim()) return 'unscorable'
+    // Overview responses keep confidence at report level; full reports also
+    // include analysis.probability. Both views must apply the same threshold.
+    const probability = analysis?.probability ?? run.report.confidence
+    if (analysis?.probability_status === 'reference_calibrated' && typeof probability === 'number' && Number.isFinite(probability) && probability >= 0.9 && probability <= 1 && run.expected_model.trim()) {
+      return identityFingerprintClass(detected) === identityFingerprintClass(run.expected_model) ? 'matched' : 'mismatched'
+    }
+    return 'ranked'
+  }
   if (run.status === 'completed') {
     if (identityFlagshipClass(run)) return 'flagshipClass'
     return run.report?.verdict === 'matched' ? 'matched' : run.report?.verdict === 'mismatched' ? 'mismatched' : 'inconclusive'
   }
-  return ['queued', 'running', 'cancelling', 'cancelled', 'timed_out', 'configuration_error', 'service_error', 'request_error'].includes(run.status) ? run.status as IdentityStatus : 'service_error'
+  return ['queued', 'running', 'cancelling', 'cancelled', 'timed_out', 'interrupted', 'configuration_error', 'service_error', 'request_error'].includes(run.status) ? run.status as IdentityStatus : 'service_error'
 }
 export function isActive(run?: IdentityRun | null) { return Boolean(run && ['queued', 'running', 'cancelling'].includes(run.status)) }
 export function identityStatusClass(status: IdentityStatus) {
   if (status === 'matched') return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
   if (['mismatched', 'configuration_error', 'service_error', 'request_error', 'timed_out'].includes(status)) return 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
   if (['queued', 'running', 'cancelling'].includes(status)) return 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-  if (status === 'inconclusive' || status === 'flagshipClass') return 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+  if (['ranked', 'inconclusive', 'flagshipClass', 'partial', 'not_model', 'unscorable', 'interrupted'].includes(status)) return 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
   return 'bg-gray-100 text-gray-600 dark:bg-dark-700 dark:text-gray-300'
 }
 
