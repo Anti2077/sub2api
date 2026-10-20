@@ -131,3 +131,16 @@
 - 本轮再次运行真实网关 HTTP 扣费回归 **8 组通过**：无卡、零余额免费日卡、倍率卡、Token 全抵／部分／耗尽、流式、双 Key 12 路共享额度。独立 Decimal 预期核对：`0.00238000 = 0.00158667 + 0.00079333`；12 路 `0.02856000 = 0.00476000 + 0.02380000`；上游每请求成本记录仍为 `0.0068`。日志 `receipt-billing-http.log`、`http-results.json`。
 - 日志和截图位于 `/private/tmp/rewards-local/`。最终截图：`screenshots/redeem-receipt-desktop.jpg`、`redeem-receipt-mobile375.jpg`、`redeem-receipt-dark-desktop.jpg`、`redeem-receipt-dark375-final.jpg`。已恢复浅色、默认视口，保留本机实际后端的兑换回执页与运行服务。
 - 本轮回执专项通过；仅使用本地协议模拟上游，不代表真实供应商生产验收。前述全量后端 unit 内存阈值失败仍未解决，未重跑全量后端默认／unit／integration，整个活动卡券／农场计划不据此标记全面完成。未合并、推送或生产部署。
+
+
+## 合并前最终验证（2026-10-20）
+
+本节取代前述“全量后端 unit 内存阈值失败尚未解决／未重跑”的当前状态；历史记录保留。验证代码为功能提交 `d690964ac` 加合并当前本地 custom 的 `630ddaae9`，包含最新兑换回执、管理批量操作及既有模型身份功能。
+
+- Go 1.27.2 完整默认测试 **13,700 通过、0 失败、14 跳过**；unit **23,492 通过、0 失败、18 跳过**；真实数据库 integration **14,483 通过、0 失败、16 跳过**。最终依次执行的三条完整命令均退出 0；日志为 `/private/tmp/rewards-local/merge-accepted-{default,unit,integration}.json` 及对应 `.err`。计数包含测试与子测试。
+- 首次将多个重型构建与测试同时运行时，既有 `TestServerTimingConnectorRecordsDriverCallsWithoutRowLifetime` 的 30ms 墙钟断言失败。未修改测试或放宽断言；降低负载后完整 repository 默认／unit／integration 分别 769／1,064／1,544 通过，再依次执行上述三套全量测试全部通过。既有 `TestInflightEstimate_AccountMappingNoDBAndBoundedMemory` 专项和最终全量 unit 均通过。首轮失败日志保留为 `merge-final-*.json`，不能与最终成功日志混同。
+- 跳过项为既有真实供应商、独立审计环境、捕获服务及可选插件等测试门槛；本次卡券／农场必测集无失败或跳过。卡券、农场、旧兑换 repository 的真实 PostgreSQL race 检查 **39 通过、0 失败、0 跳过**，日志 `merge-final-race.json`。
+- Node 24.22.0／pnpm 9.15.9 前端全量 **409 文件、3,114 项通过、0 失败、0 跳过**；全量 lint、vue-tsc 类型检查、国际化 3 项及生产构建通过。后端 golangci-lint **0 issues**，后端嵌入最终前端产物后构建通过；模型身份引擎先构建再测试 **7 通过**，容器进程生命周期 **5 通过**。日志为 `merge-final-frontend.log`、`merge-final-frontend-lint.log`、`merge-final-frontend-build.log`、`merge-final-backend-lint.log`、`merge-final-identity.log`、`merge-final-supervisor.log`。
+- 最终合并代码在隔离本机后端实际运行：环境身份检查通过；真实网关 HTTP 扣费 **8 组通过**，三类卡券回执 **3 组通过**，发卡／兑换码／撤销／竞争管理 **5 组通过**。日志 `merge-final-http.log`、`merge-final-receipt-http.log`、`merge-final-management-http.log`。部分 Token 抵扣：`0.00238000 = 0.00158667 + 0.00079333`；12 路双 Key 共享额度：`0.02856000 = 0.00476000 + 0.02380000`；上游每请求成本仍为 `0.0068`。
+- HTTP 上游仍为本地协议模拟，以上结果不代表真实供应商或生产部署验收。最新兑换回执的桌面／375px／深色浏览器证据沿用上一节，本次合并未改变页面代码。
+- 用户已授权将本功能合并至 `Anti2077/custom` 并推送；本节为推送前验证记录，最终远端提交与工作流状态以实际 Git／GitHub 回执为准。没有执行生产部署。
