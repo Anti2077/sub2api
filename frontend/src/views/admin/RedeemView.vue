@@ -137,7 +137,7 @@
                   >({{ row.group.name }})</span
                 >
               </template>
-              <template v-else>{{ value }}</template>
+              <template v-else-if="row.type==='card'">{{ t('rewards.cards') }}</template><template v-else>{{ value }}</template>
             </span>
           </template>
 
@@ -747,6 +747,7 @@ const typeOptions = computed(() => [
 ])
 
 const filterTypeOptions = computed(() => [
+  { value: 'card', label: t('rewards.cards') },
   { value: '', label: t('admin.redeem.allTypes') },
   { value: 'balance', label: t('admin.redeem.balance') },
   { value: 'concurrency', label: t('admin.redeem.concurrency') },

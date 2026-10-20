@@ -32,7 +32,7 @@ vi.mock('vue-i18n', async () => {
 
 async function submitCode() {
   const wrapper = mount(RedeemView, {
-    global: { stubs: { AppLayout: { template: '<div><slot /></div>' }, Icon: true } },
+    global: { stubs: { AppLayout: { template: '<div><slot /></div>' }, Icon: true, RouterLink: { template: '<a><slot /></a>' } } },
   })
   await flushPromises()
   await wrapper.get('input#code').setValue(' REDEEM-CODE ')
@@ -86,10 +86,35 @@ describe('RedeemView refresh after redemption', () => {
     }
   )
 
+  it.each(['model_day', 'model_tokens', 'group_rate'])('delivers the %s receipt without changing balances or activating the card', async kind => {
+    redeem.mockResolvedValue({ type: 'card', value: 0, card: {
+      id: 87, user_id: 1, status: 'unused', source: 'code', remaining_tokens: 9000,
+      claim_expires_at: '2026-11-20T00:00:00Z',
+      template: { id: 1, version: 3, name: 'Received snapshot', kind, model: 'gpt-luna', group_ids: [2], rate: .3, tokens: 9000, hours: 24, claim_days: 30, published: true },
+    } })
+    const wrapper = await submitCode()
+    expect(wrapper.get('.card-receipt').text()).toContain('Received snapshot')
+    expect(wrapper.text()).toContain('$10.00')
+    expect(wrapper.emitted('redeemed')).toHaveLength(1)
+    expect(fetchActiveSubscriptions).not.toHaveBeenCalled()
+    expect(redeem).toHaveBeenCalledTimes(1)
+    await wrapper.findAll('button').find(b => b.text() === 'redeem.ticketAnother')!.trigger('click')
+    expect(wrapper.find('.card-receipt').exists()).toBe(false)
+    redeem.mockRejectedValueOnce({ reason: 'REDEEM_CODE_USED', message: 'Already redeemed' })
+    await wrapper.get('input#code').setValue('NEXT-CODE')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.find('.card-receipt').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Received snapshot')
+    expect(wrapper.text()).toContain('Already redeemed')
+    expect(wrapper.text()).toContain('$10.00')
+    wrapper.unmount()
+  })
+
   it('pages on the server, changes size, and resets page and total after redeeming', async () => {
     getHistory.mockResolvedValue({ items: [], total: 101 })
     const wrapper = mount(RedeemView, {
-      global: { stubs: { AppLayout: { template: '<div><slot /></div>' }, Icon: true } },
+      global: { stubs: { AppLayout: { template: '<div><slot /></div>' }, Icon: true, RouterLink: { template: '<a><slot /></a>' } } },
     })
     await flushPromises()
     const button = (text: string) => wrapper.findAll('button').find(b => b.text() === text)!
@@ -125,7 +150,7 @@ describe('RedeemView refresh after redemption', () => {
     const item = { id: 1, code: 'OLD-ROWS', type: 'balance', value: 20, used_at: '2026-03-08T00:00:00Z' }
     getHistory.mockResolvedValue({ items: [item], total: 61 })
     const wrapper = mount(RedeemView, {
-      global: { stubs: { AppLayout: { template: '<div><slot /></div>' }, Icon: true } },
+      global: { stubs: { AppLayout: { template: '<div><slot /></div>' }, Icon: true, RouterLink: { template: '<a><slot /></a>' } } },
     })
     await flushPromises()
     const button = (text: string) => wrapper.findAll('button').find(b => b.text() === text)!
@@ -163,7 +188,7 @@ describe('RedeemView refresh after redemption', () => {
       rejectOld = reject
     }))
     const wrapper = mount(RedeemView, {
-      global: { stubs: { AppLayout: { template: '<div><slot /></div>' }, Icon: true } },
+      global: { stubs: { AppLayout: { template: '<div><slot /></div>' }, Icon: true, RouterLink: { template: '<a><slot /></a>' } } },
     })
     getHistory.mockResolvedValue({ items: [{
       id: 2, code: 'NEW-ROWS', type: 'balance', value: 30, used_at: '2026-03-08T00:00:00Z',
@@ -205,6 +230,7 @@ describe('RedeemView refresh after redemption', () => {
   it('finishes normally without a warning when profile refresh succeeds', async () => {
     const wrapper = await submitCode()
 
+    expect(wrapper.emitted('redeemed')).toHaveLength(1)
     expect(refreshUser).toHaveBeenCalledOnce()
     expect(showWarning).not.toHaveBeenCalled()
     expect(showError).not.toHaveBeenCalled()
@@ -255,6 +281,7 @@ describe('RedeemView refresh after redemption', () => {
     await flushPromises()
     expect(refreshUser).not.toHaveBeenCalled()
     expect(showSuccess).not.toHaveBeenCalled()
+    expect(wrapper.emitted('redeemed')).toBeUndefined()
   })
 
   it('keeps the code and reports failure when the redemption request itself fails', async () => {
@@ -270,6 +297,7 @@ describe('RedeemView refresh after redemption', () => {
     expect(getHistory).toHaveBeenCalledOnce()
     expect(showSuccess).not.toHaveBeenCalled()
     expect(showWarning).not.toHaveBeenCalled()
+    expect(wrapper.emitted('redeemed')).toBeUndefined()
     wrapper.unmount()
   })
 })

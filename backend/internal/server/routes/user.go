@@ -25,6 +25,17 @@ func RegisterUserRoutes(
 	// 用户管理面变更类操作入审计（含 TOTP 启用/禁用、step-up 验证、密码修改等安全事件）
 	authenticated.Use(gin.HandlerFunc(auditLog))
 	{
+		if h.Rewards != nil {
+			r := authenticated.Group("/rewards")
+			r.GET("/cards", h.Rewards.Cards)
+			r.POST("/cards/:id/activate", h.Rewards.Activate)
+			r.GET("/records", h.Rewards.Records)
+			r.GET("/farm", h.Rewards.Farm)
+			r.GET("/neighbors", h.Rewards.Neighbors)
+			r.POST("/actions", h.Rewards.Action)
+			r.GET("/shop", h.Rewards.Shop)
+			r.GET("/farm/ledger", h.Rewards.FarmLedger)
+		}
 		// 用户接口
 		user := authenticated.Group("/user")
 		{

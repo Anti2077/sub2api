@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/Wei-Shaw/sub2api/internal/rewards"
 	"strings"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
@@ -47,11 +48,53 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBi
 		return nil, err
 	}
 	if !applied {
-		return &service.UsageBillingApplyResult{Applied: false}, nil
+		result := &service.UsageBillingApplyResult{Applied: false}
+		// A retry can arrive after the entitlement expires or is revoked. Read
+		// the durable receipt using the already validated request/key identity,
+		// even when the new request has no active capture. Never re-price it.
+		// Regression: TestRewardsLifecycleScopeAndRequestSnapshot verifies this
+		// exact path against PostgreSQL (the guarded lookup returned nil).
+		var paid float64
+		err := tx.QueryRowContext(ctx, `SELECT paid_cost FROM reward_usage WHERE request_id=$1 AND api_key_id=$2`, cmd.RequestID, cmd.APIKeyID).Scan(&paid)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		if err == nil {
+			result.PaidCost = &paid
+		}
+		return result, nil
 	}
 
 	result := &service.UsageBillingApplyResult{Applied: true}
-	if err := r.applyUsageBillingEffects(ctx, tx, cmd, result); err != nil {
+	settled := *cmd // Preserve original command and fingerprint across retries.
+	if c := cmd.RewardCapture; c != nil {
+		var lockedUser int64
+		if e := tx.QueryRowContext(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, cmd.UserID).Scan(&lockedUser); e != nil {
+			return nil, e
+		}
+		if c.UserID != cmd.UserID {
+			return nil, rewards.Bad("权益快照归属不匹配")
+		}
+		original := cmd.BalanceCost + cmd.SubscriptionCost
+		paid, e := rewards.Spend(ctx, tx, c, cmd.APIKeyID, cmd.RequestID, int64(cmd.InputTokens)+int64(cmd.OutputTokens)+int64(cmd.CacheCreationTokens)+int64(cmd.CacheReadTokens), original, cmd.RewardTextCost, cmd.RewardBaseRate)
+		if e != nil {
+			return nil, e
+		}
+		if cmd.SubscriptionID != nil {
+			settled.SubscriptionCost = paid
+			settled.BalanceCost = 0
+		} else {
+			settled.BalanceCost = paid
+		}
+		if cmd.APIKeyQuotaCost > 0 {
+			settled.APIKeyQuotaCost = paid
+		}
+		if cmd.APIKeyRateLimitCost > 0 {
+			settled.APIKeyRateLimitCost = paid
+		}
+		result.PaidCost = &paid
+	}
+	if err := r.applyUsageBillingEffects(ctx, tx, &settled, result); err != nil {
 		return nil, err
 	}
 

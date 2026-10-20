@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/rewards"
 	"math"
 	"slices"
 	"time"
@@ -134,6 +136,21 @@ func (s *IncentiveService) Configs(ctx context.Context) ([]IncentiveConfig, erro
 	return result, rows.Err()
 }
 func (s *IncentiveService) Save(ctx context.Context, c IncentiveConfig, actor int64) (IncentiveConfig, error) {
+	for i := range c.Prizes {
+		p := &c.Prizes[i]
+		p.Card = nil
+		p.CardID = 0
+		if p.CardTemplateID > 0 {
+			t, e := rewards.LoadTemplate(ctx, s.client, p.CardTemplateID, true)
+			if e != nil {
+				return c, e
+			}
+			p.Card = &t
+			if p.RewardAmount != 0 {
+				return c, rewards.Bad("卡券奖项不能同时发放余额")
+			}
+		}
+	}
 	c.Timezone = timezone.Location().String()
 	if err := validateIncentiveConfig(c); err != nil {
 		return c, err
@@ -643,6 +660,15 @@ func (s *IncentiveService) Draw(ctx context.Context, userID int64, key string) (
 	prize, err := s.lottery.selectPrize(c.Prizes)
 	if err != nil {
 		return nil, err
+	}
+	if prize.CardTemplateID > 0 {
+		if prize.Card == nil {
+			return nil, rewards.Bad("卡券奖项缺少模板快照")
+		}
+		prize.CardID, err = rewards.Grant(ctx, tx, userID, *prize.Card, "lottery", fmt.Sprintf("lottery:%d:%s", userID, key), time.Now().UTC())
+		if err != nil {
+			return nil, err
+		}
 	}
 	encoded, err := json.Marshal(prize)
 	if err != nil {

@@ -314,6 +314,7 @@ export default {
       failedToDeleteUnused: 'Failed to delete unused codes',
       failedToCopy: 'Failed to copy codes',
       types: {
+        card: 'Reward card',
         balance: 'Balance',
         concurrency: 'Concurrency',
         subscription: 'Subscription',

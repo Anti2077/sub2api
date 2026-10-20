@@ -1,6 +1,9 @@
 import { apiClient } from './client'
 
 export interface DailyLotteryPrize {
+  card_template_id?: number
+  card?: {name: string}
+  card_id?: number
   id: string
   name: string
   reward_amount: number

@@ -646,6 +646,7 @@ func RedeemCodeFromServiceAdmin(rc *service.RedeemCode) *AdminRedeemCode {
 
 func redeemCodeFromServiceBase(rc *service.RedeemCode) RedeemCode {
 	out := RedeemCode{
+		Card:         rc.Card,
 		ID:           rc.ID,
 		Code:         rc.Code,
 		Type:         rc.Type,

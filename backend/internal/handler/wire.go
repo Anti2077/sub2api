@@ -3,6 +3,7 @@ package handler
 import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
+	"github.com/Wei-Shaw/sub2api/internal/rewards"
 	"github.com/Wei-Shaw/sub2api/internal/securityaudit"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -194,6 +195,9 @@ func ProvideHandlers(
 	incentiveHandler *IncentiveHandler,
 	incentiveService *service.IncentiveService,
 	incentiveSettings *service.SettingService,
+	rewardStore *rewards.Store,
+	rewardKeys *service.APIKeyService,
+	rewardsHandler *RewardsHandler,
 	subscriptionHandler *SubscriptionHandler,
 	announcementHandler *AnnouncementHandler,
 	channelMonitorUserHandler *ChannelMonitorUserHandler,
@@ -215,6 +219,7 @@ func ProvideHandlers(
 	_ *service.OpenAIQuotaAutoResetService,
 ) *Handlers {
 	incentiveSettings.SetIncentiveService(incentiveService)
+	rewardKeys.Rewards = rewardStore
 	return &Handlers{
 		Auth:             authHandler,
 		User:             userHandler,
@@ -223,6 +228,7 @@ func ProvideHandlers(
 		Redeem:           redeemHandler,
 		DailyLottery:     dailyLotteryHandler,
 		Incentives:       incentiveHandler,
+		Rewards:          rewardsHandler,
 		Subscription:     subscriptionHandler,
 		Announcement:     announcementHandler,
 		ChannelMonitor:   channelMonitorUserHandler,
@@ -252,6 +258,8 @@ var ProviderSet = wire.NewSet(
 	NewRedeemHandler,
 	NewDailyLotteryHandler,
 	NewIncentiveHandler,
+	rewards.New,
+	NewRewardsHandler,
 	NewSubscriptionHandler,
 	NewAnnouncementHandler,
 	NewChannelMonitorUserHandler,

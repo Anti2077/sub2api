@@ -825,7 +825,7 @@ export default {
     newConcurrency: 'New Concurrency',
     aboutCodes: 'About Redeem Codes',
     codeRule1: 'Each code can only be used once',
-    codeRule2: 'Codes may add balance, increase concurrency, or grant trial access',
+    codeRule2: 'Codes may add balance, increase concurrency, grant a subscription, or claim a reward card',
     codeRule3: 'Contact support if you have issues redeeming a code',
     codeRule4: 'Balance and concurrency updates are immediate',
     recentActivity: 'Recent Activity',

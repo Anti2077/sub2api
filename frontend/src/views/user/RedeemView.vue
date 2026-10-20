@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <component :is="embedded ? 'div' : AppLayout">
     <div class="relative mx-auto max-w-3xl space-y-6">
       <RedeemCeremony ref="ceremony" @active="ceremonyActive = $event" @progress="updateCeremonyProgress" />
       <!-- Current Balance Card -->
@@ -28,7 +28,7 @@
       <!-- Success Message -->
       <transition name="fade">
         <div
-          v-if="redeemResult"
+          v-if="redeemResult && redeemResult.type !== 'card'"
           ref="resultTarget"
           role="status"
           class="card border-emerald-200 bg-emerald-50 dark:border-emerald-800/50 dark:bg-emerald-900/20"
@@ -179,12 +179,12 @@
             <div
               v-for="item in history"
               :key="item.id"
-              class="flex items-center justify-between rounded-xl bg-gray-50 p-4 dark:bg-dark-800"
+              class="flex flex-col gap-3 rounded-xl bg-gray-50 p-4 dark:bg-dark-800 sm:flex-row sm:items-center sm:justify-between"
             >
-              <div class="flex items-center gap-4">
+              <div class="flex min-w-0 items-center gap-4">
                 <div
                   :class="[
-                    'flex h-10 w-10 items-center justify-center rounded-xl',
+                    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
                     isBalanceType(item.type)
                       ? item.value >= 0
                         ? 'bg-emerald-100 dark:bg-emerald-900/30'
@@ -235,7 +235,7 @@
                   </p>
                 </div>
               </div>
-              <div class="text-right">
+              <div class="min-w-0 text-right sm:max-w-[50%]">
                 <p
                   :class="[
                     'text-sm font-semibold',
@@ -264,7 +264,7 @@
                 <!-- Display notes for admin adjustments -->
                 <p
                   v-if="item.notes"
-                  class="mt-1 text-xs text-gray-500 dark:text-dark-400 italic max-w-[200px] truncate"
+                  class="mt-1 max-w-full truncate text-xs italic text-gray-500 dark:text-dark-400 sm:max-w-[200px]"
                   :title="item.notes"
                 >
                   {{ item.notes }}
@@ -311,7 +311,7 @@
         </div>
       </div>
     </div>
-  </AppLayout>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -321,12 +321,15 @@ import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useSubscriptionStore } from '@/stores/subscriptions'
 import { redeemAPI, authAPI, type RedeemHistoryItem } from '@/api'
+import type { RedeemResult } from '@/api/redeem'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import RedeemCeremony from '@/components/redeem/RedeemCeremony.vue'
 import RedeemTicket from '@/components/redeem/RedeemTicket.vue'
 import { formatDateTime } from '@/utils/format'
 
+defineProps<{ embedded?: boolean }>()
+const emit = defineEmits<{ redeemed: [] }>()
 const { t } = useI18n()
 const authStore = useAuthStore()
 const appStore = useAppStore()
@@ -336,15 +339,6 @@ const user = computed(() => authStore.user)
 
 const redeemCode = ref('')
 const submitting = ref(false)
-type RedeemResult = {
-  message: string
-  type: string
-  value: number
-  new_balance?: number
-  new_concurrency?: number
-  group_name?: string
-  validity_days?: number
-}
 const redeemResult = ref<RedeemResult | null>(null)
 const errorMessage = ref('')
 const invalidCode = ref<string | null>(null)
@@ -400,6 +394,7 @@ const isAdminAdjustment = (type: string) => {
 }
 
 const getHistoryItemTitle = (item: RedeemHistoryItem) => {
+  if (item.type === 'card') return t('rewards.cards')
   if (item.type === 'balance') {
     return t('redeem.balanceAddedRedeem')
   } else if (item.type === 'admin_balance') {
@@ -415,6 +410,7 @@ const getHistoryItemTitle = (item: RedeemHistoryItem) => {
 }
 
 const formatHistoryValue = (item: RedeemHistoryItem) => {
+  if (item.type === 'card') return t('rewards.notice')
   if (isBalanceType(item.type)) {
     const sign = item.value >= 0 ? '+' : ''
     return `${sign}$${item.value.toFixed(2)}`
@@ -481,6 +477,7 @@ const handleRedeem = async () => {
   }
   if (disposed) return
   balanceOverride.value = beforeBalance
+  emit('redeemed')
   concurrencyOverride.value = beforeConcurrency
   animationResult.value = result
   // Start visual delivery promptly from authoritative response values while refreshing in parallel.
@@ -511,7 +508,7 @@ const handleRedeem = async () => {
     if (result.type === 'subscription') redeemResult.value = result
     await nextTick()
     try {
-      await Promise.all([ticket.value?.accept(), result.value > 0 ? ceremony.value?.play() : Promise.resolve()])
+      await Promise.all([ticket.value?.accept(result), result.value > 0 ? ceremony.value?.play() : Promise.resolve()])
     } catch { /* Visual feedback cannot invalidate an already successful redemption. */ }
     if (disposed) return
     updateCeremonyProgress(1)

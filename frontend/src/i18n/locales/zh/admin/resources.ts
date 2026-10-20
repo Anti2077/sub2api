@@ -255,6 +255,7 @@ export default {
         actions: '操作'
       },
       types: {
+        card: '卡券',
         balance: '余额',
         concurrency: '并发数',
         subscription: '订阅',

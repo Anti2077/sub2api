@@ -1,14 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import RedeemTicket from '../RedeemTicket.vue'
-vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
+vi.mock('vue-i18n', async () => ({
+  ...(await vi.importActual<typeof import('vue-i18n')>('vue-i18n')),
+  useI18n: () => ({ t: (key: string) => key })
+}))
 function pointer(element: Element, type: string, x: number, y: number) {
   const event = new Event(type, { bubbles: true })
   Object.assign(event, { pointerId: 1, button: 0, clientX: x, clientY: y })
   element.dispatchEvent(event)
 }
 const create = () =>
-  mount(RedeemTicket, { props: { modelValue: 'CODE', locked: false } })
+  mount(RedeemTicket, { props: { modelValue: 'CODE', locked: false }, global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
 describe('manual ticket redemption', () => {
   beforeEach(() => {
     vi.stubGlobal('matchMedia', () => ({ matches: true }))
@@ -103,6 +106,66 @@ describe('manual ticket redemption', () => {
     await wrapper.setProps({ modelValue: 'CODE', locked: true })
     await wrapper.get('form').trigger('submit')
     expect(wrapper.emitted('redeem')).toBeUndefined()
+    wrapper.unmount()
+  })
+})
+
+const card = (kind: 'model_day' | 'model_tokens' | 'group_rate') => ({
+  id: 47, user_id: 1, status: 'unused', source: 'code', remaining_tokens: 1234567,
+  claim_expires_at: '2026-11-20T00:00:00Z',
+  template: { id: 1, version: 2, name: 'A real issued card', kind, model: 'gpt-6-luna', group_ids: [7, 9], tokens: 1234567, rate: .25, hours: 24, claim_days: 30, published: true },
+})
+describe('card receipt on the torn ticket', () => {
+  beforeEach(() => { vi.stubGlobal('matchMedia', () => ({ matches: true })) })
+  afterEach(() => { vi.unstubAllGlobals() })
+  it.each(['model_day', 'model_tokens', 'group_rate'] as const)('shows the actual %s benefits only after confirmed acceptance', async kind => {
+    const wrapper = create()
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.find('.card-receipt').exists()).toBe(false)
+    const received = card(kind)
+    await wrapper.vm.accept({ type: 'card', value: 0, card: received })
+    await wrapper.vm.$nextTick()
+    received.template.name = 'Later mutable template'
+    const receipt = wrapper.get('.card-receipt')
+    expect(receipt.text()).toContain('A real issued card')
+    expect(receipt.text()).toContain(`rewards.${kind}`)
+    expect(receipt.text()).toContain('#7 · #9')
+    expect(receipt.text()).toContain('rewards.receiptHours')
+    expect(receipt.text()).toContain('rewards.exchangeActivationNote')
+    if (kind === 'model_tokens') expect(receipt.text()).toContain('1,234,567')
+    if (kind === 'group_rate') {
+      expect(receipt.text()).toContain('0.25')
+      expect(receipt.text()).not.toContain('gpt-6-luna')
+    } else expect(receipt.text()).toContain('gpt-6-luna')
+    expect(wrapper.get('form').classes()).toContain('ticket-receipted')
+    expect(wrapper.find('.ticket-stamp').exists()).toBe(true)
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.find('.card-receipt').exists()).toBe(false)
+    await wrapper.get('form').trigger('submit')
+    wrapper.vm.rollback()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.card-receipt').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('keeps a successful old-server card response useful without guessing its contents', async () => {
+    const wrapper = create()
+    await wrapper.vm.accept({ type: 'card', value: 0 })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('.card-receipt').text()).toContain('rewards.notice')
+    expect(wrapper.find('dl').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('renders a long card name and model as text, with a route to the card bag', async () => {
+    const wrapper = create()
+    const received = card('model_tokens')
+    received.template.name = '<img src=x onerror=alert(1)> ' + 'Long name '.repeat(10)
+    received.template.model = 'gpt-' + 'very-long-model-'.repeat(10)
+    await wrapper.vm.accept({ type: 'card', value: 0, card: received })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('.card-receipt h3').text()).toBe(received.template.name.trim())
+    expect(wrapper.get('.receipt-model').text()).toBe(received.template.model)
+    expect(wrapper.find('.card-receipt img').exists()).toBe(false)
+    expect(wrapper.get('.receipt-bag').text()).toContain('rewards.viewBag')
     wrapper.unmount()
   })
 })

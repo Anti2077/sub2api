@@ -1,213 +1,288 @@
 <template>
   <AppLayout>
-    <div class="mx-auto max-w-6xl space-y-6">
-      <header>
-        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('incentives.title') }}</h1>
-        <p class="mt-2 text-gray-600 dark:text-gray-300">{{ t('incentives.description') }}</p>
+    <div class="reward-page">
+      <RewardsNav current="benefits" />
+      <header class="rw-header">
+        <div>
+          <p class="rw-eyebrow">
+            WEEKLY PERKS / 01
+          </p><h1>
+            {{ t('incentives.title') }}<span class="rw-title-mark">
+              .
+            </span>
+          </h1><p>
+            {{ t('incentives.description') }}
+          </p>
+        </div><div class="benefit-stamp">
+          <RewardIcon name="gift" /><span>
+            {{ t('rewards.intoPocket') }}
+          </span>
+        </div>
       </header>
-
-      <p v-if="error" role="alert" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
-        {{ error }}
-        <button type="button" class="btn btn-secondary ml-2" @click="load()">{{ t('incentives.refresh') }}</button>
+      <p v-if="error"
+         role="alert"
+         class="rw-alert">
+        <RewardIcon name="shield" />{{ error }}<button type="button"
+                                                       class="rw-link"
+                                                       @click="load()">
+          {{ t('incentives.refresh') }}
+        </button>
+      </p><p v-if="loading"
+             role="status"
+             class="rw-caption">
+        {{ t('incentives.loading') }}
       </p>
-      <p v-if="loading" class="text-gray-500 dark:text-dark-300">{{ t('incentives.loading') }}</p>
-
-      <div v-if="items.length" class="grid gap-6 lg:grid-cols-2">
-        <section
-          v-for="item in items"
-          :id="item.kind"
-          :key="item.kind"
-          class="card space-y-5 p-5 sm:p-6"
-        >
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t(`incentives.${item.kind}`) }}</h2>
-              <p class="mt-1 text-sm text-gray-500 dark:text-dark-300">
-                {{ date(item.starts_at) }} — {{ date(item.ends_at) }} · {{ item.timezone }}
-              </p>
-            </div>
-            <span
-              class="rounded-full px-3 py-1 text-xs font-semibold"
-              :class="isItemActive(item) ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-dark-300'"
-            >
-              {{ isItemActive(item) ? t('incentives.enabled') : t('incentives.disabled') }}
+      <div v-if="loading && !items.length"
+           class="benefit-skeleton"
+           aria-hidden="true">
+        <div/><div/>
+      </div>
+      <div class="benefit-flow">
+        <div :class="['benefit-step', {'is-done':lottery?.checked_in_today,'is-current':!lottery?.checked_in_today}]">
+          <span>
+            01
+          </span><RewardIcon name="check" /><div>
+            <strong>
+              {{ t('rewards.checkInStep') }}
+            </strong><small>
+              {{ t('rewards.checkInStepNote') }}
+            </small>
+          </div>
+        </div><i>
+          →
+        </i><div :class="['benefit-step', {'is-current':lottery?.checked_in_today}]">
+          <span>
+            02
+          </span><RewardIcon name="gift" /><div>
+            <strong>
+              {{ t('rewards.drawStep') }}
+            </strong><small>
+              {{ t('rewards.drawStepNote') }}
+            </small>
+          </div>
+        </div><i>
+          →
+        </i><div class="benefit-step">
+          <span>
+            03
+          </span><RewardIcon name="ticket" /><div>
+            <strong>
+              {{ t('rewards.cardStep') }}
+            </strong><small>
+              {{ t('rewards.cardStepNote') }}
+            </small>
+          </div>
+        </div>
+      </div>
+      <div v-if="items.length"
+           class="benefit-grid">
+        <section v-for="item in items"
+                 :id="item.kind"
+                 :key="item.kind"
+                 class="rw-panel benefit-card"
+                 :class="`benefit-${item.kind}`">
+          <div class="benefit-card-head">
+            <div class="benefit-icon">
+              <RewardIcon :name="item.kind==='global_rate'?'spark':'gift'" />
+            </div><div>
+              <p class="rw-eyebrow">
+                {{ item.kind==='global_rate' ? 'SITEWIDE RATE' : 'DAILY DRAW' }}
+              </p><h2>
+                {{ t(`incentives.${item.kind}`) }}
+              </h2>
+            </div><span class="benefit-status"
+                        :class="{active:isItemActive(item)}">
+              <i />{{ isItemActive(item) ? t('incentives.enabled') : t('incentives.disabled') }}
             </span>
           </div>
-
-          <template v-if="item.kind === 'global_rate'">
-            <div v-if="item.enabled" class="space-y-4">
-              <div class="flex items-end justify-between gap-3">
-                <div>
-                  <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-dark-400">{{ t('incentives.progress') }}</p>
-                  <p class="mt-1 text-3xl font-semibold tabular-nums text-gray-900 dark:text-white">${{ item.spend.toFixed(2) }}</p>
-                </div>
-                <p class="text-right text-sm text-gray-500 dark:text-dark-300">
-                  {{ t('incentives.next') }}<br />
-                  <strong class="text-primary-600 dark:text-primary-300">${{ item.next_threshold.toFixed(2) }}</strong>
-                </p>
+          <p class="rw-caption benefit-period">
+            {{ date(item.starts_at) }} — {{ date(item.ends_at) }} · {{ item.timezone }}
+          </p><template v-if="item.kind==='global_rate'">
+            <div v-if="item.enabled"
+                 class="benefit-rate">
+              <div>
+                <span class="rw-caption">
+                  {{ t('incentives.progress') }}
+                </span><strong>
+                  ${{ item.spend.toFixed(2) }}
+                </strong>
+              </div><div class="rate-next">
+                <span>
+                  {{ t('incentives.next') }}
+                </span><strong>
+                  ${{ item.next_threshold.toFixed(2) }}
+                </strong>
               </div>
-
-              <div
-                class="h-3 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-700"
-                role="progressbar"
-                :aria-valuenow="progressPercent(item)"
-                aria-valuemin="0"
-                aria-valuemax="100"
-                :aria-label="t('incentives.progress')"
-              >
-                <div class="h-full rounded-full bg-gradient-to-r from-primary-500 to-emerald-500 transition-[width] duration-300" :style="{ width: `${progressPercent(item)}%` }" />
+            </div><div v-if="item.enabled"
+                       class="rw-progress">
+              <span :style="{width:`${progressPercent(item)}%`}" />
+            </div><div v-if="item.groups.length"
+                       class="rate-list">
+              <div v-for="group in item.groups"
+                   :key="group.group_id">
+                <span>
+                  {{ group.name }}
+                </span><span class="rate-values">
+                  <del>
+                    {{ formatRate(group.base_rate) }}×
+                  </del><strong>
+                    {{ formatRate(group.current_rate) }}×
+                  </strong>
+                </span>
               </div>
-
-              <p v-if="!item.eligible" role="status" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-200">
-                {{ t('incentives.excludedNotice') }}
-              </p>
-
-              <div v-if="item.groups.length" class="grid gap-2 sm:grid-cols-2">
-                <div v-for="group in item.groups" :key="group.group_id" class="rounded-lg border border-gray-200/80 bg-white/60 px-3 py-3 dark:border-dark-700 dark:bg-dark-900/30">
-                  <p class="truncate text-xs text-gray-500 dark:text-dark-400">{{ group.name }}</p>
-                  <div class="mt-1 flex items-baseline justify-between gap-2">
-                    <span class="text-sm tabular-nums text-gray-500 line-through dark:text-dark-500">{{ formatRate(group.base_rate) }}x</span>
-                    <strong class="text-base tabular-nums text-primary-700 dark:text-primary-300">{{ formatRate(group.current_rate) }}x</strong>
-                  </div>
-                </div>
-              </div>
-              <p class="text-sm text-gray-500 dark:text-dark-300">{{ t('incentives.rateNote') }}</p>
-            </div>
-            <p v-else class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-600 dark:border-dark-700 dark:bg-dark-900/40 dark:text-dark-300">
+            </div><p v-if="item.eligible"
+                     class="rw-note">
+              <RewardIcon name="spark" />{{ t('incentives.rateNote') }}
+            </p><p v-else
+                   class="benefit-muted">
+              {{ t('incentives.excludedNotice') }}
+            </p><p v-if="!item.enabled"
+                   class="benefit-muted">
               {{ t('incentives.disabled') }}
             </p>
           </template>
-
           <template v-else>
-            <div v-if="item.enabled" class="space-y-4">
-              <div class="flex items-end justify-between gap-3">
-                <div>
-                  <p class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-dark-400">{{ t('incentives.progress') }}</p>
-                  <p class="mt-1 text-3xl font-semibold tabular-nums text-gray-900 dark:text-white">${{ item.personal_spend.toFixed(2) }}</p>
-                </div>
-                <p class="text-right text-sm text-gray-500 dark:text-dark-300">
-                  {{ t('incentives.next') }}<br />
-                  <strong class="text-primary-600 dark:text-primary-300">${{ item.next_threshold.toFixed(2) }}</strong>
-                </p>
-              </div>
-              <div
-                class="h-3 overflow-hidden rounded-full bg-gray-200 dark:bg-dark-700"
-                role="progressbar"
-                :aria-valuenow="progressPercent(item)"
-                aria-valuemin="0"
-                aria-valuemax="100"
-                :aria-label="t('incentives.progress')"
-              >
-                <div class="h-full rounded-full bg-gradient-to-r from-primary-500 to-violet-500 transition-[width] duration-300" :style="{ width: `${progressPercent(item)}%` }" />
-              </div>
+            <div class="lottery-welcome">
+              <svg class="lottery-gift" viewBox="0 0 120 120" aria-hidden="true"><path d="M19 48h82v54H19z" fill="#e8b96d"/><path d="M14 35h92v20H14z" fill="#d88e61"/><path d="M54 35h12v67H54z" fill="#f6df9d"/><path d="M60 35c-20 0-30-9-24-19 6-10 24 0 24 19Zm0 0c20 0 30-9 24-19-6-10-24 0-24 19Z" fill="#f0c780" stroke="#b87754" stroke-width="3"/><path d="M19 102h82" stroke="#b87754" stroke-width="5" stroke-linecap="round"/></svg>
+              <div><h3>{{ t('rewards.drawWelcome') }}</h3><p>{{ t('rewards.drawWelcomeNote') }}</p></div>
             </div>
-            <p v-else class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-600 dark:border-dark-700 dark:bg-dark-900/40 dark:text-dark-300">
-              {{ t('incentives.consumptionDisabled') }}
-            </p>
-
-            <div class="rounded-xl border border-primary-200 bg-primary-50/70 p-4 dark:border-primary-800/60 dark:bg-primary-900/20">
-              <div class="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 class="font-semibold text-gray-900 dark:text-white">{{ t('incentives.checkInTitle') }}</h3>
-                  <p class="mt-1 text-sm text-gray-600 dark:text-dark-300">{{ t('incentives.checkInDescription') }}</p>
-                </div>
-                <span v-if="item.checked_in_today" class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                  {{ t('incentives.checkedInToday') }}
+            <div class="lottery-balance">
+              <div>
+                <span class="rw-caption">
+                  {{ t('incentives.available') }}
+                </span><strong>
+                  {{ item.available.toString().padStart(2,'0') }}
+                </strong><small>
+                  {{ t('rewards.drawUnit') }}
+                </small>
+              </div><div class="lottery-totals">
+                <span>
+                  {{ t('incentives.earned') }} <b>
+                    {{ item.earned }}
+                  </b>
+                </span><span>
+                  {{ t('incentives.used') }} <b>
+                    {{ item.used }}
+                  </b>
                 </span>
               </div>
-              <button
-                type="button"
-                data-testid="incentive-check-in"
-                class="btn btn-secondary mt-4 min-h-11 w-full sm:w-auto"
-                :disabled="checkInPending || item.checked_in_today || !item.check_in_enabled"
-                @click="checkIn"
-              >
-                {{ checkInPending ? t('incentives.checkingIn') : item.checked_in_today ? t('incentives.checkedInToday') : item.check_in_enabled ? t('incentives.checkIn') : t('incentives.checkInDisabled') }}
+            </div><div class="checkin-box">
+              <div>
+                <strong>
+                  {{ t('incentives.checkInTitle') }}
+                </strong><p>
+                  {{ t('incentives.checkInDescription') }}
+                </p>
+              </div><button type="button"
+                            data-testid="incentive-check-in"
+                            class="btn btn-secondary"
+                            :disabled="checkInPending||item.checked_in_today||!item.check_in_enabled"
+                            @click="checkIn">
+                {{ checkInPending?t('incentives.checkingIn'):item.checked_in_today?t('incentives.checkedInToday'):item.check_in_enabled?t('incentives.checkIn'):t('incentives.checkInDisabled') }}
               </button>
-            </div>
-
-            <div
-              v-if="drawing"
-              data-testid="incentive-draw-animation"
-              class="incentive-draw-stage"
-              role="status"
-              aria-live="polite"
-              aria-busy="true"
-            >
-              <div class="incentive-draw-stage__pulse" aria-hidden="true"><span /></div>
-              <div class="min-w-0">
-                <p class="text-xs font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-300">{{ t('incentives.drawing') }}</p>
-                <p class="mt-1 truncate text-lg font-semibold text-gray-900 dark:text-white">{{ activePrize?.name || t('incentives.drawing') }}</p>
+            </div><div v-if="drawing"
+                       data-testid="incentive-draw-animation"
+                       class="draw-stage"
+                       role="status"
+                       aria-live="polite"
+                       aria-busy="true">
+              <div class="draw-orbit">
+                <RewardIcon name="spark" />
+              </div><div>
+                <p class="rw-eyebrow">
+                  {{ t('incentives.drawing') }}
+                </p><strong>
+                  {{ activePrize?.name || t('incentives.drawing') }}
+                </strong>
+              </div><div class="draw-dots">
+                <i v-for="prize in enabledPrizes"
+                   :key="prize.id"
+                   :class="{'is-active':activePrize?.id===prize.id}" />
               </div>
-              <div class="incentive-draw-stage__dots" aria-hidden="true">
-                <span
-                  v-for="prize in enabledPrizes"
-                  :key="prize.id"
-                  :class="{ 'is-active': activePrize?.id === prize.id }"
-                />
+            </div><button type="button"
+                          data-testid="incentive-draw"
+                          class="draw-button"
+                          :disabled="drawing||item.available<1||(!item.enabled&&!item.check_in_enabled)"
+                          @click="draw">
+              <RewardIcon name="gift" />{{ t(drawing?'incentives.drawing':'incentives.draw') }}<span>
+                {{ item.available }}
+              </span>
+            </button><p v-if="!drawing && item.available < 1" class="draw-empty-hint">{{ t('rewards.drawEmptyHint') }}</p><p v-if="result"
+                        role="status"
+                        class="draw-result">
+              <RewardIcon name="check" /><span>{{ result.prize.name }} · {{ result.prize.card?.name || '$'+result.reward_amount.toFixed(2) }}<small>{{ result.prize.card ? t('rewards.cardNote') : t('rewards.balanceDeposited') }}</small></span><RouterLink v-if="result.prize.card" class="rw-link" to="/cards?tab=bag">{{ t('rewards.viewBag') }}<RewardIcon name="arrow" /></RouterLink>
+            </p><p class="rw-caption mt-3">
+              {{ t('incentives.expiry') }}
+            </p><div v-if="item.enabled"
+                     class="lottery-consumption">
+              <p class="rw-caption">
+                {{ t('incentives.progress') }} ${{ item.personal_spend.toFixed(2) }} · {{ t('incentives.next') }} ${{ item.next_threshold.toFixed(2) }}
+              </p><div class="rw-progress"
+                       role="progressbar"
+                       :aria-label="t('incentives.progress')"
+                       :aria-valuenow="progressPercent(item)"
+                       aria-valuemin="0"
+                       aria-valuemax="100">
+                <span :style="{width:`${progressPercent(item)}%`}" />
               </div>
-            </div>
-
-            <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-gray-600 dark:text-dark-300">
+            </div><p v-else
+                     class="rw-caption mt-3">
+              {{ t('incentives.consumptionDisabled') }}
+            </p><div v-if="enabledPrizes.length"
+                     class="prize-grid">
               <p>
-                {{ t('incentives.available') }}: <strong class="text-gray-900 dark:text-white">{{ item.available }}</strong>
-                · {{ t('incentives.earned') }}: {{ item.earned }} · {{ t('incentives.used') }}: {{ item.used }}
-              </p>
-              <p>{{ t('incentives.expiry') }}</p>
-            </div>
-
-            <button
-              type="button"
-              data-testid="incentive-draw"
-              class="btn btn-primary min-h-11 w-full"
-              :disabled="drawing || item.available < 1 || (!item.enabled && !item.check_in_enabled)"
-              @click="draw"
-            >
-              {{ t(drawing ? 'incentives.drawing' : 'incentives.draw') }}
-            </button>
-            <p v-if="result" role="status" class="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-              {{ result.prize.name }} · ${{ result.reward_amount.toFixed(2) }}
-            </p>
-
-            <div v-if="item.prizes.filter((prize) => prize.enabled).length" class="space-y-2">
-              <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('incentives.prizes') }}</p>
-              <ul class="space-y-2">
-                <li
-                  v-for="prize in item.prizes.filter((entry) => entry.enabled)"
-                  :key="prize.id"
-                  class="incentive-prize-row flex justify-between gap-3 text-sm text-gray-600 dark:text-dark-300"
-                  :class="{
-                    'incentive-prize-row--active': drawing && activePrize?.id === prize.id,
-                    'incentive-prize-row--winning': !drawing && result?.prize.id === prize.id
-                  }"
-                >
-                  <span>{{ prize.name }}</span>
-                  <span>${{ prize.reward_amount.toFixed(2) }} · {{ (prize.probability * 100).toFixed(2) }}%</span>
-                </li>
-              </ul>
+                {{ t('incentives.prizes') }}
+              </p><div v-for="prize in enabledPrizes"
+                       :key="prize.id"
+                       class="prize-chip"
+                       :class="{'is-active':drawing&&activePrize?.id===prize.id,'is-winning':!drawing&&result?.prize.id===prize.id}">
+                <RewardIcon :name="prize.card?'ticket':'crystal'" /><span>
+                  {{ prize.name }}<small>
+                    {{ prize.card?.name || '$'+prize.reward_amount.toFixed(2) }}
+                  </small>
+                </span><b>
+                  {{ (prize.probability*100).toFixed(2) }}%
+                </b>
+              </div>
             </div>
           </template>
         </section>
       </div>
-
-      <section v-if="history" class="card p-5 sm:p-6">
-        <h2 class="mb-4 text-lg font-semibold text-gray-900 dark:text-white">{{ t('incentives.history') }}</h2>
-        <p v-if="!history.rewards.length" class="text-sm text-gray-500 dark:text-dark-300">{{ t('incentives.empty') }}</p>
-        <ul v-else class="space-y-3">
-          <li v-for="reward in history.rewards" :key="reward.id" class="flex flex-wrap justify-between gap-2 border-b border-gray-100 pb-3 text-sm last:border-b-0 last:pb-0 dark:border-dark-700">
-            <time class="text-gray-500 dark:text-dark-300">{{ date(reward.created_at) }}</time>
-            <span class="font-medium text-gray-900 dark:text-white">{{ reward.prize.name }} · ${{ reward.reward_amount.toFixed(2) }}</span>
+      <section v-if="history"
+               class="rw-panel benefit-history">
+        <div class="rw-section-title">
+          <div>
+            <h2>
+              {{ t('incentives.history') }}
+            </h2><p class="rw-caption">
+              {{ t('rewards.historyNote') }}
+            </p>
+          </div><RewardIcon name="clock" />
+        </div><p v-if="!history.rewards.length"
+                 class="rw-empty">
+          {{ t('incentives.empty') }}
+        </p><ul v-else>
+          <li v-for="reward in history.rewards"
+              :key="reward.id">
+            <span class="history-dot" /><time>
+              {{ date(reward.created_at) }}
+            </time><strong>
+              {{ reward.prize.name }}
+            </strong><span>
+              {{ reward.prize.card?.name || '$'+reward.reward_amount.toFixed(2) }}
+            </span>
           </li>
         </ul>
       </section>
     </div>
   </AppLayout>
 </template>
-
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import RewardsNav from '@/components/rewards/RewardsNav.vue'
+import RewardIcon from '@/components/rewards/RewardIcon.vue'
 import { incentivesAPI, type IncentiveHistory, type IncentiveStatus } from '@/api/incentives'
 import type { DailyLotteryPrize } from '@/api/dailyLottery'
 

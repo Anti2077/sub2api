@@ -43,7 +43,7 @@ const status = (enabled = true, available = 2, checkInEnabled = false, checkedIn
 }]
 
 const render = () => mount(IncentivesView, {
-  global: { stubs: { AppLayout: { template: '<slot />' } } }
+  global: { stubs: { AppLayout: { template: '<slot />' }, RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } } }
 })
 
 beforeEach(() => {
@@ -56,6 +56,19 @@ beforeEach(() => {
 })
 
 describe('IncentivesView', () => {
+  it('links an awarded card to the bag and does not describe it as deposited balance', async () => {
+    vi.useFakeTimers()
+    api.draw.mockResolvedValue({ prize: { ...prizes[0], card: { name: 'Luna day card' }, card_id: 42 }, reward_amount: 0, source: 'checkin' })
+    const page = render()
+    await flushPromises()
+    await page.get('[data-testid="incentive-draw"]').trigger('click')
+    await vi.advanceTimersByTimeAsync(1350)
+    await flushPromises()
+    expect(page.get('.draw-result a').attributes('href')).toBe('/cards?tab=bag')
+    expect(page.get('.draw-result').text()).toContain('Luna day card')
+    expect(page.get('.draw-result').text()).not.toContain('rewards.balanceDeposited')
+    page.unmount()
+  })
   it('shows the daily check-in action and refreshes the chance count', async () => {
     api.status.mockResolvedValueOnce(status(true, 0, true, false)).mockResolvedValueOnce(status(true, 1, true, true))
     const page = render()

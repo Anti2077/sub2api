@@ -1,0 +1,22 @@
+name: sub2api-rewards-local
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: rewards_test
+      POSTGRES_PASSWORD: rewards_local_only
+      POSTGRES_DB: rewards_test
+    ports: ['127.0.0.1:15486:5432']
+    volumes: ['rewards_pg:/var/lib/postgresql']
+    healthcheck:
+      test: ['CMD-SHELL','pg_isready -U rewards_test -d rewards_test']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:8.4-alpine
+    ports: ['127.0.0.1:16386:6379']
+    volumes: ['rewards_redis:/data']
+volumes:
+  rewards_pg:
+  rewards_redis:

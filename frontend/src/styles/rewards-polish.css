@@ -1,0 +1,65 @@
+/* Illustrated field and shared activity surfaces. */
+.farm-layout{min-width:0}.farm-scene{width:100%;min-width:0}.farm-aside{min-width:0}
+.farm-action-guide>.farm-crop-image{grid-column:1;grid-row:2/5;width:min(100%,72px);height:80px;align-self:center}
+.farm-crop-image{display:block}.farm-crop-image>img{width:100%;height:100%;object-fit:contain}.farm-crop{position:absolute;left:50%;bottom:27%;translate:-50% 0;z-index:1;width:62%;height:60%;transform:none;filter:drop-shadow(1px 3px 1px #352b2433)}.farm-crop.is-young{width:42%;height:42%;bottom:29%;transform:none}
+.farm-crop.is-ripe{animation:none}
+.farm-crop>.crop-art{width:100%;height:100%;transform:none}.seed-option>.crop-mini{flex:none}
+@media(prefers-reduced-motion:reduce){.farm-crop.is-ripe,.cards-skeleton span{animation:none}.reward-ticket{transition:none}}
+.farm-scene{aspect-ratio:4/3;border:1px solid #9eaf78;box-shadow:0 8px 28px #53643c19}
+.farm-scene:after{pointer-events:none;background:linear-gradient(180deg,#fff5d011,transparent 45%,#34452414)}
+.crop-art{object-fit:contain;width:85%;height:77%;transform:translateY(-8%);filter:drop-shadow(2px 7px 2px #352b2444)}
+.crop-art.is-young{width:65%;height:55%;transform:translateY(6%)}
+.farm-aside{grid-template-columns:1fr 1fr}
+.farm-action-guide{display:grid;grid-template-columns:72px 1fr;column-gap:14px;align-content:center;padding:20px;background:linear-gradient(135deg,var(--rw-soft),var(--rw-paper))}
+.farm-action-guide .rw-section-title{grid-column:1/-1;margin-bottom:12px}
+.farm-action-guide>img{grid-column:1;grid-row:2/5;width:72px;height:80px;object-fit:contain;align-self:center}
+.farm-action-guide>strong{font-size:16px;align-self:end}.farm-action-guide>p{margin:5px 0;font-size:12px;color:var(--rw-sage)}
+.farm-action-guide>small{font-size:11px;line-height:1.7;color:var(--rw-muted)}
+.farm-crop-detail{padding:18px;display:grid;gap:13px}.farm-crop-detail .rw-section-title{margin:0}.farm-crop-detail>.farm-crop-image{width:94px;height:88px;margin:auto}.farm-crop-detail>strong{text-align:center;font-size:13px;color:var(--rw-sage)}.farm-crop-detail .rw-link{justify-content:center}
+.reward-terms{display:grid;gap:10px;margin:0;font-size:12px;line-height:1.7}.reward-terms>div{display:flex;justify-content:space-between;gap:16px}.reward-terms dt{color:var(--rw-muted)}.reward-terms dd{text-align:right;overflow-wrap:anywhere;margin:0;min-width:0}.farm-shop-card>.reward-terms{padding:14px 0;margin-bottom:14px;border-block:1px solid var(--rw-line)}.farm-shop-card>.btn{margin-top:18px}.exchange-cost{border-top:1px solid #b5c8d4;padding-top:14px}.shop-receipt{grid-column:1/-1;flex-wrap:wrap;margin-bottom:0}.shop-receipt>span{flex:1;min-width:180px}
+.farm-seeds{grid-column:1/-1}.seed-option .crop-mini{width:52px;height:56px;object-fit:contain}
+.farm-goal{padding:20px}.farm-goal .rw-section-title{margin-bottom:12px}
+.cards-filter{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 22px}.cards-filter button{display:flex;align-items:center;gap:8px;min-height:44px;padding:8px 15px;border:1px solid var(--rw-line);border-radius:99px;font-size:12px;color:var(--rw-muted);background:var(--rw-paper)}
+.cards-filter button[aria-pressed=true]{background:var(--rw-mist);border-color:var(--rw-blue);color:var(--rw-blue)}.cards-filter button span{font:11px ui-monospace,monospace;opacity:.8}
+.cards-skeleton{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.cards-skeleton span{height:380px;border-radius:20px;background:var(--rw-mist);animation:rw-loading 1.5s ease-in-out infinite alternate}
+.reward-ticket{position:relative;overflow:hidden;box-shadow:0 7px 18px #23384f08;transition:box-shadow .2s,transform .2s}.reward-ticket:hover{transform:translateY(-3px);box-shadow:0 12px 24px #23384f12}
+.reward-ticket:after{content:"";position:absolute;right:-25px;top:70px;width:120px;height:120px;border:18px solid currentColor;border-radius:50%;opacity:.025;pointer-events:none}
+.ticket-active-note{min-height:44px}.card-activation-preview{display:grid;gap:14px;padding:18px;border:1px solid #b5c8d4;border-radius:16px;background:#f1f6f7;color:#23384f}.card-activation-preview h3{font-size:18px;font-weight:600;overflow-wrap:anywhere}.card-activation-preview dl{display:grid;gap:10px}.card-activation-preview dl>div{display:flex;justify-content:space-between;gap:16px;font-size:12px}.card-activation-preview dt{color:#536b7e}.card-activation-preview dd{margin:0;text-align:right;overflow-wrap:anywhere}.card-activation-preview p{font-size:12px;line-height:1.8;color:#536b7e}
+html.dark .card-activation-preview{background:#254858;color:#eaf0f2;border-color:#426f80}html.dark .card-activation-preview dt,html.dark .card-activation-preview p{color:#b7cbd1}
+.benefit-flow .is-done{background:var(--rw-soft);color:var(--rw-sage)}
+.benefit-grid{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);align-items:start}.benefit-lottery{position:relative;background:linear-gradient(145deg,var(--rw-paper) 45%,var(--rw-soft))}
+.lottery-welcome{display:flex;align-items:center;gap:20px;padding:10px 0 22px;border-bottom:1px solid var(--rw-line);margin-bottom:20px}.lottery-welcome h3{font-size:22px;font-weight:650;line-height:1.5}.lottery-welcome p{font-size:12px;color:var(--rw-muted);line-height:1.8;margin-top:6px}.lottery-gift{width:108px;height:114px;flex:none;filter:drop-shadow(0 8px 4px #36556b20)}
+.lottery-balance strong{font-size:42px}.draw-button{background:linear-gradient(130deg,#527b91,#365d7e);box-shadow:0 4px 0 #294963,0 9px 18px #365d7e26}.draw-button:active:enabled{transform:translateY(2px);box-shadow:0 2px 0 #294963}.draw-button:hover:enabled{background:linear-gradient(130deg,#446d84,#294f71)}
+.draw-result{align-items:flex-start;padding:16px;flex-wrap:wrap}.draw-result>span{display:flex;flex:1;min-width:150px;flex-direction:column;font-size:13px;line-height:1.8}.draw-result>span small{font-size:11px;color:var(--rw-muted)}.draw-result .rw-link{width:100%;font-size:13px}.draw-result svg{margin-top:4px}.draw-empty-hint{margin:12px 0;font-size:12px;line-height:1.8;color:var(--rw-muted)}
+.prize-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.prize-grid>p{grid-column:1/-1}.prize-chip{border:1px solid var(--rw-line);border-radius:12px;padding:12px;align-items:start;position:relative;min-height:90px;gap:8px}.prize-chip>b{position:absolute;right:9px;bottom:8px;font-size:10px}.prize-chip>svg{width:24px;height:24px;padding:4px;background:var(--rw-mist);border-radius:7px}.prize-chip small{line-height:1.7;margin-top:4px;padding-bottom:12px}.prize-chip.is-winning{border-color:var(--rw-sage);background:var(--rw-soft)}
+@media(min-width:1200px){.farm-layout{grid-template-columns:minmax(0,1fr) 280px;align-items:start}.farm-aside{display:flex;flex-direction:column;gap:14px}.farm-seeds{order:2;grid-template-columns:repeat(2,minmax(0,1fr));padding:16px}.farm-action-guide{padding:16px}.farm-goal{order:3}.farm-seeds .rw-section-title{margin-bottom:12px}.farm-seeds .seed-option{min-height:106px}.farm-seeds .seed-option strong{font-size:12px}.farm-scene{min-height:530px}}
+@media(max-width:900px){.benefit-grid{grid-template-columns:1fr}.benefit-lottery{order:-1}.cards-skeleton{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.farm-scene{aspect-ratio:1/1.08;min-height:0}.crop-art{height:75%;width:85%}.crop-art.is-young{width:65%;height:55%}.farm-aside{grid-template-columns:1fr}.farm-action-guide{padding:14px;grid-template-columns:52px 1fr}.farm-action-guide>img{width:52px;height:60px}.farm-action-guide .rw-section-title{margin-bottom:6px}.farm-action-guide .rw-section-title h2{font-size:14px}.farm-action-guide>strong{font-size:14px}.farm-action-guide>small{font-size:12px}.farm-seeds{grid-column:auto}.farm-goal{order:3}.cards-filter{gap:6px;margin-bottom:16px}.cards-filter button{padding:6px 12px}.cards-skeleton{grid-template-columns:1fr}.lottery-welcome{gap:12px}.lottery-welcome h3{font-size:19px}.lottery-gift{width:86px;height:94px}.benefit-flow{flex-direction:row;gap:6px}.benefit-step{flex:1;flex-direction:column;align-items:start;padding:10px;gap:5px}.benefit-step>span,.benefit-step>svg{display:none}.benefit-step strong{font-size:12px}.benefit-step small{font-size:10px;line-height:1.6}.benefit-stamp{display:none}.prize-chip{padding:10px;gap:6px}.prize-chip>svg{width:22px;height:22px}}
+
+/* The complete farm uses one orthographic 2:1 world, never stretched textures. */
+.farm-page .farm-scene{aspect-ratio:960/740;min-height:0;background:#c1d3a1;border-color:#b5c39a}
+.farm-world{position:absolute;left:50%;top:50%;width:100%;aspect-ratio:960/740;translate:-50% -50%}
+.farm-page .farm-pods{position:absolute;inset:0;padding:0}
+.farm-page .farm-plot{translate:-50% -75%;transition:none;filter:none}
+.farm-page .farm-hit{clip-path:polygon(50% 50%,100% 75%,50% 100%,0 75%)}
+.farm-page .pod-planter,.farm-page .farm-selection{bottom:0;width:100%;height:50%;aspect-ratio:2;filter:none}
+.farm-page .farm-selection{stroke:#fff4ca;stroke-width:2;z-index:2}
+.farm-page .farm-crop,.farm-page .farm-crop.is-young{left:0;top:0;bottom:0;width:100%;height:100%;translate:none;transform:none;filter:none;clip-path:polygon(50% 34%,80% 55%,82% 80%,50% 91%,18% 80%,20% 55%)}
+.farm-page .pod-plus{top:75%;width:20px;height:20px;color:#f1dcad;filter:none}
+.farm-page .pod-number{bottom:4%;font-size:10px;color:#f8e5bf;text-shadow:0 1px 1px #695035}
+.farm-page .pod-ready{top:38%;right:17%;padding:3px;background:#fff3ca;border-color:#c8ab73;box-shadow:0 2px 3px #52613c19}
+.farm-page .pod-feedback{top:24%}
+.farm-page .farm-scene:after{background:none}
+html.dark .farm-page .farm-world{filter:brightness(.78) saturate(.82)}
+@media(max-width:640px){.farm-page .farm-scene{aspect-ratio:1/1.06}.farm-world{width:112%}.farm-page .pod-number{font-size:9px}.farm-page .pod-ready{padding:2px}.farm-page .pod-ready svg{width:9px;height:9px}.farm-page .pod-plus{width:18px;height:18px}}
+
+/* Morning light is static and shares the world coordinates, including the crops. */
+.farm-page .farm-world::after{content:"";position:absolute;inset:0;z-index:4;pointer-events:none;background:radial-gradient(ellipse at 14% 8%,#fff6d51a,transparent 58%)}
+.farm-page .farm-scene{box-shadow:inset 0 1px 0 #fff9dc99,0 2px 4px #495d3520,0 14px 32px #495d3514}
+.farm-page .farm-scene::after{z-index:5;box-shadow:inset 0 0 30px #4a623610,inset 0 1px 0 #fff7d68c;border-radius:inherit;background:linear-gradient(135deg,transparent 55%,#4a623608)}
+.farm-page .farm-scene-tag,.farm-page .farm-live{border:1px solid #fff8de80;background:#fff9e7e8;box-shadow:inset 0 1px 0 #fffdf5,0 2px 5px #4d63351a;color:#50663d}
+.farm-page .farm-scene-footer{background:#fff9eaeF;border-color:#fff5d2b3;box-shadow:inset 0 1px 0 #fffdf3,0 3px 8px #3e542219;color:#4f633f}
+.farm-page .farm-selection{stroke:#fff0b8;stroke-width:1.6}
+html.dark .farm-page .farm-world::after{opacity:.35}
+html.dark .farm-page .farm-scene-tag,html.dark .farm-page .farm-live{background:#2f483ceF;border-color:#66806b;color:#e6eccf;box-shadow:inset 0 1px 0 #c9deb41a,0 2px 5px #17261f26}
+html.dark .farm-page .farm-scene-footer{background:#2c4438f2;border-color:#67816b;color:#e0e9ce;box-shadow:inset 0 1px 0 #c9deb41a,0 3px 8px #17261f26}

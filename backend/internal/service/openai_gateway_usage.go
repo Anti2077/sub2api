@@ -328,6 +328,8 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		// usage row instead of dropping it on the Standard re-evaluation.
 		if standardErr == nil && cost != nil && standardCost != nil {
 			cost.ActualCost = standardCost.ActualCost
+			cost.RewardTextCost = standardCost.RewardTextCost
+			cost.RewardBaseRate = standardCost.RewardBaseRate
 		}
 	}
 
@@ -691,6 +693,10 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 			lastErr = fmt.Errorf("%w: openai usage billing model is empty", ErrModelPricingUnavailable)
 		}
 		return nil, fmt.Errorf("calculate OpenAI usage cost failed for billing models %s: %w", strings.Join(billingModels, ","), lastErr)
+	}
+	if result != nil && result.ImageCount == 0 && result.VideoCount == 0 && (tokenCost.BillingMode == "" || tokenCost.BillingMode == string(BillingModeToken)) {
+		tokenCost.RewardTextCost = rewardTextCharge(tokenCost)
+		tokenCost.RewardBaseRate = webSearchMultiplier
 	}
 	if searchCost == nil || (searchCost.TotalCost == 0 && searchCost.ActualCost == 0) {
 		return tokenCost, nil

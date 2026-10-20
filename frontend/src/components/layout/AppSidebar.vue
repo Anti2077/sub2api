@@ -747,12 +747,14 @@ function buildSelfNavItems(withDashboard: boolean, dashboardLabel = t('nav.dashb
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     { path: '/leaderboard', label: t('nav.tokenLeaderboard'), icon: TrophyIcon, hideInSimpleMode: true },
     { path: '/incentives', label: t('incentives.title'), icon: GiftIcon, hideInSimpleMode: true },
+    { path:'/cards',label:t('rewards.cards'),icon:TicketIcon,hideInSimpleMode:true },
+    { path:'/farm',label:t('rewards.farm'),icon:GiftIcon,hideInSimpleMode:true },
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
     { path: '/monitor', label: t('nav.channelStatus'), icon: SignalIcon, featureFlag: flagChannelMonitor },
     { path: '/subscriptions', label: t('nav.mySubscriptions'), icon: CreditCardIcon, hideInSimpleMode: true, featureFlag: flagSubscription },
     { path: '/purchase', label: purchaseNavLabel.value, icon: RechargeSubscriptionIcon, hideInSimpleMode: true, featureFlag: flagPayment },
     { path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, hideInSimpleMode: true, featureFlag: flagPayment },
-    { path: '/redeem', label: t('nav.redeem'), icon: GiftIcon, hideInSimpleMode: true },
+
     { path: '/affiliate', label: t('nav.affiliate'), icon: UsersIcon, hideInSimpleMode: true, featureFlag: flagAffiliate },
     { path: '/profile', label: t('nav.profile'), icon: UserIcon },
     ...customMenuItemsForUser.value.map((item): NavItem => ({
@@ -833,6 +835,8 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/redeem', label: t('nav.redeemCodes'), icon: TicketIcon, hideInSimpleMode: true },
     { path: '/admin/promo-codes', label: t('nav.promoCodes'), icon: GiftIcon, hideInSimpleMode: true },
     { path: '/admin/incentives', label: t('incentives.settings'), icon: TrophyIcon, hideInSimpleMode: true },
+    {path:'/admin/reward-cards',label:t('rewards.admin'),icon:TicketIcon,hideInSimpleMode:true},
+    {path:'/admin/farm',label:t('rewards.farmAdmin'),icon:GiftIcon,hideInSimpleMode:true},
     {
       path: '/admin/affiliates',
       label: t('nav.affiliateManagement'),
