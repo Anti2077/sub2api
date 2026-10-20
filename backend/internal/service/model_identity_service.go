@@ -49,6 +49,7 @@ const identityPublicURLSetting = "model_identity_public_base_url"
 const identitySettingsSetting = "model_identity_settings"
 
 type IdentitySettings struct {
+	TestUserID         int64  `json:"test_user_id"`
 	PublicBaseURL      string `json:"public_base_url"`
 	ConcurrentAccounts int    `json:"concurrent_accounts"`
 	ProbeConcurrency   int    `json:"probe_concurrency"`
@@ -115,24 +116,74 @@ func (s *ModelIdentityService) PlannedAccounts(ctx context.Context, page, size i
 	}
 	return s.repo.PlannedAccounts(ctx, page, size, strings.TrimSpace(search))
 }
+func (s *ModelIdentityService) Overview(ctx context.Context, page, size int, search string) (*IdentityPlanPage, error) {
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 100 {
+		size = 20
+	}
+	return s.repo.Overview(ctx, page, size, strings.TrimSpace(search))
+}
 
 func (s *ModelIdentityService) SaveSettings(ctx context.Context, settings IdentitySettings) (*IdentitySettings, error) {
-	value, err := normalizeIdentityPublicURL(settings.PublicBaseURL)
-	if err != nil {
-		return nil, err
+	value := strings.TrimRight(strings.TrimSpace(settings.PublicBaseURL), "/")
+	if value != "" {
+		var err error
+		value, err = normalizeIdentityPublicURL(value)
+		if err != nil {
+			return nil, err
+		}
+	} else if s.engineURL == "" {
+		// Keep the legacy hosted callback contract when no local worker is
+		// configured. A self-hosted Fingerpoint worker does not need a public URL.
+		return nil, errors.New("configure the public Base URL on the Model identity page before running a detection")
 	}
+
 	if err := settings.ValidateConcurrency(); err != nil {
 		return nil, err
 	}
 	if s.settings == nil {
 		return nil, errors.New("identity settings storage unavailable")
 	}
+	if settings.TestUserID < 0 {
+		return nil, errors.New("configuration error: active fixed test user required")
+	}
+	if settings.TestUserID == 0 && s.apiKeys != nil {
+		return nil, errors.New("select a fixed test user before saving detection settings")
+	}
+	if settings.TestUserID > 0 {
+		if s.apiKeys == nil || s.apiKeys.userRepo == nil || s.repo == nil {
+			return nil, errors.New("identity test configuration service unavailable")
+		}
+		user, err := s.apiKeys.userRepo.GetByID(ctx, settings.TestUserID)
+		if err != nil || user == nil || !user.IsActive() {
+			return nil, errors.New("configuration error: active fixed test user required")
+		}
+	}
 	settings.PublicBaseURL = value
 	encoded, err := json.Marshal(settings)
 	if err != nil {
 		return nil, err
 	}
-	// A single settings row prevents partial saves of the URL and limits.
+	if settings.TestUserID > 0 {
+		keys, err := s.repo.SaveTestUserSettings(ctx, settings.TestUserID, string(encoded))
+		if err != nil {
+			return nil, err
+		}
+		for _, key := range keys {
+			s.apiKeys.InvalidateAuthCacheByKey(ctx, key)
+		}
+		return &settings, nil
+	}
+	current, err := s.Settings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if current.TestUserID > 0 {
+		return nil, errors.New("select a fixed test user before saving detection settings")
+	}
+	// Retain compatibility with settings saved before a fixed user was configured.
 	if err := s.settings.Set(ctx, identitySettingsSetting, string(encoded)); err != nil {
 		return nil, err
 	}
@@ -150,14 +201,16 @@ func (s *ModelIdentityService) publicBaseURL(ctx context.Context) (string, error
 	return normalizeIdentityPublicURL(settings.PublicBaseURL)
 }
 func (s *ModelIdentityService) EngineCommit() string {
-	if s.remoteURL != "" {
+	if s.engineURL == "" && s.remoteURL != "" {
 		return "bazaarlink-online"
 	}
 	return IdentityEngineCommit
 }
 
 func (s *ModelIdentityService) Models(ctx context.Context) ([]IdentityModel, error) {
-	if s.remoteURL != "" {
+	// Preserve read-only catalogs for legacy configurations. A configured local
+	// engine always wins; Enqueue and the runner still require the local worker.
+	if s.engineURL == "" && s.remoteURL != "" {
 		return s.remoteModels(ctx)
 	}
 	if s.engineURL == "" {
@@ -294,7 +347,16 @@ func (s *ModelIdentityService) validateBinding(ctx context.Context, accountID, u
 	}
 	return a, g, nil
 }
-func (s *ModelIdentityService) Configure(ctx context.Context, accountID, userID, groupID int64) (*IdentityConfig, error) {
+func (s *ModelIdentityService) Configure(ctx context.Context, accountID, _ int64, groupID int64) (*IdentityConfig, error) {
+	settings, err := s.Settings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if settings.TestUserID <= 0 {
+		return nil, errors.New("configure the fixed test user in Model identity settings first")
+	}
+	// Ignore legacy clients' per-account user selection.
+	userID := settings.TestUserID
 	a, g, e := s.validateBinding(ctx, accountID, userID, groupID)
 	if e != nil {
 		return nil, e
@@ -334,6 +396,18 @@ func (s *ModelIdentityService) Configure(ctx context.Context, accountID, userID,
 	return c, nil
 }
 func (s *ModelIdentityService) ValidateRun(ctx context.Context, r *IdentityRun) (*APIKey, error) {
+	if s.settings != nil {
+		settings, err := s.Settings(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if settings.TestUserID <= 0 {
+			return nil, errors.New("configure the fixed test user in Model identity settings first")
+		}
+		if r.UserID != settings.TestUserID {
+			return nil, errors.New("configuration error: dedicated Key does not belong to the fixed test user")
+		}
+	}
 	if _, _, e := s.validateBinding(ctx, r.AccountID, r.UserID, r.GroupID); e != nil {
 		return nil, e
 	}
@@ -386,26 +460,34 @@ func (s *ModelIdentityService) SavePlan(ctx context.Context, p *IdentityPlan) er
 			return err
 		}
 		p.AccountID = existing.AccountID
+		if p.Options == nil {
+			p.Options = existing.Options
+		}
 		// Pausing an unchanged plan must work even if its Key or the catalog is unavailable.
 		if !p.Enabled && p.RequestModel == existing.RequestModel && p.ExpectedModel == existing.ExpectedModel && p.IntervalMinutes == existing.IntervalMinutes {
+			if p.Options != nil {
+				if err := p.Options.Validate(); err != nil {
+					return err
+				}
+			}
 			return s.repo.SavePlan(ctx, p, time.Now())
 		}
 	}
-	models, e := s.Models(ctx)
-	if e != nil {
-		return e
+	if p.Options == nil {
+		options := DefaultIdentityPlanOptions()
+		p.Options = &options
 	}
-	valid := false
-	for _, m := range models {
-		if m.ID == p.ExpectedModel {
-			valid = true
-		}
+	if err := p.Options.Validate(); err != nil {
+		return err
 	}
-	if !valid {
-		return errors.New("expected model is not supported by the current identity baseline catalog")
+	if strings.TrimSpace(p.ExpectedModel) == "" || len(p.ExpectedModel) > 256 {
+		return errors.New("expected model is required and must be at most 256 bytes")
 	}
 	if strings.TrimSpace(p.RequestModel) == "" || len(p.RequestModel) > 256 {
 		return errors.New("request model is required and must be at most 256 bytes")
+	}
+	if s.apiKeys == nil || s.accounts == nil {
+		return errors.New("identity test configuration service unavailable")
 	}
 	c, e := s.repo.Config(ctx, p.AccountID)
 	if e != nil {
@@ -416,17 +498,35 @@ func (s *ModelIdentityService) SavePlan(ctx context.Context, p *IdentityPlan) er
 	}
 	return s.repo.SavePlan(ctx, p, time.Now())
 }
+func (options *IdentityPlanOptions) Validate() error {
+	if options.Protocol == "" {
+		options.Protocol = "chat_completions"
+	}
+	if options.Protocol != "chat_completions" && options.Protocol != "responses" && options.Protocol != "messages" {
+		return errors.New("invalid sampling protocol")
+	}
+	if !identityOptionAllowed(options.ReasoningEffort, "", "default", "none", "minimal", "low", "medium", "high", "xhigh", "max") {
+		return errors.New("invalid reasoning effort")
+	}
+	if !identityOptionAllowed(options.ServiceTier, "", "default", "auto", "flex", "priority", "standard", "fast", "ultrafast") {
+		return errors.New("invalid service tier")
+	}
+	return nil
+}
+func identityOptionAllowed(value string, choices ...string) bool {
+	for _, choice := range choices {
+		if value == choice {
+			return true
+		}
+	}
+	return false
+}
 func (s *ModelIdentityService) DeletePlan(ctx context.Context, id int64) error {
 	return s.repo.DeletePlan(ctx, id)
 }
 func (s *ModelIdentityService) Enqueue(ctx context.Context, id int64) (*IdentityRun, error) {
-	if s.engineURL == "" && s.remoteURL == "" {
+	if s.engineURL == "" {
 		return nil, errors.New("identity engine is not configured")
-	}
-	if s.remoteURL != "" {
-		if _, err := s.publicBaseURL(ctx); err != nil {
-			return nil, err
-		}
 	}
 	p, e := s.repo.Plan(ctx, id)
 	if e != nil {

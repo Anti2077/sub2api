@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 )
 
@@ -37,12 +38,38 @@ func IdentityProbeRetryDelay(attempt int) time.Duration {
 }
 
 type identityTargetKey struct{}
-type identityTarget struct{ AccountID, GroupID int64 }
+type identityTarget struct {
+	AccountID, GroupID int64
+	retries            *atomic.Int32
+}
 
 // WithIdentityTarget is installed only after authenticating a detection capability.
 // No public middleware translates headers or request parameters into this context.
 func WithIdentityTarget(ctx context.Context, accountID, groupID int64) context.Context {
-	return context.WithValue(ctx, identityTargetKey{}, identityTarget{accountID, groupID})
+	return context.WithValue(ctx, identityTargetKey{}, identityTarget{accountID, groupID, new(atomic.Int32)})
+}
+
+// RetryIdentityProbe owns the single transient retry budget shared by every
+// protocol adapter in one pinned probe. The worker never retries paid calls.
+func RetryIdentityProbe(ctx context.Context, status int) bool {
+	p, ok := ctx.Value(identityTargetKey{}).(identityTarget)
+	if !ok || p.retries == nil || !IdentityProbeRetryableStatus(status) || ctx.Err() != nil {
+		return false
+	}
+	for {
+		n := p.retries.Load()
+		if n >= IdentityProbeMaxRetries {
+			return false
+		}
+		if p.retries.CompareAndSwap(n, n+1) {
+			select {
+			case <-ctx.Done():
+				return false
+			case <-time.After(IdentityProbeRetryDelay(int(n + 1))):
+				return true
+			}
+		}
+	}
 }
 func IdentityTargetFromContext(ctx context.Context) (int64, int64, bool) {
 	p, ok := ctx.Value(identityTargetKey{}).(identityTarget)

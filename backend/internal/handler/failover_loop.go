@@ -204,6 +204,12 @@ func (s *FailoverState) HandleFailoverError(
 		return FailoverCanceled
 	}
 	s.LastFailoverErr = failoverErr
+	if _, _, pinned := service.IdentityTargetFromContext(ctx); pinned {
+		if failoverErr != nil && service.RetryIdentityProbe(ctx, failoverErr.StatusCode) {
+			return FailoverContinue
+		}
+		return FailoverExhausted
+	}
 	if failoverErr == nil || !failoverErr.ShouldRetryNextAccount() {
 		return FailoverExhausted
 	}

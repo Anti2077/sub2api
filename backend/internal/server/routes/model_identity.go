@@ -41,7 +41,7 @@ func registerIdentityProbe(r *gin.Engine, h *handler.Handlers, svc *service.Mode
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"request_model": run.RequestModel, "expected_model": run.ExpectedModel})
+		c.JSON(http.StatusOK, gin.H{"request_model": run.RequestModel, "expected_model": run.ExpectedModel, "options": run.Options})
 	})
 	r.POST("/internal/model-identity/:run/probe", middleware.RequestBodyLimit(64<<10), identityProbeDeadline(), func(c *gin.Context) {
 		id, e := strconv.ParseInt(c.Param("run"), 10, 64)
@@ -151,8 +151,8 @@ func registerIdentityProbe(r *gin.Engine, h *handler.Handlers, svc *service.Mode
 			h.Gateway.ChatCompletions(c)
 		}
 	})
-	// This route is the only public identity callback. Keep capability/probe
-	// routes above private. Its own guard runs before ordinary Key billing.
+	// Historical BazaarLink callback retained for already-recorded runs. New
+	// tasks use the self-hosted Fingerpoint protocol routes registered below.
 	r.POST("/internal/model-identity/:run/remote/v1/chat/completions", middleware.RequestBodyLimit(1<<20), identityProbeDeadline(),
 		remoteIdentityProbe(svc), middleware.ClientRequestID(), opsLogger, handler.InboundEndpointMiddleware(), gin.HandlerFunc(auth),
 		middleware.GroupModelAllowlist(), requireGroup, func(c *gin.Context) {
@@ -163,6 +163,7 @@ func registerIdentityProbe(r *gin.Engine, h *handler.Handlers, svc *service.Mode
 				h.Gateway.ChatCompletions(c)
 			}
 		})
+	registerIdentityCompletions(r, h, svc, auth, requireGroup, opsLogger)
 }
 
 func identityProbeDeadline() gin.HandlerFunc {

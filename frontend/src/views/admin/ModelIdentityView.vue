@@ -8,15 +8,15 @@
         </div>
         <div class="flex flex-wrap gap-2"><button data-testid="identity-settings-button" class="btn btn-secondary min-h-11" type="button" @click="openSettings"><Icon name="cog" size="sm" />{{ t('admin.modelIdentity.settingsTitle') }}</button><button class="btn btn-primary min-h-11" type="button" @click="openAddPlan"><Icon name="plus" size="sm" />{{ t('admin.modelIdentity.addPlan') }}</button><button class="btn btn-secondary min-h-11" type="button" :disabled="loading" @click="loadRows()"><Icon name="refresh" size="sm" />{{ t('common.refresh') }}</button></div>
       </header>
-      <p v-if="!settingsLoading && (!savedSettings || !savedSettings.public_base_url || settingsError)" role="status" class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">{{ settingsError || t('admin.modelIdentity.publicBaseURLRequired') }} <button class="underline underline-offset-2" type="button" @click="openSettings">{{ t('admin.modelIdentity.settingsTitle') }}</button></p>
+
       <BaseDialog :show="settingsOpen" :title="t('admin.modelIdentity.settingsTitle')" width="normal" :close-on-escape="!settingsSaving" :show-close-button="!settingsSaving" @close="closeSettings">
         <form id="identity-settings-form" class="space-y-5" :aria-busy="settingsLoading || settingsSaving" @submit.prevent="saveConnectionSettings" @input="settingsSaved = false; settingsError = ''">
           <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('admin.modelIdentity.settingsHint') }}</p>
           <p v-if="settingsLoading" role="status" class="text-sm text-gray-500">{{ t('common.loading') }}</p>
           <div>
-            <label for="identity-base-url" class="input-label">{{ t('admin.modelIdentity.publicBaseURL') }}</label>
-            <input id="identity-base-url" v-model="settingsDraft.public_base_url" type="url" required maxlength="2048" class="input min-h-11 w-full" placeholder="https://your-site.example.com" :disabled="settingsLoading || settingsSaving || !savedSettings" aria-describedby="identity-base-url-help" />
-            <p id="identity-base-url-help" class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.modelIdentity.publicBaseURLHint') }}</p>
+            <label for="identity-test-user" class="input-label">{{ t('admin.modelIdentity.fixedTestUser') }}</label>
+            <Select id="identity-test-user" v-model="settingsDraft.test_user_id" :options="testUserOptions" :aria-label="t('admin.modelIdentity.fixedTestUser')" :search-placeholder="t('admin.modelIdentity.searchUser')" searchable remote :loading="usersLoading" :disabled="settingsLoading || settingsSaving || !savedSettings" @search="searchTestUsers" />
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.modelIdentity.fixedTestUserHint') }}</p>
           </div>
           <div class="grid gap-5 sm:grid-cols-2">
             <div>
@@ -62,89 +62,67 @@
         </div>
         <p v-if="loading && !rows.length" role="status" class="p-8 text-center text-sm text-gray-500">{{ t('common.loading') }}</p>
         <div v-else-if="!filteredRows.length" class="p-8 text-center"><p class="text-sm text-gray-500">{{ t(total || query || statusFilter !== 'all' ? 'common.noData' : 'admin.modelIdentity.emptyPlans') }}</p><button class="btn btn-primary mt-4 min-h-11" type="button" @click="openAddPlan">{{ t('admin.modelIdentity.addPlan') }}</button></div>
-        <div v-else class="hidden overflow-x-auto lg:block">
-          <table class="w-full min-w-[1060px] table-fixed text-left text-sm">
-            <colgroup><col class="w-[120px]" /><col class="w-[150px]" /><col class="w-[160px]" /><col class="w-[300px]" /><col class="w-[120px]" /><col class="w-[90px]" /><col class="w-[120px]" /></colgroup>
-            <thead class="bg-gray-50 text-xs text-gray-500 dark:bg-dark-900/50 dark:text-gray-400"><tr>
-              <th class="px-3 py-2 font-medium">{{ t('admin.modelIdentity.account') }}</th>
-              <th class="px-3 py-2 font-medium">{{ t('admin.modelIdentity.expectedModel') }}</th>
-              <th class="px-3 py-2 font-medium">{{ t('admin.modelIdentity.lastResult') }}</th>
-              <th class="px-3 py-2 font-medium">{{ t('admin.modelIdentity.recentRuns') }}</th>
-              <th class="px-3 py-2 font-medium">{{ t('admin.modelIdentity.nextRun') }}</th>
-              <th class="px-3 py-2 font-medium">{{ t('admin.modelIdentity.keyStatus') }}</th>
-              <th class="px-3 py-2 font-medium">{{ t('common.actions') }}</th>
-            </tr></thead>
-            <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
-              <template v-for="row in filteredRows" :key="row.plan.id">
-                <tr :data-plan-id="row.plan.id" class="align-top hover:bg-gray-50/80 dark:hover:bg-dark-800/60">
-                  <td class="px-3 py-2.5"><strong class="block text-gray-900 dark:text-white">{{ row.account.name }}</strong><span class="mt-1 block text-xs text-gray-500">#{{ row.account.id }} · {{ groupName(row) }} · {{ t('admin.modelIdentity.planNumber', { id: row.plan.id }) }}</span><p v-if="row.error" role="alert" class="mt-2 max-w-64 text-xs text-red-600 dark:text-red-400">{{ row.error }}</p></td>
-                  <td class="px-3 py-2.5"><code class="block break-all text-xs">{{ row.plan.expected_model }}</code><span class="mt-1 block text-xs text-gray-500">{{ row.plan.request_model }}</span></td>
-                  <td class="px-3 py-2.5"><span class="inline-flex rounded-full px-2 py-1 text-xs font-medium" :class="identityStatusClass(row.status)">{{ statusLabel(row.status) }}</span><span class="mt-2 block break-all text-xs">{{ identityDetectedModel(row.latest) }}</span><time class="mt-1 block whitespace-nowrap text-xs text-gray-500">{{ formatTime(row.latest?.created_at) }}</time></td>
-                  <td class="px-3 py-2.5"><IdentityRecentRuns :runs="row.history.slice(0, 5)" compact @report="openReport" /></td>
-                  <td class="px-3 py-2.5 text-xs"><time>{{ formatTime(nextRun(row)) }}</time><IdentityScheduleToggle :plan-id="row.plan.id" :enabled="row.plan.enabled" :busy="scheduleBusy === row.plan.id" :disabled="loading || Boolean(scheduleBusy)" @change="toggleSchedule(row.plan)" /></td>
-                  <td class="max-w-48 px-3 py-2.5 text-xs"><span :class="row.config?.configuration_error ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'">{{ row.config ? (row.config.configuration_error ? t('admin.modelIdentity.keyError') : t('admin.modelIdentity.keyReady')) : t('admin.modelIdentity.notConfigured') }}</span><span v-if="row.config" class="mt-1 block break-words" :title="row.config.key_name">#{{ row.config.api_key_id }}</span></td>
-                  <td class="px-3 py-2.5"><div class="flex flex-col gap-1"><IdentityOfficialLink :run="row.latest" /><button class="btn btn-primary min-h-11 text-xs" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" :aria-busy="actionBusy === row.plan.id" type="button" @click="runPlan(row.plan)"><Icon name="play" size="sm" />{{ actionBusy === row.plan.id ? t('common.loading') : t('admin.modelIdentity.manualTrigger') }}</button><button class="btn btn-secondary min-h-11 text-xs" :disabled="scheduleBusy === row.plan.id" type="button" @click="editPlan(row)">{{ t('common.edit') }}</button><button class="btn btn-ghost min-h-11 text-xs" type="button" :aria-expanded="expandedRows.has(row.plan.id)" :aria-controls="`identity-history-${row.plan.id}`" @click="toggleHistory(row.plan.id)">{{ expandedRows.has(row.plan.id) ? t('common.collapse') : t('admin.modelIdentity.history') }}</button></div></td>
-                </tr>
-                <tr v-if="expandedRows.has(row.plan.id)" :id="`identity-history-${row.plan.id}`"><td colspan="7" class="bg-gray-50/70 px-3 py-2.5 dark:bg-dark-900/30"><div class="space-y-3">
-                  <IdentityHistoryTable :runs="row.history" :busy="Boolean(actionBusy)" @report="openReport" @cancel="cancelRun" />
-                </div></td></tr>
-              </template>
-            </tbody>
-          </table>
-        </div>
-        <div class="divide-y divide-gray-200 dark:divide-dark-700 lg:hidden">
-          <article v-for="row in filteredRows" :key="row.plan.id" class="space-y-4 p-4" :data-plan-id="row.plan.id">
-            <div class="flex items-start justify-between gap-3"><div><h3 class="font-semibold text-gray-900 dark:text-white">{{ row.account.name }}</h3><p class="mt-1 text-xs text-gray-500">#{{ row.account.id }} · {{ groupName(row) }} · {{ t('admin.modelIdentity.planNumber', { id: row.plan.id }) }}</p></div><span class="shrink-0 rounded-full px-2 py-1 text-xs" :class="identityStatusClass(row.status)">{{ statusLabel(row.status) }}</span></div>
-            <p v-if="row.error" role="alert" class="text-sm text-red-600">{{ row.error }}</p>
-            <dl class="grid grid-cols-2 gap-3 text-xs"><div><dt class="text-gray-500">{{ t('admin.modelIdentity.expectedModel') }}</dt><dd class="mt-1 break-all">{{ row.plan.expected_model }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.detectedModel') }}</dt><dd class="mt-1 break-all">{{ identityDetectedModel(row.latest) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.nextRun') }}</dt><dd class="mt-1">{{ formatTime(nextRun(row)) }}<IdentityScheduleToggle :plan-id="row.plan.id" :enabled="row.plan.enabled" :busy="scheduleBusy === row.plan.id" :disabled="loading || Boolean(scheduleBusy)" @change="toggleSchedule(row.plan)" /></dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.keyStatus') }}</dt><dd class="mt-1">{{ row.config ? (row.config.configuration_error ? t('admin.modelIdentity.keyError') : `#${row.config.api_key_id}`) : t('admin.modelIdentity.notConfigured') }}</dd></div></dl>
-            <div><h4 class="mb-2 text-xs text-gray-500">{{ t('admin.modelIdentity.recentRuns') }}</h4><IdentityRecentRuns :runs="row.history.slice(0, 5)" @report="openReport" /></div>
-            <div class="flex flex-wrap gap-2"><IdentityOfficialLink :run="row.latest" /><button class="btn btn-secondary min-h-11" :disabled="scheduleBusy === row.plan.id" type="button" @click="editPlan(row)">{{ t('common.edit') }}</button><button class="btn btn-primary min-h-11 text-xs" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" :aria-busy="actionBusy === row.plan.id" type="button" @click="runPlan(row.plan)"><Icon name="play" size="sm" />{{ actionBusy === row.plan.id ? t('common.loading') : t('admin.modelIdentity.manualTrigger') }}</button><button v-if="isActive(row.latest)" class="btn btn-secondary min-h-11" :disabled="Boolean(actionBusy)" type="button" @click="cancelRun(row.latest!)">{{ t('common.cancel') }}</button></div>
+        <div v-else class="divide-y divide-gray-100 dark:divide-dark-600">
+          <article v-for="row in filteredRows" :key="row.plan.id" class="min-w-0 px-4 py-1.5" :class="selectedPlanID === row.plan.id ? 'bg-primary-50/60 dark:bg-primary-900/15' : 'bg-white dark:bg-dark-800'" :data-plan-id="row.plan.id">
+            <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 md:flex-nowrap">
+              <button type="button" class="flex min-h-11 min-w-0 flex-1 basis-full flex-wrap items-center gap-x-5 gap-y-1 text-left focus-visible:outline-primary-500 sm:flex-nowrap md:basis-0" :aria-pressed="selectedPlanID === row.plan.id" @click="selectPlan(row.plan.id)">
+                <span class="min-w-0 basis-full sm:w-40 sm:shrink-0 sm:basis-auto">
+                  <span class="block truncate text-sm font-medium text-gray-900 dark:text-white" :title="`${row.account.name} · ${row.groupName} · ${t('admin.modelIdentity.planNumber', { id: row.plan.id })}`">{{ row.account.name }} <span class="text-xs font-normal text-gray-400">#{{ row.account.id }}</span></span>
+                  <span class="sr-only">{{ row.groupName }} · {{ t('admin.modelIdentity.planNumber', { id: row.plan.id }) }}</span>
+                </span>
+                <span class="min-w-0 flex-1 truncate font-mono text-xs text-gray-600 dark:text-gray-300" :title="row.plan.request_model">{{ row.plan.request_model }}</span>
+                <span class="flex min-w-0 flex-1 items-center gap-2">
+                  <span class="shrink-0 rounded px-1.5 py-0.5 text-xs" :class="identityStatusClass(row.status)">{{ statusLabel(row.status) }}</span>
+                  <span class="min-w-0 truncate text-xs text-gray-600 dark:text-gray-300" :title="identityDetectedModel(row.latest)">{{ identityDetectedModel(row.latest) }}</span>
+                </span>
+              </button>
+              <IdentityRecentRuns :runs="row.history.slice(0, 5)" compact dense @report="openReport" />
+              <div class="ml-auto flex shrink-0 items-center gap-1">
+                <IdentityScheduleToggle :plan-id="row.plan.id" :enabled="row.plan.enabled" :busy="scheduleBusy === row.plan.id" :disabled="loading || Boolean(scheduleBusy)" compact :title="`${t('admin.modelIdentity.nextRun')}: ${formatTime(nextRun(row))}`" @change="toggleSchedule(row.plan)" />
+                <button type="button" class="btn btn-ghost min-h-11 min-w-11 p-2" :title="t('admin.modelIdentity.manualTrigger')" :aria-label="t('admin.modelIdentity.manualTrigger')" :disabled="Boolean(actionBusy) || accountHasActiveRun(row.account.id)" @click="runPlan(row.plan)"><Icon name="play" size="sm" /><span class="sr-only">{{ t('admin.modelIdentity.manualTrigger') }}</span></button>
+                <button type="button" class="btn btn-ghost min-h-11 min-w-11 p-2" :title="t('common.edit')" :aria-label="t('common.edit')" @click="editPlan(row)"><Icon name="edit" size="sm" /><span class="sr-only">{{ t('common.edit') }}</span></button>
+                <button type="button" class="btn btn-ghost min-h-11 min-w-11 p-2" :title="t('admin.modelIdentity.history')" :aria-label="t('admin.modelIdentity.history')" @click="loadHistory(row.plan)"><Icon name="clock" size="sm" /><span class="sr-only">{{ t('admin.modelIdentity.history') }}</span></button>
+              </div>
+            </div>
+            <p v-if="row.error" role="alert" class="pb-1 text-xs text-red-600 dark:text-red-400">{{ row.error }}</p>
           </article>
         </div>
         <Pagination v-if="total > pageSize" :page="page" :page-size="pageSize" :total="total" :show-page-size-selector="false" @update:page="changePage" />
       </section>
-      <section class="grid gap-6 lg:grid-cols-3">
-        <div class="card p-5 lg:col-span-2"><h2 class="font-semibold">{{ t('admin.modelIdentity.recentActivity') }}</h2><p class="mt-1 text-xs text-gray-500">{{ t('admin.modelIdentity.currentPage') }}</p><p v-if="!events.length" class="mt-5 text-sm text-gray-500">{{ t('admin.modelIdentity.noHistory') }}</p><button v-for="event in events" :key="event.run.id" type="button" class="mt-3 flex min-h-11 w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-100 p-3 text-left dark:border-dark-700" @click="openReport(event.run)"><span class="text-sm">{{ event.name }} <span class="ml-2 rounded-full px-2 py-1 text-xs" :class="identityStatusClass(identityRunStatus(event.run))">{{ statusLabel(identityRunStatus(event.run)) }}</span><span class="mt-1 block break-all text-xs text-gray-500">{{ event.run.request_model }} → {{ identityDetectedModel(event.run) }}</span></span><time class="text-xs text-gray-500">{{ formatTime(event.run.created_at) }}</time></button></div>
-        <div class="card p-5"><h2 class="font-semibold">{{ t('admin.modelIdentity.scheduleSummary') }}</h2><dl class="mt-5 space-y-4 text-sm"><div class="flex justify-between gap-3"><dt class="text-gray-500">{{ t('admin.modelIdentity.enabledPlans') }}</dt><dd>{{ enabledPlans.length }}</dd></div><div class="flex justify-between gap-3"><dt class="text-gray-500">{{ t('admin.modelIdentity.runningNow') }}</dt><dd>{{ rows.filter(row => isActive(row.latest)).length }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.nextWindow') }}</dt><dd class="mt-1">{{ formatTime(scheduleNext) }}</dd></div></dl><p class="mt-5 text-xs text-gray-500">{{ t('admin.modelIdentity.scheduleHint') }}</p></div>
+      <section class="space-y-4" aria-live="polite" aria-atomic="false">
+        <div class="flex flex-wrap items-center justify-between gap-3"><div><h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.modelIdentity.currentReport') }}</h2><p class="text-sm text-gray-500 dark:text-gray-400">{{ t('admin.modelIdentity.selectionHint') }}</p></div><button v-if="isActive(selectedReport)" type="button" class="btn btn-secondary min-h-11" :disabled="Boolean(actionBusy)" @click="cancelRun(selectedReport!)">{{ t('common.cancel') }}</button></div>
+        <p v-if="reportLoading" role="status" class="text-sm text-gray-500">{{ t('common.loading') }}</p><p v-if="reportError" role="alert" class="text-sm text-red-600 dark:text-red-400">{{ reportError }}</p>
+        <FingerpointReport v-if="selectedReport?.report?.engine === 'lm-fingerpoint-detector'" :run="selectedReport" />
+        <div v-else-if="selectedReport" class="card space-y-4 p-5"><div class="flex flex-wrap justify-between gap-2"><p>{{ statusLabel(identityRunStatus(selectedReport)) }} · {{ formatTime(selectedReport.created_at) }}</p><IdentityOfficialLink :run="selectedReport" /></div><IdentityScopeSummary :run="selectedReport" /><IdentityPerformance :report="selectedReport.report" /><IdentityModelVotes :report="selectedReport.report" /><details><summary class="min-h-11 cursor-pointer">{{ t('admin.modelIdentity.evidence') }}</summary><pre class="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">{{ JSON.stringify(selectedReport.report, null, 2) }}</pre></details></div>
+        <p v-else-if="!reportLoading" class="card p-8 text-center text-sm text-gray-500 dark:text-gray-400">{{ t('admin.modelIdentity.noHistory') }}</p>
       </section>
+      <BaseDialog :show="historyOpen" :title="t('admin.modelIdentity.history')" width="wide" @close="historyOpen = false"><IdentityHistoryTable :runs="historyRuns" :busy="Boolean(actionBusy)" @report="openReport" @cancel="cancelRun" /></BaseDialog>
       <BaseDialog :show="addPlanOpen" :title="t(editingPlanID ? 'admin.modelIdentity.editPlan' : 'admin.modelIdentity.addPlan')" width="normal" :close-on-escape="!addSaving" :show-close-button="!addSaving" @close="closeAddPlan">
         <form class="space-y-4" @submit.prevent="saveNewPlan">
           <div><label class="block text-sm" for="identity-add-account">{{ t('admin.modelIdentity.account') }}</label><Select id="identity-add-account" v-model="addAccountID" class="mt-1" :options="addAccountOptions" :aria-label="t('admin.modelIdentity.account')" :search-placeholder="t('admin.modelIdentity.filterAccounts')" searchable remote :loading="accountsLoading" :disabled="addBusy || Boolean(editingPlanID)" @search="searchAddAccounts" /></div>
-          <div class="grid gap-3 sm:grid-cols-2">
-            <div><label class="text-sm" for="identity-add-user">{{ t('admin.modelIdentity.testUser') }}</label><Select id="identity-add-user" v-model="addUserID" class="mt-1" :options="addUserOptions" :aria-label="t('admin.modelIdentity.testUser')" :search-placeholder="t('admin.modelIdentity.searchUser')" searchable remote :loading="usersLoading" :disabled="addBusy || !addAccountID" @search="searchAddUsers" /></div>
-            <label class="text-sm">{{ t('admin.modelIdentity.billingGroup') }}<select v-model="addGroupID" class="input mt-1 min-h-11 w-full" :disabled="addBusy || !addAccountID" required><option :value="0" disabled>{{ t('common.select') }}</option><option v-for="group in addCompatibleGroups" :key="group.id" :value="group.id">{{ group.name }}</option></select></label>
+          <div class="rounded-lg bg-gray-50 p-3 text-sm dark:bg-dark-900">
+            <p>{{ t('admin.modelIdentity.fixedTestUser') }} · {{ fixedTestUserLabel }}</p>
+            <button v-if="!savedSettings?.test_user_id" type="button" class="btn btn-secondary mt-2 min-h-11" @click="openSettings">{{ t('admin.modelIdentity.configureFixedTestUser') }}</button>
           </div>
+          <label class="block text-sm">{{ t('admin.modelIdentity.billingGroup') }}<select v-model="addGroupID" class="input mt-1 min-h-11 w-full" :disabled="addBusy || !addAccountID" required><option :value="0" disabled>{{ t('common.select') }}</option><option v-for="group in addCompatibleGroups" :key="group.id" :value="group.id">{{ group.name }}</option></select></label>
           <div class="grid gap-3 sm:grid-cols-2">
             <label class="text-sm">{{ t('admin.modelIdentity.requestModel') }}<input id="identity-add-model" v-model="addDraft.request_model" required maxlength="256" class="input mt-1 min-h-11 w-full" /></label>
-            <label class="text-sm">{{ t('admin.modelIdentity.expectedModel') }}<select v-model="addDraft.expected_model" required class="input mt-1 min-h-11 w-full"><option value="" disabled>{{ t('common.select') }}</option><option v-for="model in addCatalog" :key="model.id" :value="model.id">{{ model.name }}</option></select></label>
+            <label class="text-sm">{{ t('admin.modelIdentity.expectedModel') }}<input v-model="addDraft.expected_model" list="identity-expected-models" required maxlength="256" class="input mt-1 min-h-11 w-full" /><datalist id="identity-expected-models"><option v-for="model in addCatalog" :key="model.id" :value="model.id">{{ model.name }}</option></datalist></label>
           </div>
           <div class="grid gap-3 sm:grid-cols-2">
             <label class="text-sm">{{ t('admin.modelIdentity.interval') }}<input v-model.number="addDraft.interval_minutes" type="number" min="15" max="10080" required class="input mt-1 min-h-11 w-full" /></label>
             <label class="flex min-h-11 items-center gap-2 text-sm"><input v-model="addDraft.enabled" type="checkbox" />{{ t('admin.modelIdentity.scheduled') }}</label>
           </div>
+          <IdentityOptionsForm v-model="addDraft.options" />
+          <p v-if="addDraft.expected_model && !addCatalog.some(model => model.id === addDraft.expected_model)" role="status" class="text-sm text-amber-700 dark:text-amber-300">{{ t('admin.modelIdentity.unknownExpectedHint') }}</p>
           <p v-if="accountsLoading || addBusy" role="status" class="text-sm text-gray-500">{{ t('common.loading') }}</p><p v-if="addError" role="alert" class="text-sm text-red-600">{{ addError }}</p>
           <p class="text-sm text-gray-500">{{ t('admin.modelIdentity.addPlanHint') }}</p>
           <p v-if="addConfig" class="text-xs text-gray-500">{{ t('admin.modelIdentity.sharedConfigHint') }}</p>
           <p class="text-xs text-gray-500">{{ t('admin.modelIdentity.remoteConsent') }}</p>
-          <div class="flex justify-end gap-2"><button v-if="editingPlanID" class="btn btn-ghost min-h-11 mr-auto text-red-600" type="button" :disabled="addBusy" @click="deleteCurrentPlan">{{ t('common.delete') }}</button><button class="btn btn-secondary min-h-11" type="button" :disabled="addBusy" @click="closeAddPlan">{{ t('common.cancel') }}</button><button class="btn btn-primary min-h-11" type="submit" :disabled="addBusy || accountsLoading || !addAccountID || !addUserID || !addGroupID || !addDraft.request_model.trim() || !addDraft.expected_model">{{ addBusy ? t('common.saving') : t(editingPlanID ? 'common.save' : 'admin.modelIdentity.addPlan') }}</button></div>
+          <div class="flex justify-end gap-2"><button v-if="editingPlanID" class="btn btn-ghost min-h-11 mr-auto text-red-600" type="button" :disabled="addBusy" @click="deleteCurrentPlan">{{ t('common.delete') }}</button><button class="btn btn-secondary min-h-11" type="button" :disabled="addBusy" @click="closeAddPlan">{{ t('common.cancel') }}</button><button class="btn btn-primary min-h-11" type="submit" :disabled="addBusy || accountsLoading || !addAccountID || !savedSettings?.test_user_id || !addGroupID || !addDraft.request_model.trim() || !addDraft.expected_model">{{ addBusy ? t('common.saving') : t(editingPlanID ? 'common.save' : 'admin.modelIdentity.addPlan') }}</button></div>
         </form>
       </BaseDialog>
-      <BaseDialog :show="reportOpen" :title="t('admin.modelIdentity.report')" width="wide" @close="closeReport">
-        <p v-if="reportLoading" role="status" class="text-sm text-gray-500">{{ t('common.loading') }}</p>
-        <p v-if="reportError" role="alert" class="text-sm text-red-600">{{ reportError }}</p>
-        <div v-if="selectedReport" class="space-y-4">
-          <dl class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2"><div><dt class="text-gray-500">{{ t('admin.modelIdentity.lastResult') }}</dt><dd class="mt-1">{{ statusLabel(identityRunStatus(selectedReport)) }} · {{ formatTime(selectedReport.created_at) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.expectedModel') }}</dt><dd class="mt-1 break-all">{{ selectedReport.expected_model }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.detectedModel') }}</dt><dd class="mt-1 break-all">{{ identityDetectedModel(selectedReport) }}</dd></div><div><dt class="text-gray-500">{{ t('admin.modelIdentity.engineVersion') }}</dt><dd class="mt-1">{{ selectedReport.report?.engine_version || '—' }}</dd></div></dl>
-          <p v-if="selectedReport.report?.error" role="alert" class="text-sm text-red-600">{{ selectedReport.report.error }}</p>
-          <p v-if="reportReason" class="rounded-lg bg-gray-50 p-3 text-sm dark:bg-dark-900">{{ reportReason }}</p>
-          <IdentityOfficialLink :run="selectedReport" />
-          <IdentityScopeSummary :run="selectedReport" />
-          <IdentityPerformance :report="selectedReport.report" />
-          <IdentityModelVotes :report="selectedReport.report" />
-          <button v-if="isActive(selectedReport)" class="btn btn-secondary" type="button" :disabled="Boolean(actionBusy)" @click="cancelRun(selectedReport)">{{ t('common.cancel') }}</button>
-          <details v-for="(probe, index) in selectedReport.probes" :key="index" class="border-b border-gray-200 py-2 dark:border-dark-700"><summary class="min-h-11 cursor-pointer break-words text-sm">{{ probe.probe_id || index + 1 }} · {{ probe.status }}</summary><dl class="space-y-1 text-xs"><div>{{ t('admin.modelIdentity.targetAccount') }}: {{ probe.target_account_id }}</div><div>{{ t('admin.modelIdentity.requestModel') }}: {{ probe.request_model }}</div><div>{{ t('admin.modelIdentity.upstreamModel') }}: {{ probe.evidence?.upstream_model || '—' }}</div><div>{{ t('admin.modelIdentity.requestID') }}: {{ probe.evidence?.request_id || '—' }}</div></dl><pre class="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{{ JSON.stringify(probe.response, null, 2) }}</pre></details>
-          <details><summary class="min-h-11 cursor-pointer text-sm">{{ t('admin.modelIdentity.evidence') }}</summary><pre class="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-gray-50 p-3 text-xs dark:bg-dark-900">{{ JSON.stringify(selectedReport.report, null, 2) }}</pre></details>
-        </div>
-      </BaseDialog>
+
     </div>
   </AppLayout>
 </template>
@@ -164,61 +142,60 @@ import IdentityHistoryTable from '@/components/admin/account/IdentityHistoryTabl
 import IdentityPerformance from '@/components/admin/account/IdentityPerformance.vue'
 import IdentityScopeSummary from '@/components/admin/account/IdentityScopeSummary.vue'
 import IdentityModelVotes from '@/components/admin/account/IdentityModelVotes.vue'
+import FingerpointReport from '@/components/model-identity/FingerpointReport.vue'
+import IdentityOptionsForm from '@/components/model-identity/IdentityOptionsForm.vue'
 import { adminAPI } from '@/api/admin'
 import * as identityAPI from '@/api/admin/modelIdentity'
 import { identityDetectedModel, identityRunStatus, identityStatusClass, isActive, type IdentityStatus } from '@/utils/modelIdentity'
 import type { Account, AccountListItem, AdminUser, Group } from '@/types'
 
-type IdentityRow = { account: AccountListItem; config: identityAPI.IdentityConfig | null; plans: identityAPI.IdentityPlan[]; history: identityAPI.IdentityRun[]; latest?: identityAPI.IdentityRun; status: IdentityStatus; error: string }
+type IdentityRow = { account: Pick<AccountListItem, 'id' | 'name'>; groupName: string; config: identityAPI.IdentityConfig | null; plans: identityAPI.IdentityPlan[]; history: identityAPI.IdentityRun[]; latest?: identityAPI.IdentityRun; status: IdentityStatus; error: string }
 const { t, locale } = useI18n()
 const rows = ref<IdentityRow[]>([]), groups = ref<Group[]>([])
-const addPlanOpen = ref(false), editingPlanID = ref(0), addAccountID = ref(0), accountSearch = ref(''), addError = ref(''), accountsLoading = ref(false), usersLoading = ref(false), addBusy = ref(false), addAccounts = ref<AccountListItem[]>([])
+const addPlanOpen = ref(false), editingPlanID = ref(0), addAccountID = ref(0), accountSearch = ref(''), addError = ref(''), accountsLoading = ref(false), usersLoading = ref(false), addBusy = ref(false), addAccounts = ref<Pick<AccountListItem, 'id' | 'name'>[]>([])
 const addSaving = ref(false)
-const addAccount = ref<Account | null>(null), addConfig = ref<identityAPI.IdentityConfig | null>(null), addUsers = ref<AdminUser[]>([]), addCatalog = ref<identityAPI.IdentityModel[]>([])
-const addUserID = ref(0), addGroupID = ref(0), addDraft = ref({ request_model: '', expected_model: '', interval_minutes: 120, enabled: false })
+const addAccount = ref<Account | null>(null), addConfig = ref<identityAPI.IdentityConfig | null>(null), testUsers = ref<AdminUser[]>([]), addCatalog = ref<identityAPI.IdentityModel[]>([])
+const addGroupID = ref(0), addDraft = ref({ request_model: '', expected_model: '', interval_minutes: 120, enabled: false, options: identityAPI.defaultIdentityOptions() })
 let accountSearchVersion = 0, addFormVersion = 0, userSearchVersion = 0
 const loading = ref(false), loadError = ref(''), query = ref(''), statusFilter = ref('all')
 const settingsLoading = ref(true), settingsSaving = ref(false), settingsError = ref(''), settingsSaved = ref(false), settingsOpen = ref(false)
-const defaultSettings: identityAPI.IdentitySettings = { public_base_url: '', concurrent_accounts: 1, probe_concurrency: 4 }
+const defaultSettings: identityAPI.IdentitySettings = { public_base_url: '', concurrent_accounts: 1, probe_concurrency: 4, test_user_id: 0 }
 const settingsDraft = ref<identityAPI.IdentitySettings>({ ...defaultSettings })
 const savedSettings = ref<identityAPI.IdentitySettings | null>(null)
 const settingsDirty = computed(() => Boolean(savedSettings.value) && JSON.stringify(settingsDraft.value) !== JSON.stringify(savedSettings.value))
 const settingsValid = computed(() => {
   const value = settingsDraft.value
-  return Boolean(value.public_base_url.trim()) && Number.isInteger(value.concurrent_accounts) && value.concurrent_accounts >= 1 && value.concurrent_accounts <= 2 && Number.isInteger(value.probe_concurrency) && value.probe_concurrency >= 1 && value.probe_concurrency <= 10
+  return Number.isSafeInteger(value.test_user_id) && value.test_user_id > 0 && Number.isInteger(value.concurrent_accounts) && value.concurrent_accounts >= 1 && value.concurrent_accounts <= 2 && Number.isInteger(value.probe_concurrency) && value.probe_concurrency >= 1 && value.probe_concurrency <= 10
 })
 const page = ref(1), total = ref(0), pageSize = 20
-const expandedRows = ref(new Set<number>()), actionBusy = ref(0), scheduleBusy = ref(0)
-const reportOpen = ref(false), reportLoading = ref(false), reportError = ref(''), selectedReport = ref<identityAPI.IdentityRun | null>(null)
+const actionBusy = ref(0), scheduleBusy = ref(0)
+const selectedPlanID = ref(0), historyOpen = ref(false), historyRuns = ref<identityAPI.IdentityRun[]>([])
+const reportLoading = ref(false), reportError = ref(''), selectedReport = ref<identityAPI.IdentityRun | null>(null)
 let loadVersion = 0, reportVersion = 0, queryTimer: ReturnType<typeof setTimeout> | undefined, poll: ReturnType<typeof setInterval> | undefined
-const filterStatuses: IdentityStatus[] = ['matched', 'mismatched', 'flagshipClass', 'inconclusive', 'running', 'queued', 'configuration_error', 'request_error', 'service_error', 'notConfigured', 'untested']
+const filterStatuses: IdentityStatus[] = ['ranked', 'partial', 'not_model', 'unscorable', 'interrupted', 'matched', 'mismatched', 'flagshipClass', 'inconclusive', 'running', 'queued', 'configuration_error', 'request_error', 'service_error', 'notConfigured', 'untested']
 const planRows = computed(() => rows.value.flatMap(row => row.plans.map(plan => {
   const history = row.history.filter(run => run.plan_id === plan.id)
   return { ...row, plan, history, latest: history[0], status: row.status === 'service_error' ? 'service_error' as IdentityStatus : row.config?.configuration_error ? 'configuration_error' as IdentityStatus : history[0] ? identityRunStatus(history[0]) : 'untested' as IdentityStatus }
 })))
 const filteredRows = computed(() => planRows.value.filter(row => statusFilter.value === 'all' || row.status === statusFilter.value))
 const addAccountOptions = computed(() => addAccounts.value.map(account => ({ value: account.id, label: `${account.name} (#${account.id})` })))
-const addUserOptions = computed(() => addUsers.value.map(user => ({ value: user.id, label: `${user.username || user.email} (#${user.id})` })))
+const testUserOptions = computed(() => testUsers.value.map(user => ({ value: user.id, label: `${user.username || user.email} (#${user.id})` })))
+const fixedTestUserLabel = computed(() => testUserOptions.value.find(user => user.value === savedSettings.value?.test_user_id)?.label || (savedSettings.value?.test_user_id ? `#${savedSettings.value.test_user_id}` : t('admin.modelIdentity.fixedTestUserRequired')))
 const addCompatibleGroups = computed(() => groups.value.filter(group => addAccount.value?.group_ids?.includes(group.id) && group.platform === addAccount.value?.platform && !group.claude_code_only))
 const enabledPlans = computed(() => planRows.value.map(row => row.plan).filter(plan => plan.enabled))
-const scheduleNext = computed(() => enabledPlans.value.map(plan => plan.next_run_at).filter((value): value is string => Boolean(value)).sort()[0])
 const stats = computed(() => [
   { label: t('admin.modelIdentity.totalPlans'), value: planRows.value.length },
-  { label: t('admin.modelIdentity.matchedAccounts'), value: planRows.value.filter(row => row.status === 'matched').length },
-  { label: t('admin.modelIdentity.attentionNeeded'), value: planRows.value.filter(row => ['mismatched', 'flagshipClass', 'inconclusive', 'configuration_error', 'request_error', 'service_error', 'timed_out'].includes(row.status)).length },
+  { label: t('admin.modelIdentity.matched'), value: planRows.value.filter(row => row.status === 'matched').length },
+  { label: t('admin.modelIdentity.attentionNeeded'), value: planRows.value.filter(row => ['partial', 'not_model', 'unscorable', 'interrupted', 'mismatched', 'flagshipClass', 'inconclusive', 'configuration_error', 'request_error', 'service_error', 'timed_out'].includes(row.status)).length },
   { label: t('admin.modelIdentity.enabledPlans'), value: enabledPlans.value.length },
 ])
-const events = computed(() => planRows.value.flatMap(row => row.history.map(run => ({ name: row.account.name, run }))).sort((a, b) => +new Date(b.run.created_at) - +new Date(a.run.created_at)).slice(0, 5))
-const reportReason = computed(() => {
-  const assessment = selectedReport.value?.report?.identityAssessment as { verdict?: { reasoning?: string } } | undefined
-  return assessment?.verdict?.reasoning || ''
-})
 function statusLabel(status: IdentityStatus) { return t(`admin.modelIdentity.${status}`) }
 function message(error: unknown) { return error && typeof error === 'object' && 'message' in error ? String(error.message) : String(error) }
 function openSettings() {
   if (savedSettings.value) settingsDraft.value = { ...savedSettings.value }
   settingsSaved.value = false
   settingsOpen.value = true
+  void searchTestUsers('')
 }
 function closeSettings() {
   if (settingsSaving.value) return
@@ -232,6 +209,10 @@ async function loadConnectionSettings() {
     const settings = { ...defaultSettings, ...await identityAPI.settings() }
     savedSettings.value = { ...settings }
     settingsDraft.value = { ...settings }
+    if (settings.test_user_id) {
+      const user = await adminAPI.users.getById(settings.test_user_id)
+      if (!testUsers.value.some(item => item.id === user.id)) testUsers.value.push(user)
+    }
   }
   catch (error) { settingsError.value = message(error) }
   finally { settingsLoading.value = false }
@@ -244,46 +225,38 @@ async function saveConnectionSettings() {
     savedSettings.value = { ...settings }
     settingsDraft.value = { ...settings }
     settingsSaved.value = true
+    await loadRows()
   }
   catch (error) { settingsError.value = message(error) }
   finally { settingsSaving.value = false }
 }
 function formatTime(value?: string) { return value ? new Date(value).toLocaleString(locale.value === 'zh' ? 'zh-CN' : 'en-US', { hour12: false }) : '—' }
-function groupName(row: IdentityRow) { return row.config ? groups.value.find(group => group.id === row.config?.group_id)?.name || `#${row.config.group_id}` : t('admin.modelIdentity.notConfigured') }
 function nextRun(row: { plan: identityAPI.IdentityPlan }) { return row.plan.enabled ? row.plan.next_run_at : undefined }
-function toggleHistory(id: number) { const next = new Set(expandedRows.value); next.has(id) ? next.delete(id) : next.add(id); expandedRows.value = next }
-async function loadRow(account: AccountListItem): Promise<IdentityRow> {
-  const row: IdentityRow = { account, config: null, plans: [], history: [], status: 'notConfigured', error: '' }
-  try {
-    try { row.config = await identityAPI.config(account.id) } catch (error) { const failure = error as { status?: number; response?: { status?: number } }; if ((failure.status ?? failure.response?.status) !== 404) throw error }
-    if (!row.config) return row
-    row.plans = await identityAPI.plans(account.id)
-    const histories: identityAPI.IdentityRun[] = []
-    for (const plan of row.plans) histories.push(...await identityAPI.history(plan.id))
-    row.history = histories.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at))
-    row.latest = row.history[0]
-    row.status = row.config.configuration_error ? 'configuration_error' : row.latest ? identityRunStatus(row.latest) : 'untested'
-    row.error = row.config.configuration_error || ''
-  } catch (error) { row.status = 'service_error'; row.error = message(error) }
-  return row
+async function selectPlan(id: number) {
+  selectedPlanID.value = id
+  const row = planRows.value.find(row => row.plan.id === id)
+  const run = row?.history.find(isActive) || row?.history[0]
+  if (run) await openReport(run)
+  else { reportVersion++; selectedReport.value = null; reportError.value = '' }
+}
+async function loadHistory(plan: identityAPI.IdentityPlan) {
+  try { historyRuns.value = await identityAPI.history(plan.id); historyOpen.value = true }
+  catch (error) { loadError.value = message(error) }
 }
 async function loadRows() {
   const version = ++loadVersion
   loading.value = true; loadError.value = ''
   try {
-    const result = await identityAPI.plannedAccounts(page.value, pageSize, query.value)
+    const result = await identityAPI.overview(page.value, pageSize, query.value)
     if (version !== loadVersion) return
     const lastPage = Math.max(1, Math.ceil(result.total / pageSize))
     if (page.value > lastPage) { page.value = lastPage; await loadRows(); return }
-    const loaded: IdentityRow[] = []
-    let cursor = 0
-    await Promise.all(Array.from({ length: Math.min(4, result.account_ids.length) }, async () => {
-      while (cursor < result.account_ids.length) { const account = await adminAPI.accounts.getById(result.account_ids[cursor++]); const row = await loadRow(account); if (version !== loadVersion) return; loaded.push(row) }
-    }))
-    if (version !== loadVersion) return
-    const positions = new Map(result.account_ids.map((id, index) => [id, index]))
-    rows.value = loaded.sort((a, b) => (positions.get(a.account.id) || 0) - (positions.get(b.account.id) || 0)); total.value = result.total
-  } catch (error) { if (version === loadVersion) { rows.value = []; loadError.value = message(error) } }
+    rows.value = result.items.map(card => ({ account: { id: card.plan.account_id, name: card.account_name }, groupName: card.group_name, config: card.config, plans: [card.plan], history: card.recent_runs, latest: card.recent_runs[0], status: card.recent_runs[0] ? identityRunStatus(card.recent_runs[0]) : 'untested', error: card.config.configuration_error || '' }))
+    total.value = result.total
+    const selected = planRows.value.find(row => row.plan.id === selectedPlanID.value)
+    if (!selected && planRows.value[0]) await selectPlan(planRows.value[0].plan.id)
+    else if (selected?.history[0] && (!selectedReport.value || (isActive(selected.history[0]) && selectedReport.value.id !== selected.history[0].id))) await selectPlan(selected.plan.id)
+  } catch (error) { if (version === loadVersion) loadError.value = message(error) }
   finally { if (version === loadVersion) loading.value = false }
 }
 async function searchAddAccountsNow() {
@@ -295,44 +268,41 @@ async function searchAddAccountsNow() {
 }
 function searchAddAccounts(search: string) { accountSearch.value = search; void searchAddAccountsNow() }
 function openAddPlan() { closeAddPlan(); accountSearch.value = ''; addAccounts.value = []; addPlanOpen.value = true; void searchAddAccountsNow() }
-function closeAddPlan() { if (addSaving.value) return; addPlanOpen.value = false; accountSearchVersion++; addFormVersion++; userSearchVersion++; editingPlanID.value = 0; addAccountID.value = 0; addBusy.value = false; accountsLoading.value = false; usersLoading.value = false; addAccount.value = null; addConfig.value = null; addUsers.value = []; addCatalog.value = []; addUserID.value = 0; addGroupID.value = 0; addError.value = ''; addDraft.value = { request_model: '', expected_model: '', interval_minutes: 120, enabled: false } }
-async function searchAddUsers(search: string) {
+function closeAddPlan() { if (addSaving.value) return; addPlanOpen.value = false; accountSearchVersion++; addFormVersion++; editingPlanID.value = 0; addAccountID.value = 0; addBusy.value = false; accountsLoading.value = false; addAccount.value = null; addConfig.value = null; addCatalog.value = []; addGroupID.value = 0; addError.value = ''; addDraft.value = { request_model: '', expected_model: '', interval_minutes: 120, enabled: false, options: identityAPI.defaultIdentityOptions() } }
+async function searchTestUsers(search: string) {
   const version = ++userSearchVersion
   usersLoading.value = true
-  try { const result = await adminAPI.users.list(1, 20, { status: 'active', search }); if (version === userSearchVersion) { const selected = addUsers.value.find(user => user.id === addUserID.value); addUsers.value = result.items; if (selected && !result.items.some(user => user.id === selected.id)) addUsers.value.push(selected) } }
-  catch (error) { if (version === userSearchVersion) addError.value = message(error) }
+  try { const result = await adminAPI.users.list(1, 20, { status: 'active', search }); if (version === userSearchVersion) { const selected = testUsers.value.filter(user => user.id === settingsDraft.value.test_user_id || user.id === savedSettings.value?.test_user_id); testUsers.value = result.items; for (const user of selected) if (!testUsers.value.some(item => item.id === user.id)) testUsers.value.push(user) } }
+  catch (error) { if (version === userSearchVersion) settingsError.value = message(error) }
   finally { if (version === userSearchVersion) usersLoading.value = false }
 }
 async function loadAddAccount() {
   const version = ++addFormVersion
-  userSearchVersion++; usersLoading.value = false
   const id = addAccountID.value
-  addAccount.value = null; addConfig.value = null; addUserID.value = 0; addGroupID.value = 0
+  addAccount.value = null; addConfig.value = null; addGroupID.value = 0
   if (!id) { addBusy.value = false; return }
   addBusy.value = true; addError.value = ''
   try {
-    const [account, userResult, modelResult] = await Promise.all([adminAPI.accounts.getById(id), adminAPI.users.list(1, 20, { status: 'active' }), identityAPI.models()])
+    const [account, modelResult] = await Promise.all([adminAPI.accounts.getById(id), identityAPI.models()])
     if (version !== addFormVersion) return
     addAccount.value = account
-    addUsers.value = userResult.items
     addCatalog.value = modelResult.models
     try {
       const config = await identityAPI.config(id)
       if (version !== addFormVersion) return
-      addConfig.value = config; addUserID.value = config.user_id; addGroupID.value = config.group_id
-      if (!addUsers.value.some(user => user.id === config.user_id)) { const user = await adminAPI.users.getById(config.user_id); if (version === addFormVersion) addUsers.value.push(user) }
+      addConfig.value = config; addGroupID.value = config.group_id
     } catch (error) { const failure = error as { status?: number; response?: { status?: number } }; if ((failure.status ?? failure.response?.status) !== 404) throw error }
   } catch (error) { if (version === addFormVersion) { addAccount.value = null; addError.value = message(error) } }
   finally { if (version === addFormVersion) addBusy.value = false }
 }
 async function saveNewPlan() {
-  if (addBusy.value || !addAccount.value || addAccount.value.id !== addAccountID.value || !addUserID.value || !addCompatibleGroups.value.some(group => group.id === addGroupID.value) || !addDraft.value.request_model.trim() || !addCatalog.value.some(model => model.id === addDraft.value.expected_model)) return
+  if (addBusy.value || !addAccount.value || addAccount.value.id !== addAccountID.value || !savedSettings.value?.test_user_id || !addCompatibleGroups.value.some(group => group.id === addGroupID.value) || !addDraft.value.request_model.trim() || !addDraft.value.expected_model.trim()) return
   addBusy.value = true; addSaving.value = true; addError.value = ''
   const accountID = addAccount.value.id, planID = editingPlanID.value
-  const configuration = { user_id: addUserID.value, group_id: addGroupID.value }
+  const configuration = { group_id: addGroupID.value }
   const payload = { account_id: accountID, ...addDraft.value, request_model: addDraft.value.request_model.trim() }
   try {
-    if (!addConfig.value || addConfig.value.user_id !== configuration.user_id || addConfig.value.group_id !== configuration.group_id) addConfig.value = await identityAPI.saveConfig(accountID, configuration)
+    if (!addConfig.value || addConfig.value.user_id !== savedSettings.value?.test_user_id || addConfig.value.group_id !== configuration.group_id) addConfig.value = await identityAPI.saveConfig(accountID, configuration)
     if (planID) await identityAPI.updatePlan(planID, payload)
     else await identityAPI.savePlan(payload)
     addSaving.value = false; closeAddPlan(); await loadRows()
@@ -344,7 +314,7 @@ watch(addAccountID, () => { if (addPlanOpen.value) void loadAddAccount() })
 function changePage(value: number) { page.value = value; void loadRows() }
 function editPlan(row: IdentityRow & { plan: identityAPI.IdentityPlan }) {
   closeAddPlan(); addAccounts.value = [row.account]; editingPlanID.value = row.plan.id
-  addDraft.value = { request_model: row.plan.request_model, expected_model: row.plan.expected_model, interval_minutes: row.plan.interval_minutes, enabled: row.plan.enabled }
+  addDraft.value = { request_model: row.plan.request_model, expected_model: row.plan.expected_model, interval_minutes: row.plan.interval_minutes, enabled: row.plan.enabled, options: { ...identityAPI.defaultIdentityOptions(), ...row.plan.options } }
   addPlanOpen.value = true; addAccountID.value = row.account.id
 }
 async function deleteCurrentPlan() {
@@ -360,7 +330,7 @@ async function toggleSchedule(plan: identityAPI.IdentityPlan) {
   scheduleBusy.value = plan.id
   loadError.value = ''
   try {
-    await identityAPI.updatePlan(plan.id, { account_id: plan.account_id, request_model: plan.request_model, expected_model: plan.expected_model, interval_minutes: plan.interval_minutes, enabled: !plan.enabled })
+    await identityAPI.updatePlan(plan.id, { account_id: plan.account_id, request_model: plan.request_model, expected_model: plan.expected_model, interval_minutes: plan.interval_minutes, enabled: !plan.enabled, options: plan.options })
     await loadRows()
   } catch (error) { loadError.value = message(error) }
   finally { scheduleBusy.value = 0 }
@@ -369,7 +339,7 @@ async function runPlan(plan: identityAPI.IdentityPlan) {
   if (actionBusy.value || accountHasActiveRun(plan.account_id)) return
   loadError.value = ''
   actionBusy.value = plan.id
-  try { await identityAPI.run(plan.id); await loadRows() }
+  try { await identityAPI.run(plan.id); selectedPlanID.value = plan.id; await loadRows(); await selectPlan(plan.id) }
   catch (error) { loadError.value = message(error) }
   finally { actionBusy.value = 0 }
 }
@@ -381,7 +351,7 @@ async function cancelRun(run: identityAPI.IdentityRun) {
 }
 async function openReport(run: identityAPI.IdentityRun) {
   const version = ++reportVersion
-  reportOpen.value = true; reportLoading.value = true; reportError.value = ''; selectedReport.value = null
+  historyOpen.value = false; selectedPlanID.value = run.plan_id; reportLoading.value = true; reportError.value = ''; selectedReport.value = null
   try { const result = await identityAPI.runStatus(run.id); if (version === reportVersion) selectedReport.value = result }
   catch (error) { if (version === reportVersion) reportError.value = message(error) }
   finally { if (version === reportVersion) reportLoading.value = false }
@@ -392,11 +362,10 @@ async function refreshActiveReport() {
   try { const result = await identityAPI.runStatus(selected.id); if (version === reportVersion && selectedReport.value?.id === selected.id) selectedReport.value = result }
   catch (error) { if (version === reportVersion) reportError.value = message(error) }
 }
-function closeReport() { reportVersion++; reportOpen.value = false; selectedReport.value = null }
 watch(query, () => { clearTimeout(queryTimer); queryTimer = setTimeout(() => { page.value = 1; void loadRows() }, 300) })
 onMounted(async () => {
   await Promise.allSettled([loadConnectionSettings(), loadRows(), adminAPI.groups.getAll().then(result => { groups.value = result }).catch(error => { loadError.value = message(error) })])
-  poll = setInterval(() => { if (!document.hidden) void refreshActiveReport(); if (!document.hidden && !loading.value && !scheduleBusy.value && !addPlanOpen.value && planRows.value.some(row => isActive(row.latest))) void loadRows() }, 5000)
+  poll = setInterval(() => { if (!document.hidden) void refreshActiveReport(); if (!document.hidden && !loading.value && !scheduleBusy.value && !addPlanOpen.value && planRows.value.some(row => isActive(row.latest))) void loadRows() }, 2000)
 })
 onUnmounted(() => { accountSearchVersion++; addFormVersion++; userSearchVersion++; loadVersion++; reportVersion++; clearInterval(poll); clearTimeout(queryTimer) })
 </script>

@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"encoding/base64"
 	"html"
+	"mime"
 	"net/http"
 	"strings"
 
@@ -126,6 +128,52 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 
 		AllowUserViewErrorRequests: settings.AllowUserViewErrorRequests,
 	})
+}
+
+// GetPublicSiteLogo serves the uploaded inline site logo as an image for clients
+// that require a public HTTPS icon URL, such as CC Switch deep-link imports.
+func (h *SettingHandler) GetPublicSiteLogo(c *gin.Context) {
+	settings, err := h.settingService.GetPublicSettings(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	contentType, image, err := decodePublicSiteLogo(settings.SiteLogo)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+
+	c.Header("Cache-Control", "public, max-age=300")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Data(http.StatusOK, contentType, image)
+}
+
+func decodePublicSiteLogo(value string) (string, []byte, error) {
+	metadata, encoded, ok := strings.Cut(strings.TrimSpace(value), ",")
+	if !ok || !strings.HasPrefix(metadata, "data:") || !strings.HasSuffix(metadata, ";base64") {
+		return "", nil, http.ErrNotSupported
+	}
+
+	contentType, _, err := mime.ParseMediaType(strings.TrimSuffix(strings.TrimPrefix(metadata, "data:"), ";base64"))
+	if err != nil {
+		return "", nil, err
+	}
+	switch contentType {
+	case "image/png", "image/jpeg", "image/webp", "image/svg+xml":
+	default:
+		return "", nil, http.ErrNotSupported
+	}
+
+	image, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", nil, err
+	}
+	if len(image) == 0 || len(image) > 256*1024 {
+		return "", nil, http.ErrNotSupported
+	}
+	return contentType, image, nil
 }
 
 // UnsubscribeNotificationEmail handles optional notification email opt-outs.
