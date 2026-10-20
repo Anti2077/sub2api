@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"github.com/Wei-Shaw/sub2api/internal/rewards"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -72,6 +73,9 @@ func reserveInflightBalanceCtx(
 	req service.InflightEstimateRequest,
 ) (context.Context, func(), error) {
 	if billing == nil || estimator == nil || apiKey == nil || apiKey.User == nil || !billing.InflightReservationEnabled() {
+		return ctx, inflightNoop, nil
+	}
+	if rewards.FreeText(apiKey.RewardCapture) {
 		return ctx, inflightNoop, nil
 	}
 	if apiKey.Group != nil && apiKey.Group.IsSubscriptionType() && subscription != nil {

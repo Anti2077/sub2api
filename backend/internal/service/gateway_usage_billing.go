@@ -347,6 +347,9 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 		cmd.AccountQuotaCost = p.Cost.TotalCost * p.AccountRateMultiplier
 	}
 
+	cmd.RewardCapture = p.APIKey.RewardCapture
+	cmd.RewardTextCost = p.Cost.RewardTextCost
+	cmd.RewardBaseRate = p.Cost.RewardBaseRate
 	cmd.Normalize()
 	return cmd
 }
@@ -358,7 +361,7 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 
 	cmd := buildUsageBillingCommand(requestID, usageLog, p)
 	if cmd == nil || cmd.RequestID == "" || repo == nil {
-		if p.SimpleModeKeyRateLimitOnly {
+		if p.SimpleModeKeyRateLimitOnly || p.APIKey != nil && p.APIKey.RewardCapture != nil {
 			return false, ErrSimpleModeKeyRateLimitBillingUnavailable
 		}
 		// The legacy path is only a fallback for standard billing. Simple mode
@@ -375,6 +378,12 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 		return false, err
 	}
 
+	if result != nil && result.PaidCost != nil {
+		p.Cost.ActualCost = *result.PaidCost
+		if usageLog != nil {
+			usageLog.ActualCost = *result.PaidCost
+		}
+	}
 	if result == nil || !result.Applied {
 		deps.deferredService.ScheduleLastUsedUpdate(p.Account.ID)
 		return false, nil
@@ -1049,6 +1058,15 @@ func (s *GatewayService) calculateRecordUsageCost(
 		tokenCost = &CostBreakdown{}
 	} else {
 		tokenCost = s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, pricingAt)
+	}
+	if tokenCost != nil && (tokenCost.BillingMode == "" || tokenCost.BillingMode == string(BillingModeToken)) {
+		tokenCost.RewardTextCost = rewardTextCharge(tokenCost)
+		tokenCost.RewardBaseRate = multiplier
+		if apiKey.Group != nil {
+			if peak := apiKey.Group.PeakMultiplierAt(pricingAt); peak > 0 {
+				tokenCost.RewardBaseRate /= peak
+			}
+		}
 	}
 	if result.SearchCount > 0 {
 		price := groupSearchPricePer1kFromAPIKey(apiKey)

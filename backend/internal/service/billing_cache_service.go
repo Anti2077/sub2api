@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/rewards"
 	"math"
 	"strconv"
 	"sync"
@@ -763,8 +765,14 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 			return err
 		}
 	} else {
+		var freeText bool
+		if apiKey != nil {
+			freeText = rewards.FreeText(apiKey.RewardCapture)
+		}
 		if err := s.checkBalanceEligibility(ctx, user.ID); err != nil {
-			return err
+			if !freeText || !errors.Is(err, ErrInsufficientBalance) {
+				return err
+			}
 		}
 	}
 

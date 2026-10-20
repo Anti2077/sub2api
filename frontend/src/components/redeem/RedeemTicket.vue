@@ -1,11 +1,11 @@
 <template>
   <section class="ticket-scene">
-    <form ref="paper" class="ticket" :class="{ 'ticket-invalid': invalid }" @submit.prevent="requestRedeem">
+    <form ref="paper" class="ticket" :class="{ 'ticket-invalid': invalid, 'ticket-receipted': complete && receipt?.type === 'card' }" @submit.prevent="requestRedeem">
       <div class="paper ticket-body" :class="{ 'ticket-torn': complete }">
         <div class="ticket-top">
           <span>CREDIT VOUCHER</span><span>ONE USE ONLY</span>
         </div>
-        <h2>{{ t('redeem.ticketTitle') }}</h2>
+        <h2>{{ t(complete && receipt?.type === 'card' ? 'rewards.receiptTitle' : 'redeem.ticketTitle') }}</h2>
         <div class="ticket-entry">
           <input
             id="code"
@@ -25,6 +25,7 @@
             "
           />
         </div>
+        <RedeemCardReceipt v-if="complete && receipt?.type === 'card'" :card="receipt.card" />
         <div class="ticket-bottom">
           <div class="barcode" aria-hidden="true" />
           <span :key="complete ? 'used' : 'waiting'" :class="{ 'ticket-used-reveal': complete }">{{
@@ -35,7 +36,7 @@
           {{ t('redeem.ticketStamp') }}<span>REDEEMED</span>
         </div>
       </div>
-      <div class="ticket-seam" aria-hidden="true">
+      <div v-if="!complete" class="ticket-seam" aria-hidden="true">
         <span>{{ t('redeem.ticketSeam') }}</span>
       </div>
       <!-- Separate attached/free layers keep the lower paper joined while the tear advances. -->
@@ -107,6 +108,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import type { RedeemResult } from '@/api/redeem'
+import RedeemCardReceipt from './RedeemCardReceipt.vue'
 const props = defineProps<{ modelValue: string; locked: boolean; invalid?: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [string]; redeem: [] }>()
 const { t } = useI18n()
@@ -116,6 +119,7 @@ const input = ref<HTMLInputElement>(),
   stub = ref<HTMLElement>(),
   attached = ref<HTMLElement>()
 const redeemedCode = ref('')
+const receipt = ref<RedeemResult | null>(null)
 const pending = ref(false),
   complete = ref(false),
   dragging = ref(false)
@@ -168,6 +172,7 @@ function reset() {
   flight = undefined
   fallen = false
   complete.value = false
+  receipt.value = null
   clearPaper()
   void nextTick(() => input.value?.focus())
 }
@@ -309,7 +314,8 @@ function detach(): Promise<void> {
     raf = requestAnimationFrame(frame)
   })
 }
-async function accept(): Promise<void> {
+async function accept(result?: RedeemResult): Promise<void> {
+  receipt.value = result ? JSON.parse(JSON.stringify(result)) as RedeemResult : null
   redeemedCode.value = props.modelValue
   await (flight ?? (fallen ? Promise.resolve() : detach()))
   pending.value = false
@@ -710,4 +716,13 @@ defineExpose({ accept, rollback, reset })
 @media (max-width: 550px) {
   .ticket-entry { margin-top: 22px; }
 }
+/* The received benefits live on the remaining paper, with a footer stamp. */
+.ticket-receipted { grid-template-columns: minmax(0, 1fr); }
+.ticket-receipted .ticket-stub { display: none; }
+.ticket-receipted .ticket-body { padding-bottom: 20px; }
+.ticket-receipted .ticket-entry { margin-top: 4px; }
+.ticket-receipted .ticket-entry input { font-size: 12px; min-height: 34px; padding: 8px 0; overflow: hidden; text-overflow: ellipsis; }
+.ticket-receipted .ticket-stamp { position: relative; inset: auto; width: fit-content; margin: 14px 8px 4px auto; padding: 6px 10px; font-size: 16px; }
+.ticket-receipted .ticket-top { flex-wrap: wrap; }
+.ticket-receipted .ticket-bottom { gap: 12px; }
 </style>

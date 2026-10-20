@@ -31,6 +31,24 @@ func RegisterAdminRoutes(
 	admin.Use(gin.HandlerFunc(auditLog))
 	admin.Use(middleware.AdminComplianceGuard(settingService))
 	{
+		if h.Rewards != nil {
+			r := admin.Group("/rewards")
+			r.GET("/config", h.Rewards.Config)
+			r.PUT("/config", h.Rewards.SaveConfig)
+			r.GET("/templates", h.Rewards.Templates)
+			r.PUT("/templates", h.Rewards.SaveTemplate)
+			r.GET("/cards", h.Rewards.AdminCards)
+			r.POST("/grant", h.Rewards.Grant)
+			r.POST("/cards/:id/revoke", h.Rewards.Revoke)
+			r.GET("/records", h.Rewards.AdminRecords)
+			r.POST("/codes", h.Rewards.Codes)
+			r.GET("/codes", h.Rewards.AdminCodes)
+			r.PUT("/codes/:id/status", h.Rewards.SetCodeStatus)
+			r.GET("/shop", h.Rewards.AdminShop)
+			r.PUT("/shop", h.Rewards.SaveShop)
+			r.PUT("/shop/:id/status", h.Rewards.SetShopPublished)
+			r.GET("/farm/ledger", h.Rewards.AdminFarmLedger)
+		}
 		// 部署与运营合规确认
 		registerAdminComplianceRoutes(admin, h)
 

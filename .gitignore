@@ -140,6 +140,10 @@ deploy/docker-compose.override.yml
 .gocache/
 vite.config.js
 docs/*
+!docs/vendor/
+!docs/vendor/grow-your-garden/
+!docs/vendor/grow-your-garden/**
+!docs/rewards-local-acceptance.md
 !docs/PAYMENT.md
 !docs/PAYMENT_CN.md
 !docs/ADMIN_PAYMENT_INTEGRATION_API.md
@@ -173,3 +177,7 @@ issues/
 
 # 本地数据库备份
 /sub2api-db-backup/
+
+# Local Python test bytecode
+__pycache__/
+*.py[cod]

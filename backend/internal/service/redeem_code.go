@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/rewards"
 )
 
 type RedeemCode struct {
@@ -23,6 +25,8 @@ type RedeemCode struct {
 
 	User  *User
 	Group *Group
+	// Card is a response-only receipt after successful card redemption.
+	Card *rewards.Card
 }
 
 func (r *RedeemCode) IsUsed() bool {

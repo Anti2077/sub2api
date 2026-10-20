@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/rewards"
 	"strings"
 	"time"
 
@@ -452,7 +453,7 @@ func (s *RedeemService) redeem(ctx context.Context, userID int64, code string, r
 
 	// 验证兑换码类型的前置条件。邀请码属于注册流程，不能通过普通兑换接口使用。
 	switch redeemCode.Type {
-	case RedeemTypeBalance, RedeemTypeConcurrency:
+	case RedeemTypeBalance, RedeemTypeConcurrency, "card":
 	case RedeemTypeSubscription:
 		if redeemCode.GroupID == nil {
 			return nil, infraerrors.BadRequest("REDEEM_CODE_INVALID", "invalid subscription redeem code: missing group_id")
@@ -487,7 +488,17 @@ func (s *RedeemService) redeem(ctx context.Context, userID int64, code string, r
 	}
 
 	// 执行兑换逻辑（兑换码已被锁定，此时可安全操作）
+	var cardReceipt *rewards.Card
 	switch redeemCode.Type {
+	case "card":
+		cardID, err := rewards.Redeem(ctx, tx.Client(), userID, redeemCode.ID)
+		if err != nil {
+			return nil, err
+		}
+		cardReceipt, err = rewards.RedemptionReceipt(ctx, tx.Client(), userID, cardID)
+		if err != nil {
+			return nil, fmt.Errorf("read redeemed card receipt: %w", err)
+		}
 	case RedeemTypeBalance:
 		amount := redeemCode.Value
 		if amount < 0 {
@@ -559,6 +570,7 @@ func (s *RedeemService) redeem(ctx context.Context, userID int64, code string, r
 	if err != nil {
 		return nil, fmt.Errorf("get updated redeem code: %w", err)
 	}
+	redeemCode.Card = cardReceipt
 
 	return redeemCode, nil
 }

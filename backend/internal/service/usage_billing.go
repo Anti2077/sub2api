@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/rewards"
 	"math"
 	"strings"
 
@@ -17,6 +18,9 @@ var ErrUsageBillingRequestConflict = errors.New("usage billing request fingerpri
 
 // UsageBillingCommand describes one billable request that must be applied at most once.
 type UsageBillingCommand struct {
+	RewardCapture      *rewards.Capture
+	RewardTextCost     float64
+	RewardBaseRate     float64
 	RequestID          string
 	APIKeyID           int64
 	RequestFingerprint string
@@ -163,6 +167,7 @@ type AccountQuotaState struct {
 }
 
 type UsageBillingApplyResult struct {
+	PaidCost             *float64 // Committed receipt, including duplicate reward settlements.
 	Applied              bool
 	APIKeyQuotaExhausted bool
 	NewBalance           *float64           // post-deduction balance (nil = no balance deduction)

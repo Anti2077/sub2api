@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/rewards"
 	"net/http"
 	"strings"
 
@@ -211,6 +212,24 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			}
 		}
 
+		if !skipBilling && apiKeyService.Rewards != nil {
+			model, pure, e := rewards.RequestIdentity(c.Request)
+			if e != nil {
+				AbortWithError(c, 400, "INVALID_REQUEST", e.Error())
+				return
+			}
+			if model != "" && apiKey.GroupID != nil {
+				capture, e := apiKeyService.Rewards.Capture(c.Request.Context(), apiKey.UserID, *apiKey.GroupID, model, pure)
+				if e != nil {
+					AbortWithError(c, 503, "REWARDS_UNAVAILABLE", "Billing entitlement lookup unavailable")
+					return
+				}
+				local := *apiKey
+				local.RewardCapture = capture
+				apiKey = &local
+				c.Request = c.Request.WithContext(rewards.WithCapture(c.Request.Context(), capture))
+			}
+		}
 		// ── 6. 计费执行（skipBilling 时整块跳过） ────────────────────
 
 		if !skipBilling {
@@ -260,7 +279,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 				}
 			} else {
 				// 非订阅模式 或 订阅模式但 subscriptionService 未注入：回退到余额检查
-				if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
+				if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) && !rewards.FreeText(apiKey.RewardCapture) {
 					AbortWithError(c, 403, "INSUFFICIENT_BALANCE", "Insufficient account balance")
 					return
 				}

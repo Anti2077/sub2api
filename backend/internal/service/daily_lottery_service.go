@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/rewards"
 	"math"
 	"math/big"
 	"strings"
@@ -42,11 +43,14 @@ var (
 )
 
 type DailyLotteryPrize struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	RewardAmount float64 `json:"reward_amount"`
-	Weight       int64   `json:"weight"`
-	Enabled      bool    `json:"enabled"`
+	CardTemplateID int64             `json:"card_template_id,omitempty"`
+	Card           *rewards.Template `json:"card,omitempty"`
+	CardID         int64             `json:"card_id,omitempty"`
+	ID             string            `json:"id"`
+	Name           string            `json:"name"`
+	RewardAmount   float64           `json:"reward_amount"`
+	Weight         int64             `json:"weight"`
+	Enabled        bool              `json:"enabled"`
 }
 
 type DailyLotteryConfig struct {
@@ -163,6 +167,15 @@ func (s *DailyLotteryService) GetConfig(ctx context.Context) (DailyLotteryConfig
 
 func (s *DailyLotteryService) UpdateConfig(ctx context.Context, cfg DailyLotteryConfig) (DailyLotteryConfig, error) {
 	for i := range cfg.Prizes {
+		cfg.Prizes[i].Card = nil
+		cfg.Prizes[i].CardID = 0
+		if cfg.Prizes[i].CardTemplateID > 0 {
+			t, e := rewards.LoadTemplate(ctx, s.entClient, cfg.Prizes[i].CardTemplateID, true)
+			if e != nil {
+				return DailyLotteryConfig{}, e
+			}
+			cfg.Prizes[i].Card = &t
+		}
 		cfg.Prizes[i].ID = strings.TrimSpace(cfg.Prizes[i].ID)
 		cfg.Prizes[i].Name = strings.TrimSpace(cfg.Prizes[i].Name)
 		if cfg.Prizes[i].ID == "" {
@@ -246,6 +259,14 @@ func (s *DailyLotteryService) Draw(ctx context.Context, userID int64) (*DailyLot
 		return nil, ErrDailyLotteryAlreadyDrawn
 	}
 
+	if prize.CardTemplateID > 0 {
+		if prize.Card == nil {
+			return nil, rewards.Bad("卡券奖项缺少快照")
+		}
+		if _, err := rewards.Grant(ctx, tx.Client(), userID, *prize.Card, "lottery", fmt.Sprintf("legacy-lottery:%d:%s", userID, date), now); err != nil {
+			return nil, err
+		}
+	}
 	change, err := s.userRepo.AdjustBalance(txCtx, userID, prize.RewardAmount)
 	if err != nil {
 		return nil, fmt.Errorf("credit daily lottery reward: %w", err)
@@ -347,6 +368,9 @@ func validateDailyLotteryConfig(cfg DailyLotteryConfig) error {
 	enabledCount := 0
 	var totalWeight int64
 	for _, prize := range cfg.Prizes {
+		if prize.CardTemplateID < 0 || prize.CardTemplateID > 0 && prize.RewardAmount != 0 {
+			return rewards.Bad("卡券奖项不能同时发放余额")
+		}
 		if prize.ID == "" || len(prize.ID) > 64 {
 			return infraerrors.BadRequest("DAILY_LOTTERY_INVALID_PRIZE_ID", "each prize must have a valid id")
 		}

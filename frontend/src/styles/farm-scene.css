@@ -1,0 +1,58 @@
+/* Continuous isometric farmland, with pointer targets following the soil. */
+.farm-layout{grid-template-columns:1fr;gap:16px}
+.farm-page .rewards-nav{margin-bottom:18px}.farm-page .rw-header{margin-bottom:16px}.farm-page .rw-header h1{font-size:29px}.farm-page .rw-flow{margin-bottom:14px}.farm-page .farm-toolbar{margin-bottom:16px}
+.farm-page{position:relative}.farm-messages{position:sticky;top:76px;height:0;z-index:20;pointer-events:none}.farm-messages>p{position:absolute;top:8px;right:12px;max-width:min(420px,calc(100% - 24px));margin:0;box-shadow:0 4px 18px #23384f18;pointer-events:auto}
+.farm-scene{aspect-ratio:960/700;min-height:0;isolation:isolate;container-type:inline-size;background:#a5cc80;overflow:hidden}
+.farm-scene:after{background:linear-gradient(120deg,#fff4cb18,transparent 60%,#2a504009)}
+.farm-scene-top{padding:18px 22px;position:absolute;left:0;right:0;top:0;z-index:10}
+.farm-scene-tag{background:#fff6dfed;color:#5b7045;border-color:#c6c994;font-size:12px;box-shadow:0 4px 12px #38562912}
+.farm-live{background:#fff6d8c9;color:#4d7145;font-size:11px}
+.farm-pods{position:absolute;inset:0;display:block;min-height:0;padding:0;pointer-events:none;z-index:3}
+.farm-plot,.farm-plot.farm-ripe,.farm-plot.farm-vacant{position:absolute;height:auto;aspect-ratio:1;min-height:0;display:block;padding:0;border:0;box-shadow:none;background:transparent;translate:-50% -66.63%;transform:none;overflow:visible;color:#fff7db;isolation:isolate;border-radius:0;transition:none;-webkit-tap-highlight-color:transparent}
+.farm-plot:before,.farm-plot.farm-ripe:before,.farm-plot.farm-vacant:before{display:none}
+.farm-plot:disabled{opacity:1;cursor:default}
+.farm-plot{pointer-events:none!important;clip-path:none}
+.farm-hit{position:absolute;inset:0;clip-path:polygon(50% 33.26%,100% 66.63%,50% 100%,0 66.63%);pointer-events:auto;cursor:pointer;touch-action:manipulation}
+.farm-plot[aria-disabled=true] .farm-hit{cursor:progress}
+.farm-plot>*:not(.farm-hit){pointer-events:none}
+.farm-plot .farm-crop{pointer-events:auto;clip-path:ellipse(49% 49% at 50% 50%);cursor:pointer;touch-action:manipulation}.farm-plot .pod-ready{pointer-events:auto;cursor:pointer}
+.farm-selection{position:absolute;bottom:0;width:100%;height:auto;aspect-ratio:466/311;z-index:0;opacity:0;fill:none;stroke:#fff0b5;stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none}
+.farm-selection path{vector-effect:non-scaling-stroke}.farm-selected .farm-selection,.farm-plot:focus-visible .farm-selection{opacity:1}
+.farm-selected-detail{display:flex;flex:1;flex-direction:column;gap:2px}.farm-selected-detail small{font-size:11px}
+.farm-plot:enabled:hover,.farm-plot:active{transform:none;box-shadow:none;background:transparent}
+.farm-plot:focus-visible{outline:none;background:transparent}
+@media(hover:hover) and (pointer:fine){.farm-plot:hover:not(.farm-selected) .farm-selection{opacity:.45}}
+.pod-bed{position:absolute;inset:0;width:100%;height:100%;margin:0;display:grid;place-items:center}
+.pod-planter{position:absolute;z-index:-1;width:100%;height:auto;aspect-ratio:466/311;bottom:0;object-fit:contain;overflow:visible;filter:drop-shadow(0 2px 1px #36563d20)}
+.planter-side{fill:#81603d}.planter-shade{fill:#65492f}.planter-rim{fill:#b58d5b}.planter-soil{fill:#8d6945}
+.farm-ripe .planter-rim{fill:#d5b479}.farm-ripe .planter-side{fill:#916b43}
+.farm-vacant .planter-soil{fill:#a47c50}.farm-vacant .planter-rim{fill:#c09a64}
+.pod-plus{position:absolute;left:50%;top:66.63%;color:#ead5ad;width:22px;height:22px;transform:translate(-50%,-50%);filter:drop-shadow(0 2px 1px #6d4d2f)}
+.crop-art{width:88%;height:83%;transform:translateY(-13%);filter:drop-shadow(2px 5px 1px #47392030);transform-origin:50% 90%}
+.crop-art.is-young{width:73%;height:70%;transform:translateY(-3%)}
+.crop-art.is-ripe{animation:none}
+.farm-plot>strong{position:absolute;left:50%;bottom:27%;translate:-50% 0;margin:0;max-width:90%;white-space:nowrap;font-size:clamp(9px,1vw,12px);font-weight:650;color:#fff6db;text-shadow:0 1px 3px #49311f;pointer-events:none}
+.farm-plot.farm-vacant>strong{color:#f8e9c9}
+.pod-label{position:absolute;bottom:16%;left:50%;translate:-50% 0;white-space:nowrap;color:#f7e4ba;text-shadow:0 1px 2px #49311f;font-size:clamp(8px,.75vw,10px);pointer-events:none}
+.farm-plot>strong,.pod-label{display:none}
+.pod-number{position:absolute;top:auto;bottom:9%;left:50%;translate:-50% 0;color:#f4dfb7;font:10px ui-monospace,monospace;text-shadow:0 1px 2px #49311f;pointer-events:none;z-index:3}
+.pod-ready{z-index:4;right:12%;top:9%;display:inline-flex;padding:4px;border-radius:99px;background:#fff5cc;color:#72572b;border:1px solid #bd995a;font-size:0;box-shadow:0 2px 4px #56713b22;pointer-events:none}.pod-ready svg{width:12px;height:12px}
+.pod-progress{display:none}.pod-yield{display:none}
+.farm-scene-footer{position:absolute;bottom:12px;left:18px;right:18px;margin:0;padding:9px 12px;border:1px solid #b6bf8b;border-radius:12px;background:#fff7dcde;color:#577044;font-size:11px;z-index:6}
+.farm-aside{display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px}.farm-seeds{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));column-gap:10px;align-content:start}.farm-seeds>.rw-section-title,.farm-seeds>.rw-caption{grid-column:1/-1}.seed-option{flex-direction:column;align-items:start;position:relative;padding:10px;border:1px solid var(--rw-line);border-radius:12px;gap:8px;min-height:130px}.seed-option:last-of-type{border:1px solid var(--rw-line)}.seed-option.is-selected{background:var(--rw-mist);border-color:var(--rw-blue)}.seed-option>svg:last-child:not(.crop-mini){position:absolute;right:8px;top:10px}.seed-option .crop-mini{width:46px;height:49px}.seed-option strong{font-size:13px}.seed-option small{font-size:11px}.seed-option:focus-within{outline:2px solid var(--rw-blue);outline-offset:2px}.farm-seeds>.rw-caption{margin-top:12px}.farm-goal h3{font-size:16px}
+.pod-feedback{position:absolute;z-index:6;top:2%;left:50%;translate:-50% 0;display:flex;align-items:center;gap:5px;padding:7px 12px;border-radius:99px;background:#fff5ce;color:#70542b;box-shadow:0 3px 12px #3c623033;animation:field-reward 2.2s ease-out forwards;font-weight:700;font-size:13px;white-space:nowrap;pointer-events:none}.pod-feedback svg{width:16px;height:16px}
+.farm-loading-skeleton,.benefit-skeleton{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;min-height:520px;padding:40px;border:1px solid var(--rw-line);border-radius:24px;background:var(--rw-soft)}
+.farm-loading-skeleton span,.benefit-skeleton>div{border-radius:18px;background:var(--rw-mist);animation:rw-loading 1.6s ease-in-out infinite alternate}.benefit-skeleton{min-height:420px;grid-template-columns:1fr 1fr;padding:0;background:transparent;border:0;margin-bottom:24px}
+@keyframes field-reward{0%{opacity:0;transform:translateY(12px) scale(.85)}15%,75%{opacity:1}100%{opacity:0;transform:translateY(-40px)}}
+@keyframes rw-loading{to{opacity:.5}}
+html.dark .farm-scene:after{background:#142a2010}html.dark .farm-plot>strong,html.dark .farm-plot.farm-vacant>strong{color:#fff4d8;text-shadow:0 1px 3px #352619}html.dark .pod-label,html.dark .pod-number{color:#f6e2ba}html.dark .pod-yield{color:#ffe3a1}html.dark .farm-scene-footer{background:#2b4a3ae8;border-color:#648568;color:#d6e1c7}html.dark .pod-ready{background:#665b36;color:#fff2bd;border-color:#ae9c62}html.dark .planter-side{fill:#795c3e}html.dark .planter-shade{fill:#57422f}html.dark .planter-rim{fill:#a38a5d}html.dark .planter-soil{fill:#6c553b}html.dark .farm-live{background:#34583de8;color:#dae6bf}
+@media(max-width:900px){.farm-aside{grid-template-columns:1fr}.farm-seeds{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:640px){
+ .farm-page .farm-wallet{min-width:0}
+ .farm-page .rw-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;margin-bottom:12px}.farm-page .rw-header h1{font-size:23px;margin:0;white-space:nowrap}.farm-page .rw-header .rw-eyebrow,.farm-page .rw-header p:not(.rw-eyebrow),.farm-page .rw-flow{display:none}.farm-page .rewards-nav{margin-bottom:16px}.farm-page .farm-wallet{width:104px;padding:8px 12px;gap:8px;min-height:59px}.farm-page .farm-wallet>svg{width:20px;height:20px}.farm-page .farm-wallet strong{font-size:21px}.farm-page .farm-wallet .rw-link{display:none}.farm-page .farm-toolbar{flex-direction:row;align-items:center;gap:7px;margin-bottom:12px}.farm-page .farm-toolbar .rw-segments{flex:1;min-width:0}.farm-page .farm-toolbar .rw-segments button{padding:0 6px;font-size:11px;gap:3px}.farm-page .farm-toolbar>.rw-link{font-size:0;gap:0;padding:0 8px;min-height:44px;align-self:center}.farm-page .farm-toolbar>.rw-link svg{width:18px;height:18px}.farm-page .rw-success{font-size:11px;padding:8px 10px;margin:0 0 10px}
+ .farm-scene{aspect-ratio:1/1.08;min-height:0;border-radius:18px}.farm-scene-top{padding:12px 10px;gap:4px}.farm-scene-tag{font-size:10px;padding:6px 9px}.farm-live{font-size:9px;padding:5px}
+ .pod-number{font-size:9px}.pod-ready{padding:3px}.pod-ready svg{width:10px;height:10px}.pod-plus{width:18px;height:18px}.pod-feedback{font-size:11px;padding:5px 8px}
+ .farm-scene-footer{left:9px;right:9px;bottom:8px;padding:6px 8px;font-size:9px;gap:5px}.farm-scene-footer span:nth-child(2){font-size:9px}.farm-seeds{grid-template-columns:repeat(2,minmax(0,1fr))}.seed-option{flex-direction:row;min-height:80px;align-items:center;padding:9px;gap:6px}.seed-option .crop-mini{width:34px;height:42px}.seed-option strong{font-size:12px}.seed-option small{font-size:10px}.farm-aside{gap:14px}.farm-loading-skeleton{min-height:380px;padding:20px}.benefit-skeleton{grid-template-columns:1fr;min-height:600px}
+ .farm-selected-detail small{font-size:10px}.farm-scene-footer .farm-selected-detail{font-size:10px;min-height:30px}
+}
+@media(prefers-reduced-motion:reduce){.reward-page *,.reward-page *::before,.reward-page *::after{animation:none!important;transition:none!important}}

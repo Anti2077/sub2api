@@ -8,6 +8,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
+	"github.com/Wei-Shaw/sub2api/internal/rewards"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -165,6 +166,24 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			return
 		}
 
+		if apiKeyService.Rewards != nil {
+			model, pure, err := rewards.RequestIdentity(c.Request)
+			if err != nil {
+				abortWithGoogleError(c, 400, "Invalid request body")
+				return
+			}
+			if model != "" && apiKey.GroupID != nil {
+				capture, err := apiKeyService.Rewards.Capture(c.Request.Context(), apiKey.UserID, *apiKey.GroupID, model, pure)
+				if err != nil {
+					abortWithGoogleError(c, 503, "Billing entitlement lookup unavailable")
+					return
+				}
+				local := *apiKey
+				local.RewardCapture = capture
+				apiKey = &local
+				c.Request = c.Request.WithContext(rewards.WithCapture(c.Request.Context(), capture))
+			}
+		}
 		isSubscriptionType := apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
 		if isSubscriptionType && subscriptionService != nil {
 			subscription, err := subscriptionService.GetActiveSubscription(
@@ -200,7 +219,7 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 
 			c.Set(string(ContextKeySubscription), subscription)
 		} else {
-			if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
+			if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) && !rewards.FreeText(apiKey.RewardCapture) {
 				abortWithGoogleError(c, 403, "Insufficient account balance")
 				return
 			}

@@ -274,6 +274,8 @@ func (r *redeemCodeRepository) BatchUpdate(ctx context.Context, ids []int64, fie
 func (r *redeemCodeRepository) batchUpdate(ctx context.Context, client *dbent.Client, ids []int64, fields service.RedeemCodeBatchUpdateFields) (int64, error) {
 	existing, err := client.RedeemCode.Query().
 		Where(redeemcode.IDIn(ids...)).
+		Order(dbent.Asc(redeemcode.FieldID)).
+		ForUpdate().
 		All(ctx)
 	if err != nil {
 		return 0, err

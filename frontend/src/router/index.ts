@@ -282,12 +282,14 @@ const routes: RouteRecordRaw[] = [
       descriptionKey: 'leaderboard.description'
     }
   },
+  { path: '/cards', name:'Cards', component:()=>import('@/views/user/CardsView.vue'),meta:{requiresAuth:true,requiresAdmin:false,titleKey:'rewards.cards'} },
+  { path: '/farm', name:'Farm', component:()=>import('@/views/user/FarmView.vue'),meta:{requiresAuth:true,requiresAdmin:false,titleKey:'rewards.farm'} },
   { path: '/daily-lottery', redirect: '/incentives#lottery' },
   { path: '/incentives', name: 'Incentives', component: () => import('@/views/user/IncentivesView.vue'), meta: { requiresAuth: true, requiresAdmin: false, titleKey: 'incentives.title' } },
   {
     path: '/redeem',
+    redirect: to => ({path:'/cards',query:{...to.query,tab:'redeem'}}),
     name: 'Redeem',
-    component: () => import('@/views/user/RedeemView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
@@ -658,6 +660,8 @@ const routes: RouteRecordRaw[] = [
       descriptionKey: 'admin.promo.description'
     }
   },
+  { path:'/admin/reward-cards',name:'AdminRewardCards',component:()=>import('@/views/admin/RewardsView.vue'),meta:{requiresAuth:true,requiresAdmin:true,titleKey:'rewards.admin'} },
+  { path:'/admin/farm',name:'AdminFarm',component:()=>import('@/views/admin/RewardsView.vue'),meta:{requiresAuth:true,requiresAdmin:true,titleKey:'rewards.farmAdmin'} },
   { path: '/admin/daily-lottery', redirect: '/admin/incentives' },
   { path: '/admin/incentives', name: 'AdminIncentives', component: () => import('@/views/admin/IncentivesView.vue'), meta: { requiresAuth: true, requiresAdmin: true, titleKey: 'incentives.settings' } },
   {

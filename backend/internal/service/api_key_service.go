@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/Wei-Shaw/sub2api/internal/rewards"
 	"html"
 	"math"
 	"sort"
@@ -288,6 +289,7 @@ type RateLimitCacheInvalidator interface {
 }
 
 type APIKeyService struct {
+	Rewards                   *rewards.Store
 	apiKeyRepo                APIKeyRepository
 	userRepo                  UserRepository
 	groupRepo                 GroupRepository

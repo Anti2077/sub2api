@@ -199,6 +199,8 @@ type UsageTokens struct {
 
 // CostBreakdown 费用明细
 type CostBreakdown struct {
+	RewardTextCost            float64 // Customer text charge before special tool/media surcharges.
+	RewardBaseRate            float64 // Effective rate before peak factor; discount keeps the peak factor.
 	InputCost                 float64 // 文本输入费用（不含图片输入，图片输入单独记入 ImageInputCost）
 	ImageInputCost            float64 // 图片输入 token 费用（如 gpt-image-2 图片编辑）
 	OutputCost                float64
@@ -209,6 +211,17 @@ type CostBreakdown struct {
 	ActualCost                float64 // 应用倍率后的实际费用
 	BillingMode               string  // 计费模式（"token"/"per_request"/"image"），由 CalculateCostUnified 填充
 	LongContextBillingApplied bool
+}
+
+// rewardTextCharge excludes separately priced image token buckets from the
+// customer text-token charge. Eligibility remains restricted to token mode at
+// the gateway call sites; tool, storage and media charges are never included.
+func rewardTextCharge(cost *CostBreakdown) float64 {
+	if cost == nil || cost.TotalCost <= 0 || cost.ActualCost <= 0 {
+		return 0
+	}
+	image := math.Max(0, cost.ImageInputCost) + math.Max(0, cost.ImageOutputCost)
+	return cost.ActualCost * math.Max(0, 1-image/cost.TotalCost)
 }
 
 func applyCostBreakdownMultiplier(cost *CostBreakdown, multiplier float64) {

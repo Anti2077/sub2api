@@ -56,6 +56,7 @@ type Handlers struct {
 	Redeem           *RedeemHandler
 	DailyLottery     *DailyLotteryHandler
 	Incentives       *IncentiveHandler
+	Rewards          *RewardsHandler
 	Subscription     *SubscriptionHandler
 	Announcement     *AnnouncementHandler
 	ChannelMonitor   *ChannelMonitorUserHandler
