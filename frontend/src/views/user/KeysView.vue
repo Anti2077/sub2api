@@ -1261,6 +1261,7 @@ import BulkEditKeysModal from '@/components/keys/BulkEditKeysModal.vue'
 import type { Column } from '@/components/common/types'
 import type { BatchApiKeyUsageStats } from '@/api/usage'
 import { formatDateTime } from '@/utils/format'
+import { buildGatewayUrl } from '@/api/client'
 import { maskApiKey } from '@/utils/maskApiKey'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import { platformBadgeLightClass } from '@/utils/platformColors'
@@ -2095,7 +2096,11 @@ const executeCcsImport = (row: ApiKey, clientType: CcSwitchClientType, model?: s
   const usageScript = CC_SWITCH_USAGE_SCRIPT
   const providerName = (publicSettings.value?.site_name || 'sub2api').trim() || 'sub2api'
   const siteLogo = publicSettings.value?.site_logo?.trim()
-  const iconUrl = siteLogo ? new URL(siteLogo, window.location.origin).toString() : undefined
+  const iconUrl = siteLogo
+    ? siteLogo.startsWith('data:image/')
+      ? buildGatewayUrl('/api/v1/settings/site-logo')
+      : new URL(siteLogo, window.location.origin).toString()
+    : undefined
   const deeplink = buildCcSwitchImportDeeplink({
     baseUrl,
     platform,
