@@ -19,8 +19,8 @@ describe('management actions',()=>{
  it('does not send a new grant when its retry ID cannot be persisted',async()=>{
   const w=mount(CardGrantManager,{props:{templates:[template],cards:[],groups:[],busy:false,reload:vi.fn()},global})
   await w.findAll('select')[1].setValue('1');await w.get('textarea').setValue('2');await w.get('input[maxlength="500"]').setValue('test');await w.get('form').trigger('submit')
-  const storage=vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new Error('blocked')})
-  await w.get('[data-confirm]').trigger('click');await flushPromises();expect(api.grant).not.toHaveBeenCalled();expect(w.get('[role=dialog]').text()).toContain('manageSessionFailed');storage.mockRestore();w.unmount()
+  const storage=vi.spyOn(Object.getPrototypeOf(sessionStorage),'setItem').mockImplementation(()=>{throw new Error('blocked')})
+  await w.get('[data-confirm]').trigger('click');await flushPromises();expect(storage).toHaveBeenCalled();expect(api.grant).not.toHaveBeenCalled();expect(w.get('[role=dialog]').text()).toContain('manageSessionFailed');storage.mockRestore();w.unmount()
  })
  it('restores uncertain grant and code batches after remount without creating new keys',async()=>{
   sessionStorage.setItem('rewards-management:session:grants',JSON.stringify([{id:3,template:1,key:'saved-grant-key',reason:'retry'}]))
