@@ -115,7 +115,9 @@ func TestRewardsRandomTokenUsageIntegerOracle(t *testing.T) {
 func TestFarmProtectionCapSnapshotAndHarvestStealRace(t *testing.T) {
 	ctx := context.Background()
 	s, owner, _, _, _ := rewardFixture(t)
-	now := time.Now().UTC()
+	// PostgreSQL rounds timestamps to microseconds. Align the fake clock so
+	// the exact protection boundary cannot precede the stored ready_at.
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	s.Now = func() time.Time { return now }
 	act := func(user int64, kind string, slot int, other int64) error {
 		_, err := s.Action(ctx, user, rewards.FarmAction{Key: uuid.NewString(), Kind: kind, Slot: slot, OwnerID: other, CropID: "sprout", Public: true})

@@ -22,6 +22,7 @@ jobs:
           /bin/sh deploy/tests/docker-compose-security-test.sh
           /bin/sh deploy/tests/docker-compose-gateway-env-test.sh
           /bin/sh deploy/tests/docker-runtime-resources-test.sh
+          /bin/sh deploy/tests/docker-tls-trust-test.sh
           /bin/sh deploy/test-caddyfile-cache.sh
 
   test:
