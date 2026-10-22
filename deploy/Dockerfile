@@ -7,8 +7,8 @@
 # Stage 3: Final minimal image
 # =============================================================================
 
-ARG NODE_IMAGE=node:24-alpine
-ARG GOLANG_IMAGE=golang:1.27.2-alpine
+ARG NODE_IMAGE=node:24.22.1-alpine
+ARG GOLANG_IMAGE=golang:1.27.3-alpine
 ARG GOPROXY=https://goproxy.cn,direct
 ARG GOSUMDB=sum.golang.google.cn
 
@@ -69,7 +69,7 @@ ENV GOPROXY=${GOPROXY}
 ENV GOSUMDB=${GOSUMDB}
 
 # Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata
+RUN apk add --no-cache git 'ca-certificates>=20261020-r0' tzdata
 
 WORKDIR /app/backend
 
@@ -109,7 +109,7 @@ LABEL org.opencontainers.image.source="https://github.com/Wei-Shaw/sub2api"
 
 # Install runtime dependencies
 RUN apk add --no-cache \
-    ca-certificates \
+    'ca-certificates>=20261020-r0' \
     tzdata \
     curl \
     su-exec \
