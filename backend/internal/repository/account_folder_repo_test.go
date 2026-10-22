@@ -22,24 +22,34 @@ func TestAccountFolderRejectsThirdLevel(t *testing.T) {
 	mock.ExpectExec("pg_advisory_xact_lock").WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery("SELECT parent_id").WithArgs(parent).WillReturnRows(sqlmock.NewRows([]string{"parent_id"}).AddRow(1))
 	mock.ExpectRollback()
-	_, err = repo.Save(context.Background(), 0, "third level", &parent)
+	_, err = repo.Save(context.Background(), 0, "third level", &parent, &service.AccountFolderRules{Platforms: []string{"openai"}})
 	require.ErrorContains(t, err, "two levels")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestAccountFolderMoveRollsBackWhenAccountDeleted(t *testing.T) {
+func TestAccountTagsUpdateRollsBackWhenAccountDeleted(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer func() { _ = db.Close() }()
+	defer db.Close()
 	repo := &accountFolderRepository{db: db}
-	folder := int64(3)
 	mock.ExpectBegin()
-	mock.ExpectExec("pg_advisory_xact_lock").WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectQuery("SELECT id FROM account_folders").WithArgs(folder).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(folder))
-	mock.ExpectQuery("SELECT id FROM accounts").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(10))
+	mock.ExpectQuery("UPDATE accounts").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
 	mock.ExpectRollback()
-	_, err = repo.Move(context.Background(), []int64{10, 11}, &folder)
+	_, err = repo.UpdateTags(context.Background(), []int64{10, 11}, []string{"new"}, "add")
 	require.Error(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestAccountTagsUpdateRollsBackWhenLimitExceeded(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	repo := &accountFolderRepository{db: db}
+	mock.ExpectBegin()
+	mock.ExpectQuery("UPDATE accounts").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2).AddRow(33))
+	mock.ExpectRollback()
+	_, err = repo.UpdateTags(context.Background(), []int64{10, 11}, []string{"new"}, "add")
+	require.ErrorContains(t, err, "32 tags")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -54,9 +64,9 @@ func TestAccountFolderFilterAppliedBeforePaginationCount(t *testing.T) {
 			ctx, err := service.WithAccountFolderFilter(context.Background(), folder)
 			require.NoError(t, err)
 			if folder == "7" {
-				mock.ExpectQuery(`SELECT COUNT\(.*EXISTS.*account_folder_members.*folder_children.*parent_id`).WithArgs(int64(7), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(4))
+				mock.ExpectQuery(`SELECT COUNT\(.*EXISTS.*account_folders.*account_matches_smart_folder.*parent_id`).WithArgs(int64(7), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(4))
 			} else {
-				mock.ExpectQuery(`SELECT COUNT\(.*NOT.*EXISTS.*account_folder_members`).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
+				mock.ExpectQuery(`SELECT COUNT\(.*NOT.*EXISTS.*account_folders.*account_matches_smart_folder`).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
 			}
 			count, err := repo.accountListFilteredQuery(ctx, "", "", "", "", 0, "").Count(ctx)
 			require.NoError(t, err)

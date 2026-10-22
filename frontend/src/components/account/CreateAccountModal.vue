@@ -56,6 +56,7 @@
           data-tour="account-form-name"
         />
       </div>
+      <AccountTagsInput v-model="selectedTags" />
       <div>
         <label class="input-label">{{ t('admin.accounts.notes') }}</label>
         <textarea
@@ -4112,6 +4113,8 @@
 </template>
 
 <script setup lang="ts">
+import AccountTagsInput from '@/components/account/AccountTagsInput.vue'
+import { withAccountTags } from '@/utils/accountTags'
 import { ref, reactive, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -4245,11 +4248,13 @@ const oauthStepTitle = computed(() => {
 
 // Platform-specific hints for API Key type
 // 上游ID：直接上游声明请求标识的响应头名，留空不记录。
+const selectedTags = ref<string[]>([])
 const upstreamRequestIdHeader = ref('')
 const withUpstreamRequestIdHeader = <T extends Record<string, unknown> | undefined>(extra: T): T | Record<string, unknown> => {
   const name = upstreamRequestIdHeader.value.trim()
-  if (!name) return extra
-  return { ...(extra || {}), upstream_request_id_header: name }
+  const tagged = selectedTags.value.length ? withAccountTags(extra, selectedTags.value) : extra
+  if (!name) return tagged
+  return { ...(tagged || {}), upstream_request_id_header: name }
 }
 
 const baseUrlHint = computed(() => {
@@ -5608,6 +5613,7 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
 
 // Methods
 const resetForm = () => {
+  selectedTags.value = []
   step.value = 1
   form.name = ''
   form.notes = ''
@@ -6474,6 +6480,7 @@ const handleGrokImportSSO = async (ssoInput: string) => {
   try {
     const result = await adminAPI.grok.createFromSSO({
       sso_tokens: ssoTokens,
+      extra: withUpstreamRequestIdHeader({}),
       name: form.name || undefined,
       notes: form.notes || undefined,
       proxy_id: form.proxy_id,

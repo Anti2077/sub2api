@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -20,6 +21,7 @@ type crsLongContextAccountRepo struct {
 }
 
 type crsOpenAILongContextSource struct {
+	tags        []string
 	collection  string
 	credentials map[string]any
 	extra       map[string]any
@@ -160,10 +162,43 @@ func runCRSOpenAILongContextSync(t *testing.T, repo AccountRepository, source cr
 	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
 	service := NewCRSSyncService(repo, nil, nil, nil, nil, cfg)
 	result, err := service.SyncFromCRS(context.Background(), SyncFromCRSInput{
+		Tags:     source.tags,
 		BaseURL:  server.URL,
 		Username: "admin",
 		Password: "password",
 	})
 	require.NoError(t, err)
 	return result
+}
+
+func TestCRSSyncAppendsAccountTags(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		t.Run(fmt.Sprint("existing-", existing), func(t *testing.T) {
+			repo := newCRSLongContextAccountRepo()
+			if existing {
+				repo.accounts["crs-openai-1"] = &Account{ID: 10, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Extra: map[string]any{"crs_account_id": "crs-openai-1", AccountTagsExtraKey: []string{"local"}}}
+			}
+			result := runCRSOpenAILongContextSync(t, repo, crsOpenAILongContextSource{collection: "openaiResponsesAccounts", credentials: map[string]any{"api_key": "sk-test"}, extra: map[string]any{AccountTagsExtraKey: []any{"source"}}, tags: []string{"batch", "source"}})
+			require.Zero(t, result.Failed)
+			tags := repo.accounts["crs-openai-1"].Extra[AccountTagsExtraKey]
+			want := []string{"source", "batch"}
+			if existing {
+				want = []string{"local", "source", "batch"}
+			}
+			require.Equal(t, want, tags)
+		})
+	}
+}
+
+func TestCRSSyncPreservesLocalTagsWithoutAdditionalTags(t *testing.T) {
+	for _, collection := range []string{"openaiOAuthAccounts", "openaiResponsesAccounts"} {
+		t.Run(collection, func(t *testing.T) {
+			repo := newCRSLongContextAccountRepo()
+			repo.accounts["crs-openai-1"] = &Account{ID: 10, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Extra: map[string]any{"crs_account_id": "crs-openai-1", AccountTagsExtraKey: []string{"local"}}}
+			result := runCRSOpenAILongContextSync(t, repo, crsOpenAILongContextSource{collection: collection, credentials: map[string]any{"api_key": "sk-test", "access_token": "oauth-test"}})
+			require.Zero(t, result.Failed)
+			require.Equal(t, 1, result.Updated)
+			require.Equal(t, []string{"local"}, repo.accounts["crs-openai-1"].Extra[AccountTagsExtraKey])
+		})
+	}
 }

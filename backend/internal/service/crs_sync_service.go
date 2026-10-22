@@ -72,6 +72,7 @@ func guardCRSShadowParentInvariant(ctx context.Context, repo AccountRepository, 
 }
 
 type SyncFromCRSInput struct {
+	Tags               []string // append to new and updated accounts, keeping existing labels
 	BaseURL            string
 	Username           string
 	Password           string
@@ -261,6 +262,10 @@ func (s *CRSSyncService) fetchCRSExport(ctx context.Context, baseURL, username, 
 }
 
 func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput) (*SyncFromCRSResult, error) {
+	tags, err := NormalizeAccountTags(input.Tags)
+	if err != nil {
+		return nil, err
+	}
 	exported, err := s.fetchCRSExport(ctx, input.BaseURL, input.Username, input.Password)
 	if err != nil {
 		return nil, err
@@ -369,6 +374,14 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			credentials = mergeMap(existing.Credentials, credentials)
 		}
 		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformAnthropic, targetType, credentials, extra)
+
+		if err := appendCRSAccountTags(extra, existing, tags); err != nil {
+			item.Action = "failed"
+			item.Error = err.Error()
+			result.Failed++
+			result.Items = append(result.Items, item)
+			continue
+		}
 
 		if existing == nil {
 			if !shouldCreateAccount(src.ID, selectedSet) {
@@ -505,6 +518,14 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			credentials = mergeMap(existing.Credentials, credentials)
 		}
 		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformAnthropic, AccountTypeAPIKey, credentials, extra)
+
+		if err := appendCRSAccountTags(extra, existing, tags); err != nil {
+			item.Action = "failed"
+			item.Error = err.Error()
+			result.Failed++
+			result.Items = append(result.Items, item)
+			continue
+		}
 
 		if existing == nil {
 			if !shouldCreateAccount(src.ID, selectedSet) {
@@ -661,6 +682,14 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		}
 		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformOpenAI, AccountTypeOAuth, credentials, extra)
 
+		if err := appendCRSAccountTags(extra, existing, tags); err != nil {
+			item.Action = "failed"
+			item.Error = err.Error()
+			result.Failed++
+			result.Items = append(result.Items, item)
+			continue
+		}
+
 		if existing == nil {
 			if !shouldCreateAccount(src.ID, selectedSet) {
 				item.Action = "skipped"
@@ -812,6 +841,14 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		}
 		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformOpenAI, AccountTypeAPIKey, credentials, extra)
 
+		if err := appendCRSAccountTags(extra, existing, tags); err != nil {
+			item.Action = "failed"
+			item.Error = err.Error()
+			result.Failed++
+			result.Items = append(result.Items, item)
+			continue
+		}
+
 		if existing == nil {
 			if !shouldCreateAccount(src.ID, selectedSet) {
 				item.Action = "skipped"
@@ -942,6 +979,14 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		}
 		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformGemini, AccountTypeOAuth, credentials, extra)
 
+		if err := appendCRSAccountTags(extra, existing, tags); err != nil {
+			item.Action = "failed"
+			item.Error = err.Error()
+			result.Failed++
+			result.Items = append(result.Items, item)
+			continue
+		}
+
 		if existing == nil {
 			if !shouldCreateAccount(src.ID, selectedSet) {
 				item.Action = "skipped"
@@ -1071,6 +1116,14 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			credentials = mergeMap(existing.Credentials, credentials)
 		}
 		reconcileCRSUpstreamBillingProbeExtra(existing, PlatformGemini, AccountTypeAPIKey, credentials, extra)
+
+		if err := appendCRSAccountTags(extra, existing, tags); err != nil {
+			item.Action = "failed"
+			item.Error = err.Error()
+			result.Failed++
+			result.Items = append(result.Items, item)
+			continue
+		}
 
 		if existing == nil {
 			if !shouldCreateAccount(src.ID, selectedSet) {
@@ -1585,4 +1638,30 @@ func (s *CRSSyncService) PreviewFromCRS(ctx context.Context, input SyncFromCRSIn
 	}
 
 	return result, nil
+}
+
+// Preserve local/source labels while appending labels chosen for this sync.
+func appendCRSAccountTags(extra map[string]any, account *Account, tags []string) error {
+	if err := NormalizeAccountTagsExtra(extra); err != nil {
+		return err
+	}
+	existing, _ := extra[AccountTagsExtraKey].([]string)
+	if account != nil {
+		if local, exists := account.Extra[AccountTagsExtraKey]; exists {
+			localExtra := map[string]any{AccountTagsExtraKey: local}
+			if err := NormalizeAccountTagsExtra(localExtra); err != nil {
+				return err
+			}
+			existing = append(append([]string{}, localExtra[AccountTagsExtraKey].([]string)...), existing...)
+		}
+	}
+	if len(tags) == 0 && len(existing) == 0 {
+		return nil
+	}
+	combined, err := NormalizeAccountTags(append(append([]string{}, existing...), tags...))
+	if err != nil {
+		return err
+	}
+	extra[AccountTagsExtraKey] = combined
+	return nil
 }

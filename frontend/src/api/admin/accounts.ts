@@ -692,6 +692,7 @@ export async function previewFromCrs(params: {
 }
 
 export async function syncFromCrs(params: {
+  tags?: string[]
   base_url: string
   username: string
   password: string

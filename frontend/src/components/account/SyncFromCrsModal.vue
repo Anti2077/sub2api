@@ -67,10 +67,13 @@
           {{ t('admin.accounts.syncProxies') }}
         </label>
       </div>
+      <AccountTagsInput v-model="selectedTags" :disabled="previewing" />
+      <p class="input-hint">{{ t('admin.accounts.tags.syncHint') }}</p>
     </form>
 
     <!-- Step 2: Preview & select -->
     <div v-else-if="currentStep === 'preview' && previewResult" class="space-y-4">
+      <p v-if="selectedTags.length" class="text-sm text-gray-600 dark:text-dark-200">{{ t('admin.accounts.tags.title') }}: {{ selectedTags.join(', ') }}</p>
       <!-- Existing accounts (read-only info) -->
       <div
         v-if="previewResult.existing_accounts.length"
@@ -243,6 +246,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AccountTagsInput from '@/components/account/AccountTagsInput.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
@@ -271,6 +275,7 @@ const previewResult = ref<PreviewFromCRSResult | null>(null)
 const selectedIds = ref(new Set<string>())
 const result = ref<Awaited<ReturnType<typeof adminAPI.accounts.syncFromCrs>> | null>(null)
 
+const selectedTags = ref<string[]>([])
 const form = reactive({
   base_url: '',
   username: '',
@@ -298,6 +303,7 @@ watch(
       previewResult.value = null
       selectedIds.value = new Set()
       result.value = null
+      selectedTags.value = []
       form.base_url = ''
       form.username = ''
       form.password = ''
@@ -375,7 +381,8 @@ const handleSync = async () => {
       username: form.username.trim(),
       password: form.password,
       sync_proxies: form.sync_proxies,
-      selected_account_ids: [...selectedIds.value]
+      selected_account_ids: [...selectedIds.value],
+      ...(selectedTags.value.length ? { tags: selectedTags.value } : {})
     })
     result.value = res
     currentStep.value = 'result'

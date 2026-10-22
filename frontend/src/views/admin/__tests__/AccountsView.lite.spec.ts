@@ -193,6 +193,20 @@ describe('admin AccountsView lite account list', () => {
     wrapper.unmount()
   })
 
+  it('re-queries the active smart folder after an account edit changes membership', async () => {
+    localStorage.setItem('account-selected-folder', '12')
+    const wrapper = mountView()
+    await flushPromises()
+    const initialCalls = listAccounts.mock.calls.length
+    listAccounts.mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
+    wrapper.getComponent(EditAccountModalStub).vm.$emit('updated', { ...fullAccount, extra: { account_tags: [] } })
+    await flushPromises()
+    expect(listAccounts.mock.calls.length).toBeGreaterThan(initialCalls)
+    expect(listAccounts).toHaveBeenLastCalledWith(1, 20, expect.objectContaining({ folder: '12' }), expect.anything())
+    expect(wrapper.find('[data-account-name]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('keeps inline filters usable with folder selection above the full-width table', async () => {
     const wrapper = mountView(true, false)
     await flushPromises()

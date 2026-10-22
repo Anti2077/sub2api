@@ -51,6 +51,9 @@
         />
       </div>
 
+      <AccountTagsInput v-model="selectedTags" :disabled="importing" />
+      <p class="input-hint">{{ t('admin.accounts.tags.importHint') }}</p>
+
       <div
         v-if="result"
         class="space-y-2 rounded-xl border border-gray-200 p-4 dark:border-dark-700"
@@ -98,6 +101,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AccountTagsInput from '@/components/account/AccountTagsInput.vue'
+import { accountTags, withAccountTags } from '@/utils/accountTags'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import { adminAPI } from '@/api/admin'
 import { useAppStore } from '@/stores/app'
@@ -118,6 +123,7 @@ const emit = defineEmits<Emits>()
 const { t } = useI18n()
 const appStore = useAppStore()
 
+const selectedTags = ref<string[]>([])
 const importing = ref(false)
 const files = ref<File[]>([])
 const dragDepth = ref(0)
@@ -139,6 +145,7 @@ watch(
   () => props.show,
   (open) => {
     if (open) {
+      selectedTags.value = []
       files.value = []
       dragDepth.value = 0
       hasCreatedData.value = false
@@ -292,6 +299,12 @@ const handleImport = async () => {
       dataPayloads.push(parsed)
     }
     const dataPayload = mergeDataPayloads(dataPayloads)
+    if (selectedTags.value.length) {
+      dataPayload.accounts = dataPayload.accounts.map(account => ({
+        ...account,
+        extra: withAccountTags(account.extra, [...new Set([...accountTags(account.extra), ...selectedTags.value])])
+      }))
+    }
 
     const res = await adminAPI.accounts.importData({
       data: dataPayload,
