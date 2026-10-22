@@ -140,15 +140,17 @@ func TestRewardsPartialSpecialFeesAndRollback(t *testing.T) {
 	var balance float64
 	require.NoError(t, integrationDB.QueryRow(`SELECT balance FROM users WHERE id=$1`, u.ID).Scan(&balance))
 	require.Equal(t, 98.25, balance)
-	// An invalid account quota FK-equivalent error occurs after card allocation: the entire tx must roll back.
+	// A missing subscription is a settlement error after card allocation: the entire tx must roll back.
+	// Deleted accounts intentionally skip quota updates and no longer fail settlement.
 	_, e = integrationDB.Exec(`UPDATE reward_cards SET remaining_tokens=25,status='active' WHERE id=$1`, id)
 	require.NoError(t, e)
 	bad := rewardCmd(u, k, c, uuid.NewString(), 100)
-	bad.AccountID = -999999
-	bad.AccountType = service.AccountTypeAPIKey
-	bad.AccountQuotaCost = 2
+	missingSubscriptionID := int64(-999999)
+	bad.SubscriptionID = &missingSubscriptionID
+	bad.SubscriptionCost = bad.BalanceCost
+	bad.BalanceCost = 0
 	_, e = repo.Apply(ctx, bad)
-	require.Error(t, e)
+	require.ErrorIs(t, e, service.ErrSubscriptionNotFound)
 	var left int64
 	require.NoError(t, integrationDB.QueryRow(`SELECT remaining_tokens FROM reward_cards WHERE id=$1`, id).Scan(&left))
 	require.Equal(t, int64(25), left)
@@ -156,6 +158,47 @@ func TestRewardsPartialSpecialFeesAndRollback(t *testing.T) {
 	require.NoError(t, integrationDB.QueryRow(`SELECT COUNT(*) FROM usage_billing_dedup WHERE request_id=$1`, bad.RequestID).Scan(&dedup))
 	require.Zero(t, dedup)
 }
+func TestRewardsDeletedAccountStillSettlesOnce(t *testing.T) {
+	ctx := context.Background()
+	s, u, g, k, tmpl := rewardFixture(t)
+	tmpl.Tokens = 25
+	tmpl.ID = 0
+	tmpl, err := s.SaveTemplate(ctx, tmpl, u.ID)
+	require.NoError(t, err)
+	id, err := s.Grant(ctx, u.ID, tmpl.ID, u.ID, uuid.NewString(), "test")
+	require.NoError(t, err)
+	require.NoError(t, s.Activate(ctx, u.ID, id))
+	capture, err := s.Capture(ctx, u.ID, g.ID, "luna", true)
+	require.NoError(t, err)
+	cmd := rewardCmd(u, k, capture, uuid.NewString(), 100)
+	cmd.AccountID = -999999
+	cmd.AccountType = service.AccountTypeAPIKey
+	cmd.AccountQuotaCost = 2
+	repo := NewUsageBillingRepository(testEntClient(t), integrationDB)
+	result, err := repo.Apply(ctx, cmd)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.Nil(t, result.QuotaState)
+	require.NotNil(t, result.PaidCost)
+	require.Equal(t, 0.75, *result.PaidCost)
+	replay, err := repo.Apply(ctx, cmd)
+	require.NoError(t, err)
+	require.False(t, replay.Applied)
+	require.NotNil(t, replay.PaidCost)
+	require.Equal(t, *result.PaidCost, *replay.PaidCost)
+	var balance float64
+	var left int64
+	var receipts, dedup int
+	require.NoError(t, integrationDB.QueryRow(`SELECT balance FROM users WHERE id=$1`, u.ID).Scan(&balance))
+	require.NoError(t, integrationDB.QueryRow(`SELECT remaining_tokens FROM reward_cards WHERE id=$1`, id).Scan(&left))
+	require.NoError(t, integrationDB.QueryRow(`SELECT COUNT(*) FROM reward_usage WHERE request_id=$1`, cmd.RequestID).Scan(&receipts))
+	require.NoError(t, integrationDB.QueryRow(`SELECT COUNT(*) FROM usage_billing_dedup WHERE request_id=$1`, cmd.RequestID).Scan(&dedup))
+	require.Equal(t, 99.25, balance)
+	require.Zero(t, left)
+	require.Equal(t, 1, receipts)
+	require.Equal(t, 1, dedup)
+}
+
 func TestFarmHarvestStealCompetitionAndShopIdempotency(t *testing.T) {
 	ctx := context.Background()
 	s, u, _, _, tmpl := rewardFixture(t)
