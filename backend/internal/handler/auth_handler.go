@@ -452,8 +452,15 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 		runMode = h.cfg.RunMode
 	}
 
+	profile := userProfileResponseFromService(user, identities)
+	// Only clients holding this account's exact avatar version may reuse it.
+	// Everything else, including balance, role and identity sources, stays live.
+	// No validator (legacy clients) always receives the full avatar value.
+	if c.Query("avatar_version") == profile.AvatarVersion {
+		profile.AvatarURL = ""
+	}
 	response.Success(c, UserResponse{
-		userProfileResponse: userProfileResponseFromService(user, identities),
+		userProfileResponse: profile,
 		RunMode:             runMode,
 	})
 }

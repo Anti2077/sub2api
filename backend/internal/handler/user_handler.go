@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"strings"
 	"time"
 
@@ -87,6 +89,7 @@ type UpdateProfileRequest struct {
 type userProfileResponse struct {
 	dto.User
 	AvatarURL         string                                 `json:"avatar_url,omitempty"`
+	AvatarVersion     string                                 `json:"avatar_version"`
 	AvatarSource      *userProfileSourceContext              `json:"avatar_source,omitempty"`
 	UsernameSource    *userProfileSourceContext              `json:"username_source,omitempty"`
 	DisplayNameSource *userProfileSourceContext              `json:"display_name_source,omitempty"`
@@ -550,6 +553,7 @@ func userProfileResponseFromService(user *service.User, identities service.UserI
 	return userProfileResponse{
 		User:              *base,
 		AvatarURL:         user.AvatarURL,
+		AvatarVersion:     userProfileAvatarVersion(user),
 		AvatarSource:      avatarSource,
 		UsernameSource:    usernameSource,
 		DisplayNameSource: usernameSource,
@@ -564,6 +568,15 @@ func userProfileResponseFromService(user *service.User, identities service.UserI
 		WeChatBound:       identities.WeChat.Bound,
 		DingTalkBound:     identities.DingTalk.Bound,
 	}
+}
+
+// Version the exact avatar value and storage source, scoped to its owner. Profile
+// mutations and /auth/me share this version so clients never pair a new image
+// with an old validator. Unrelated balance/profile changes keep it stable.
+func userProfileAvatarVersion(user *service.User) string {
+	hash := sha256.New()
+	fmt.Fprintf(hash, "%d\x00%s\x00%s", user.ID, user.AvatarSource, user.AvatarURL)
+	return fmt.Sprintf("v1-%x", hash.Sum(nil))
 }
 
 func userProfileBindingMap(identities service.UserIdentitySummarySet) map[string]service.UserIdentitySummary {

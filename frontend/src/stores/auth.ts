@@ -85,6 +85,7 @@ export const useAuthStore = defineStore('auth', () => {
   const pendingAuthSession = ref<PendingAuthSessionSummary | null>(null)
   let refreshIntervalId: ReturnType<typeof setInterval> | null = null
   let tokenRefreshTimeoutId: ReturnType<typeof setTimeout> | null = null
+  let authSessionVersion = 0
 
   // ==================== Computed ====================
 
@@ -115,6 +116,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     if (savedToken && savedUser) {
       try {
+        authSessionVersion++
         token.value = savedToken
         user.value = JSON.parse(savedUser)
         refreshTokenValue.value = savedRefreshToken
@@ -297,6 +299,7 @@ export const useAuthStore = defineStore('auth', () => {
    * Internal helper function
    */
   function setAuthFromResponse(response: AuthResponse): void {
+    authSessionVersion++
     // Store token and user
     token.value = response.access_token
 
@@ -355,6 +358,7 @@ export const useAuthStore = defineStore('auth', () => {
    * @param newToken - 后端签发的 JWT access token
    */
   async function setToken(newToken: string): Promise<User> {
+    const sessionVersion = ++authSessionVersion
     // Clear any previous state first (avoid mixing sessions)
     // Note: Don't clear localStorage here as OAuth callback may have set refresh_token
     stopAutoRefresh()
@@ -389,7 +393,10 @@ export const useAuthStore = defineStore('auth', () => {
       clearPendingAuthSession()
       return userData
     } catch (error) {
-      clearAuth({ preservePendingAuthSession: pendingAuthSession.value !== null })
+      const savedToken = localStorage.getItem(AUTH_TOKEN_KEY)
+      if (sessionVersion === authSessionVersion && (!savedToken || savedToken === newToken)) {
+        clearAuth({ preservePendingAuthSession: pendingAuthSession.value !== null })
+      }
       throw error
     }
   }
@@ -437,12 +444,52 @@ export const useAuthStore = defineStore('auth', () => {
       throw new Error('Not authenticated')
     }
 
+    const sessionVersion = authSessionVersion
+    const cachedUser = user.value
+    const requestToken = localStorage.getItem(AUTH_TOKEN_KEY)
+    // Negotiate only when the version and its value were saved together. null
+    // represents a confirmed absence; an incomplete cache needs a full fetch.
+    const avatarVersion = cachedUser &&
+      (typeof cachedUser.avatar_url === 'string' || cachedUser.avatar_url === null)
+      ? cachedUser.avatar_version
+      : undefined
+
+    const isSameSession = (responseUserID?: number): boolean => {
+      const savedToken = localStorage.getItem(AUTH_TOKEN_KEY)
+      if (sessionVersion !== authSessionVersion || !token.value || !savedToken) {
+        return false
+      }
+      if (!cachedUser && savedToken === requestToken) return true
+      try {
+        const savedUser = JSON.parse(localStorage.getItem(AUTH_USER_KEY) || 'null') as User | null
+        const expectedUserID = cachedUser?.id ?? responseUserID
+        return expectedUserID !== undefined && savedUser?.id === expectedUserID
+      } catch {
+        return false
+      }
+    }
+
     try {
-      const response = await authAPI.getCurrentUser()
+      const response = await authAPI.getCurrentUser(avatarVersion)
+      if (!isSameSession(response.data.id)) {
+        throw new Error('Authentication session changed while refreshing user')
+      }
+      // A profile update or another refresh completed while this request was in
+      // flight. Keep that newer state, including its matching avatar/version.
+      if (user.value !== cachedUser && user.value) return user.value
+
       if (response.data.run_mode) {
         runMode.value = response.data.run_mode
       }
       const { run_mode: _run_mode, ...userData } = response.data
+      if (!Object.prototype.hasOwnProperty.call(userData, 'avatar_url')) {
+        if (avatarVersion && userData.id === cachedUser?.id && userData.avatar_version === avatarVersion) {
+          userData.avatar_url = cachedUser.avatar_url
+        } else if (userData.avatar_version) {
+          // A changed version with no avatar is a deletion, not a cache hit.
+          userData.avatar_url = null
+        }
+      }
       user.value = userData
 
       // Update localStorage
@@ -451,7 +498,9 @@ export const useAuthStore = defineStore('auth', () => {
       return userData
     } catch (error) {
       // If refresh fails with 401, clear auth state
-      if ((error as { status?: number }).status === 401) {
+      const authError = error as { status?: number; code?: string }
+      if (authError.status === 401 && authError.code !== 'AUTH_SESSION_CHANGED' &&
+        sessionVersion === authSessionVersion && (!localStorage.getItem(AUTH_TOKEN_KEY) || isSameSession())) {
         clearAuth({ preservePendingAuthSession: pendingAuthSession.value !== null })
       }
       throw error
@@ -463,6 +512,7 @@ export const useAuthStore = defineStore('auth', () => {
    * Internal helper function
    */
   function clearAuth(options?: { preservePendingAuthSession?: boolean }): void {
+    authSessionVersion++
     // Stop auto-refresh
     stopAutoRefresh()
     // Stop token refresh

@@ -185,13 +185,15 @@ func TestUserHandlerUpdateProfileReturnsAvatarURL(t *testing.T) {
 	var resp struct {
 		Code int `json:"code"`
 		Data struct {
-			AvatarURL string `json:"avatar_url"`
-			Username  string `json:"username"`
+			AvatarURL     string `json:"avatar_url"`
+			AvatarVersion string `json:"avatar_version"`
+			Username      string `json:"username"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	require.Equal(t, 0, resp.Code)
 	require.Equal(t, "https://cdn.example.com/avatar.png", resp.Data.AvatarURL)
+	require.Equal(t, userProfileAvatarVersion(repo.user), resp.Data.AvatarVersion)
 	require.Equal(t, "handler-avatar", resp.Data.Username)
 }
 
