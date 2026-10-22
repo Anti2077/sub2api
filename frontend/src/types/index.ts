@@ -70,6 +70,7 @@ export interface User {
 	leaderboard_anonymous: boolean
   email: string
   avatar_url?: string | null
+  avatar_version?: string
   avatar_source?: string | UserProfileSourceContext | null
   username_source?: string | UserProfileSourceContext | null
   display_name_source?: string | UserProfileSourceContext | null

@@ -27,6 +27,7 @@ func RegisterAuthRoutes(
 
 	// 公开接口
 	auth := v1.Group("/auth")
+	auth.Use(servermiddleware.PrivateNoStore())
 	auth.Use(servermiddleware.BackendModeAuthGuard(settingService))
 	// 认证事件（登录/注册/2FA/token 刷新失败）入审计
 	auth.Use(gin.HandlerFunc(auditLog))
@@ -250,6 +251,9 @@ func RegisterAuthRoutes(
 
 	// 需要认证的当前用户信息
 	authenticated := v1.Group("")
+	// Run before JWT/guards/rate limiting so failures cannot be cached either.
+	// Avatar negotiation is application state, never an HTTP/shared-cache hit.
+	authenticated.Use(servermiddleware.PrivateNoStore())
 	authenticated.Use(gin.HandlerFunc(jwtAuth))
 	authenticated.Use(servermiddleware.BackendModeUserGuard(settingService))
 	// 面板全局按用户限流
