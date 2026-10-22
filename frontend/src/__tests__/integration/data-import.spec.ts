@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import AccountTagsInput from '@/components/account/AccountTagsInput.vue'
 import ImportDataModal from '@/components/admin/account/ImportDataModal.vue'
 
 const showError = vi.fn()
@@ -13,6 +14,8 @@ vi.mock('@/stores/app', () => ({
     showWarning
   })
 }))
+
+vi.mock('@/api/admin/accountFolders', () => ({ accountFoldersAPI: { tags: vi.fn().mockResolvedValue([]) } }))
 
 vi.mock('@/api/admin', () => ({
   adminAPI: {
@@ -132,6 +135,22 @@ describe('ImportDataModal', () => {
       }),
       skip_default_group_bind: true
     })
+  })
+
+  it('appends selected tags to every imported account and preserves source metadata', async () => {
+    const { adminAPI } = await import('@/api/admin')
+    vi.mocked(adminAPI.accounts.importData).mockResolvedValue({ proxy_created: 0, proxy_reused: 0, proxy_failed: 0, account_created: 2, account_failed: 0 })
+    const wrapper = mountModal()
+    wrapper.getComponent(AccountTagsInput).vm.$emit('update:modelValue', ['batch', 'source'])
+    const input = wrapper.get('input[type="file"]')
+    setInputFiles(input.element, [makeJsonFile('tags.json', JSON.stringify({ proxies: [], accounts: [
+      { name: 'a', extra: { account_tags: ['source'], other: true } }, { name: 'b' }
+    ] }))])
+    await input.trigger('change'); await wrapper.get('form').trigger('submit'); await flushPromises()
+    expect(adminAPI.accounts.importData).toHaveBeenCalledWith({ data: expect.objectContaining({ accounts: [
+      { name: 'a', extra: { account_tags: ['source', 'batch'], other: true } },
+      { name: 'b', extra: { account_tags: ['batch', 'source'] } }
+    ] }), skip_default_group_bind: true })
   })
 
   it('merges multiple selected JSON files before importing', async () => {

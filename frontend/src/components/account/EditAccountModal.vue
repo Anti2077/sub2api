@@ -15,6 +15,7 @@
         <label class="input-label">{{ t('common.name') }}</label>
         <input v-model="form.name" type="text" required class="input" data-tour="edit-account-form-name" />
       </div>
+      <AccountTagsInput v-model="selectedTags" />
       <div>
         <label class="input-label">{{ t('admin.accounts.notes') }}</label>
         <textarea
@@ -3227,6 +3228,8 @@
 </template>
 
 <script setup lang="ts">
+import AccountTagsInput from '@/components/account/AccountTagsInput.vue'
+import { accountTags, withAccountTags } from '@/utils/accountTags'
 import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -3784,6 +3787,7 @@ const upstreamBillingAutoProbeEnabled = ref(false)
 const upstreamBillingRateSyncEnabled = ref(false)
 const mixedScheduling = ref(false) // For antigravity accounts: enable mixed scheduling
 // 上游ID：直接上游声明请求标识的响应头名，留空不记录。
+const selectedTags = ref<string[]>([])
 const upstreamRequestIdHeader = ref('')
 const readUpstreamRequestIdHeader = (extra: unknown): string => {
   const value = (extra as Record<string, unknown> | undefined)?.upstream_request_id_header
@@ -4294,6 +4298,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   mixedChannelWarningDetails.value = null
   mixedChannelWarningRawMessage.value = ''
   mixedChannelWarningAction.value = null
+  selectedTags.value = accountTags(newAccount.extra)
   form.name = newAccount.name
   form.notes = newAccount.notes || ''
   form.proxy_id = newAccount.proxy_id
@@ -6089,6 +6094,8 @@ const handleSubmit = async () => {
       }
       updatePayload.extra = newExtra
     }
+
+    updatePayload.extra = withAccountTags((updatePayload.extra as Record<string, unknown> | undefined) || props.account.extra, selectedTags.value)
 
     const canContinue = await ensureAntigravityMixedChannelConfirmed(async () => {
       await submitUpdateAccount(accountID, updatePayload)

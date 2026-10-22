@@ -44,3 +44,7 @@ Verify group/account listing through authenticated endpoints. Compare daily spen
 - account costs: `SUM(COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1))`.
 
 Use a dedicated local group/account/key pointing at the mock upstream. A successful gateway request must return 200 and emit `started` followed by `completed`, with the correct user and account IDs. Confirm the route also appears in the browser through the real WebSocket connection. Existing backup accounts must not be allowed to make outbound production requests during testing.
+
+## Account tags and smart folders
+
+Open `/dev/smart-account-folders.html` on the same Vite server. It mounts the production smart-folder sidebar, account creation and JSON import dialogs with synthetic accounts. Every API request is handled by a local Axios adapter. Use it to check saved conditions, automatic membership after adding/removing tags, source-tag retention during imports, narrow screens and dark mode.

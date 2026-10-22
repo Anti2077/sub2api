@@ -420,6 +420,8 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		c.Next()
 	})
 	{
+		accounts.GET("/tags", h.Admin.Account.AccountTags)
+		accounts.POST("/tags", h.Admin.Account.UpdateAccountTags)
 		accounts.GET("/folders", h.Admin.Account.FolderOverview)
 		accounts.POST("/folders", h.Admin.Account.SaveFolder)
 		accounts.DELETE("/folders/:id", h.Admin.Account.DeleteFolder)

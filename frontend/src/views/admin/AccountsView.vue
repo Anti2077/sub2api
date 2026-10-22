@@ -3,7 +3,7 @@
     <TablePageLayout class="min-w-0">
       <template #filters>
         <div class="grid min-w-0 gap-4 lg:grid-cols-[14rem_minmax(0,1fr)]" data-testid="account-toolbar">
-          <AccountFolderSidebar ref="folderSidebar" :model-value="params.folder" @select="selectFolder" @moved="handleFolderMoved" @changed="reload" />
+          <AccountFolderSidebar ref="folderSidebar" :model-value="params.folder" @select="selectFolder" @tagged="handleAccountTagsChanged" @changed="handleAccountTagsChanged" />
           <div class="flex min-w-0 flex-wrap-reverse items-end justify-between gap-3 lg:min-h-48 lg:flex-col lg:flex-nowrap lg:items-stretch" data-testid="account-toolbar-controls">
           <AccountTableFilters
             v-model:searchQuery="params.search"
@@ -166,7 +166,7 @@
           :total-results="pagination.total"
           :selecting-all="selectingAllResults"
           :all-results-selected="allResultsSelected"
-          @move-folder="folderSidebar?.openMove(selIds)"
+          @manage-tags="folderSidebar?.openTags(selIds)"
           @delete="handleBulkDelete"
           @reset-status="handleBulkResetStatus"
           @refresh-token="handleBulkRefreshToken"
@@ -229,6 +229,9 @@
                 </template>
               </HelpTooltip>
               <span v-else class="font-medium text-gray-900 dark:text-white">{{ value }}</span>
+              <div v-if="accountTags(row.extra).length" class="mt-1 flex max-w-xs flex-wrap gap-1" :aria-label="t('admin.accounts.tags.title')">
+                <span v-for="tag in accountTags(row.extra)" :key="tag" class="max-w-40 truncate rounded bg-primary-50 px-1.5 py-0.5 text-xs text-primary-700 dark:bg-primary-900/30 dark:text-primary-200" :title="tag">{{ tag }}</span>
+              </div>
               <span
                 v-if="accountDisplayEmail(row)"
                 class="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[200px]"
@@ -521,6 +524,7 @@ import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ErrorPassthroughRulesModal from '@/components/admin/ErrorPassthroughRulesModal.vue'
 import TLSFingerprintProfilesModal from '@/components/admin/TLSFingerprintProfilesModal.vue'
+import { accountTags } from '@/utils/accountTags'
 import { fetchAllAccountIds } from '@/utils/accountSelection'
 import { buildGrokUsageRefreshKey, buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { formatDateTime, formatRelativeTime } from '@/utils/format'
@@ -1218,7 +1222,7 @@ const selectFolder = async (folder: string) => {
   try { localStorage.setItem("account-selected-folder", folder) } catch { /* Storage is optional. */ }
   await reload()
 }
-const handleFolderMoved = async () => { clearSelection(); await reload() }
+const handleAccountTagsChanged = async () => { clearSelection(); await reload() }
 
 const buildUpstreamBillingRateFilters = () => {
   const rawParams = toRaw(params) as Record<string, unknown>
@@ -1525,6 +1529,7 @@ const refreshAccountsIncrementally = async () => {
       pagination.total = result.data.total || 0
       pagination.pages = result.data.pages || 0
       mergeAccountsIncrementally(result.data.items || [])
+      await folderSidebar.value?.refresh?.()
       hasPendingListSync.value = false
     }
     upstreamBillingNow.value = Date.now()
@@ -1538,7 +1543,7 @@ const refreshAccountsIncrementally = async () => {
 }
 
 const handleManualRefresh = async () => {
-  await Promise.all([load(), loadUpstreamBillingProbeGlobalState()])
+  await Promise.all([load(), loadUpstreamBillingProbeGlobalState(), folderSidebar.value?.refresh?.()])
   // Force usage cells to refetch /usage on explicit user refresh.
   usageManualRefreshToken.value += 1
 }
@@ -2275,6 +2280,12 @@ const syncPaginationAfterLocalRemoval = () => {
 }
 
 const patchAccountInList = (updatedAccount: Account) => {
+  if (params.folder) {
+    // The server owns smart rules, including time-dependent expiry conditions.
+    clearSelection()
+    void reload()
+    return
+  }
   const index = accounts.value.findIndex(account => account.id === updatedAccount.id)
   if (index === -1) return
   const mergedAccount = mergeRuntimeFields(accounts.value[index], updatedAccount)
@@ -2326,6 +2337,7 @@ const handleProbeUpstreamBilling = async (account: Account) => {
 }
 const handleAccountUpdated = (updatedAccount: Account) => {
   patchAccountInList(updatedAccount)
+  if (!params.folder) void folderSidebar.value?.refresh?.()
   enterAutoRefreshSilentWindow()
 }
 const formatExportTimestamp = () => {

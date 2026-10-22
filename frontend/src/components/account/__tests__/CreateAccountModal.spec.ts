@@ -61,6 +61,8 @@ vi.mock('@/api/admin', () => ({
   },
 }))
 
+vi.mock('@/api/admin/accountFolders', () => ({ accountFoldersAPI: { tags: vi.fn().mockResolvedValue([]) } }))
+
 vi.mock('@/api/admin/accounts', () => ({
   getAntigravityDefaultModelMapping: vi.fn().mockResolvedValue([]),
 }))
@@ -73,6 +75,7 @@ vi.mock('vue-i18n', async () => {
   }
 })
 
+import AccountTagsInput from '../AccountTagsInput.vue'
 import CreateAccountModal from '../CreateAccountModal.vue'
 
 const BaseDialogStub = defineComponent({
@@ -218,6 +221,26 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
   })
 
   afterEach(() => vi.useRealTimers())
+
+  it('includes selected labels when creating an API key account', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI'); await selectButtonByText(wrapper, 'API Key')
+    wrapper.getComponent(AccountTagsInput).vm.$emit('update:modelValue', ['production', 'batch A'])
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Tagged account')
+    await wrapper.get('input[type="password"]').setValue('test-key')
+    await wrapper.get('#create-account-form').trigger('submit.prevent'); await flushPromises()
+    expect(createAccountMock).toHaveBeenCalledWith(expect.objectContaining({ extra: expect.objectContaining({ account_tags: ['production', 'batch A'] }) }))
+  })
+
+  it('keeps labels across the OAuth step and includes them in Codex session import', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    wrapper.getComponent(AccountTagsInput).vm.$emit('update:modelValue', ['import batch'])
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Codex import')
+    await wrapper.get('#create-account-form').trigger('submit.prevent')
+    await wrapper.get('[data-testid="import-codex-session"]').trigger('click'); await flushPromises()
+    expect(importCodexSessionMock).toHaveBeenCalledWith(expect.objectContaining({ extra: expect.objectContaining({ account_tags: ['import batch'] }) }))
+  })
 
   it('sets month and year expiry presets without submitting the account form', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })

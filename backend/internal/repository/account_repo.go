@@ -64,6 +64,7 @@ var schedulerNeutralExtraKeyPrefixes = []string{
 }
 
 var schedulerNeutralExtraKeys = map[string]struct{}{
+	"account_tags":               {},
 	"codex_usage_updated_at":     {},
 	"codex_credits_snapshot":     {},
 	"codex_referral_snapshot":    {},
@@ -1007,15 +1008,23 @@ func (r *accountRepository) accountListFilteredQuery(ctx context.Context, platfo
 	q := r.client.Account.Query()
 	if folderID, scoped := service.AccountFolderFilterFromContext(ctx); scoped {
 		q = q.Where(dbpredicate.Account(func(s *entsql.Selector) {
-			members := entsql.Table("account_folder_members").As("folder_members")
-			membership := entsql.Select(members.C("account_id")).From(members).Where(entsql.ColumnsEQ(members.C("account_id"), s.C(dbaccount.FieldID)))
+			folders := entsql.Table("account_folders").As("smart_folder")
+			match := entsql.P(func(b *entsql.Builder) {
+				b.WriteString("account_matches_smart_folder(")
+				for i, field := range []string{"platform", "type", "status", "name", "extra", "schedulable", "expires_at"} {
+					if i > 0 {
+						b.WriteString(",")
+					}
+					b.Ident(s.C(field))
+				}
+				b.WriteString(",").Ident(folders.C("rules")).WriteString(")")
+			})
+			scope := entsql.Select(folders.C("id")).From(folders).Where(match)
 			if folderID == -1 {
-				s.Where(entsql.Not(entsql.Exists(membership)))
+				s.Where(entsql.Not(entsql.Exists(scope)))
 			} else {
-				folders := entsql.Table("account_folders").As("folder_children")
-				children := entsql.Select(folders.C("id")).From(folders).Where(entsql.EQ(folders.C("parent_id"), folderID))
-				membership.Where(entsql.Or(entsql.EQ(members.C("folder_id"), folderID), entsql.In(members.C("folder_id"), children)))
-				s.Where(entsql.Exists(membership))
+				scope.Where(entsql.Or(entsql.EQ(folders.C("id"), folderID), entsql.EQ(folders.C("parent_id"), folderID)))
+				s.Where(entsql.Exists(scope))
 			}
 		}))
 	}

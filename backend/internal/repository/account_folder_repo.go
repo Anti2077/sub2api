@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -18,18 +19,25 @@ func NewAccountFolderRepository(db *sql.DB) service.AccountFolderRepository {
 
 func (r *accountFolderRepository) Overview(ctx context.Context) (*service.AccountFolderOverview, error) {
 	result := &service.AccountFolderOverview{Folders: []service.AccountFolder{}}
-	rows, err := r.db.QueryContext(ctx, `SELECT f.id,f.name,f.parent_id,COUNT(DISTINCT a.id),COUNT(DISTINCT a.id) FILTER (WHERE a.status='error')
-        FROM account_folders f LEFT JOIN account_folders child ON child.parent_id=f.id
-        LEFT JOIN account_folder_members m ON m.folder_id=f.id OR m.folder_id=child.id
-        LEFT JOIN accounts a ON a.id=m.account_id AND a.deleted_at IS NULL
-        GROUP BY f.id ORDER BY LOWER(f.name),f.id`)
+	rows, err := r.db.QueryContext(ctx, `SELECT f.id,f.name,f.parent_id,f.rules,
+        (SELECT COUNT(*) FROM accounts a WHERE a.deleted_at IS NULL AND EXISTS (
+            SELECT 1 FROM account_folders scope WHERE (scope.id=f.id OR scope.parent_id=f.id)
+            AND account_matches_smart_folder(a.platform,a.type,a.status,a.name,a.extra,a.schedulable,a.expires_at,scope.rules))),
+        (SELECT COUNT(*) FROM accounts a WHERE a.deleted_at IS NULL AND a.status='error' AND EXISTS (
+            SELECT 1 FROM account_folders scope WHERE (scope.id=f.id OR scope.parent_id=f.id)
+            AND account_matches_smart_folder(a.platform,a.type,a.status,a.name,a.extra,a.schedulable,a.expires_at,scope.rules)))
+        FROM account_folders f ORDER BY LOWER(f.name),f.id`)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		f := service.AccountFolder{}
-		if err = rows.Scan(&f.ID, &f.Name, &f.ParentID, &f.AccountCount, &f.ErrorCount); err != nil {
+		var rules []byte
+		if err = rows.Scan(&f.ID, &f.Name, &f.ParentID, &rules, &f.AccountCount, &f.ErrorCount); err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal(rules, &f.Rules); err != nil {
 			return nil, err
 		}
 		result.Folders = append(result.Folders, f)
@@ -37,7 +45,7 @@ func (r *accountFolderRepository) Overview(ctx context.Context) (*service.Accoun
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-	err = r.db.QueryRowContext(ctx, `SELECT COUNT(*),COUNT(*) FILTER (WHERE NOT EXISTS(SELECT 1 FROM account_folder_members m WHERE m.account_id=a.id)) FROM accounts a WHERE a.deleted_at IS NULL`).Scan(&result.Total, &result.Unfiled)
+	err = r.db.QueryRowContext(ctx, `SELECT COUNT(*),COUNT(*) FILTER (WHERE NOT EXISTS(SELECT 1 FROM account_folders f WHERE account_matches_smart_folder(a.platform,a.type,a.status,a.name,a.extra,a.schedulable,a.expires_at,f.rules))) FROM accounts a WHERE a.deleted_at IS NULL`).Scan(&result.Total, &result.Unfiled)
 	return result, err
 }
 
@@ -51,7 +59,7 @@ func folderDBError(err error) error {
 	}
 	return err
 }
-func (r *accountFolderRepository) Save(ctx context.Context, id int64, name string, parent *int64) (*service.AccountFolder, error) {
+func (r *accountFolderRepository) Save(ctx context.Context, id int64, name string, parent *int64, rules *service.AccountFolderRules) (*service.AccountFolder, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -78,11 +86,15 @@ func (r *accountFolderRepository) Save(ctx context.Context, id int64, name strin
 			return nil, infraerrors.BadRequest("ACCOUNT_FOLDER_DEPTH", "Folders support at most two levels")
 		}
 	}
-	f := &service.AccountFolder{}
+	payload, err := json.Marshal(rules)
+	if err != nil {
+		return nil, err
+	}
+	f := &service.AccountFolder{Rules: rules}
 	if id == 0 {
-		err = tx.QueryRowContext(ctx, `INSERT INTO account_folders(name,parent_id) VALUES($1,$2) RETURNING id,name,parent_id`, name, parent).Scan(&f.ID, &f.Name, &f.ParentID)
+		err = tx.QueryRowContext(ctx, `INSERT INTO account_folders(name,parent_id,rules) VALUES($1,$2,$3) RETURNING id,name,parent_id`, name, parent, string(payload)).Scan(&f.ID, &f.Name, &f.ParentID)
 	} else {
-		err = tx.QueryRowContext(ctx, `UPDATE account_folders SET name=$2,parent_id=$3 WHERE id=$1 RETURNING id,name,parent_id`, id, name, parent).Scan(&f.ID, &f.Name, &f.ParentID)
+		err = tx.QueryRowContext(ctx, `UPDATE account_folders SET name=$2,parent_id=$3,rules=$4 WHERE id=$1 RETURNING id,name,parent_id`, id, name, parent, string(payload)).Scan(&f.ID, &f.Name, &f.ParentID)
 	}
 	if err != nil {
 		return nil, folderDBError(err)
@@ -111,44 +123,66 @@ func (r *accountFolderRepository) Delete(ctx context.Context, id int64) error {
 	}
 	return tx.Commit()
 }
-func (r *accountFolderRepository) Move(ctx context.Context, ids []int64, folder *int64) (int64, error) {
+func (r *accountFolderRepository) Tags(ctx context.Context) ([]service.AccountTag, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT tag,COUNT(DISTINCT a.id) FROM accounts a
+ CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN jsonb_typeof(a.extra->'account_tags')='array' THEN a.extra->'account_tags' ELSE '[]'::jsonb END) tag
+ WHERE a.deleted_at IS NULL GROUP BY tag ORDER BY LOWER(tag),tag`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []service.AccountTag{}
+	for rows.Next() {
+		var tag service.AccountTag
+		if err = rows.Scan(&tag.Name, &tag.AccountCount); err != nil {
+			return nil, err
+		}
+		result = append(result, tag)
+	}
+	return result, rows.Err()
+}
+
+// One statement updates only the label key. Row locks protect concurrent edits;
+// any missing target or tag-limit failure rolls the entire transaction back.
+func (r *accountFolderRepository) UpdateTags(ctx context.Context, ids []int64, tags []string, operation string) (int64, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(246,1)`); err != nil {
-		return 0, err
-	}
-	if folder != nil {
-		var id int64
-		if err = tx.QueryRowContext(ctx, `SELECT id FROM account_folders WHERE id=$1`, *folder).Scan(&id); err != nil {
-			return 0, folderDBError(err)
-		}
-	}
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM accounts WHERE id=ANY($1::bigint[]) AND deleted_at IS NULL FOR UPDATE`, pq.Array(ids))
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `UPDATE accounts a SET extra=COALESCE(extra,'{}'::jsonb) || jsonb_build_object('account_tags',
+   (SELECT COALESCE(jsonb_agg(tag ORDER BY tag),'[]'::jsonb) FROM (
+      SELECT DISTINCT tag FROM (
+         SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(a.extra->'account_tags')='array' THEN a.extra->'account_tags' ELSE '[]'::jsonb END) AS tag
+         UNION ALL SELECT UNNEST($2::text[]) WHERE $3='add'
+      ) candidates WHERE $3='add' OR NOT tag=ANY($2::text[])
+   ) labels)) , updated_at=NOW()
+ WHERE a.id=ANY($1::bigint[]) AND a.deleted_at IS NULL RETURNING jsonb_array_length(extra->'account_tags')`, pq.Array(ids), pq.Array(tags), operation)
 	if err != nil {
 		return 0, err
 	}
 	count := int64(0)
+	overflow := false
 	for rows.Next() {
+		var size int
+		if err = rows.Scan(&size); err != nil {
+			break
+		}
 		count++
+		overflow = overflow || size > service.MaxAccountTags
 	}
-	err = rows.Err()
-	_ = rows.Close()
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
 	if err != nil {
 		return 0, err
 	}
 	if count != int64(len(ids)) {
 		return 0, folderDBError(sql.ErrNoRows)
 	}
-	if folder == nil {
-		_, err = tx.ExecContext(ctx, `DELETE FROM account_folder_members WHERE account_id=ANY($1::bigint[])`, pq.Array(ids))
-	} else {
-		_, err = tx.ExecContext(ctx, `INSERT INTO account_folder_members(account_id,folder_id) SELECT UNNEST($1::bigint[]),$2 ON CONFLICT(account_id) DO UPDATE SET folder_id=EXCLUDED.folder_id`, pq.Array(ids), *folder)
-	}
-	if err != nil {
-		return 0, err
+	if overflow {
+		return 0, infraerrors.BadRequest("INVALID_ACCOUNT_TAGS", "An account supports at most 32 tags")
 	}
 	return count, tx.Commit()
 }

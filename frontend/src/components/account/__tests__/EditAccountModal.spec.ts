@@ -45,6 +45,8 @@ vi.mock('@/api/admin', () => ({
   }
 }))
 
+vi.mock('@/api/admin/accountFolders', () => ({ accountFoldersAPI: { tags: vi.fn().mockResolvedValue([]) } }))
+
 vi.mock('@/api/admin/accounts', () => ({
   getAntigravityDefaultModelMapping: vi.fn()
 }))
@@ -59,6 +61,7 @@ vi.mock('vue-i18n', async () => {
   }
 })
 
+import AccountTagsInput from '../AccountTagsInput.vue'
 import EditAccountModal from '../EditAccountModal.vue'
 
 const BaseDialogStub = defineComponent({
@@ -335,6 +338,18 @@ describe('EditAccountModal', () => {
   })
 
   afterEach(() => vi.useRealTimers())
+
+  it('loads account tags and can clear them without dropping unrelated extra settings', async () => {
+    const account = buildAccount()
+    account.extra = { account_tags: ['batch A', '生产'], keep: true }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    const wrapper = mountModal(account)
+    expect(wrapper.getComponent(AccountTagsInput).props('modelValue')).toEqual(['batch A', '生产'])
+    wrapper.getComponent(AccountTagsInput).vm.$emit('update:modelValue', [])
+    await wrapper.get('#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).toEqual(expect.objectContaining({ account_tags: [], keep: true }))
+  })
 
   it('passes existing non-identity mappings to the whitelist selector and preserves them on save', async () => {
     const account = buildAccount()

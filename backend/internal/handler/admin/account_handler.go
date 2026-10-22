@@ -1275,6 +1275,7 @@ type TestAccountRequest struct {
 }
 
 type SyncFromCRSRequest struct {
+	Tags               []string `json:"tags"`
 	BaseURL            string   `json:"base_url" binding:"required"`
 	Username           string   `json:"username" binding:"required"`
 	Password           string   `json:"password" binding:"required"`
@@ -1358,6 +1359,11 @@ func (h *AccountHandler) SyncFromCRS(c *gin.Context) {
 		return
 	}
 
+	if _, err := service.NormalizeAccountTags(req.Tags); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
 	// Default to syncing proxies (can be disabled by explicitly setting false)
 	syncProxies := true
 	if req.SyncProxies != nil {
@@ -1365,6 +1371,7 @@ func (h *AccountHandler) SyncFromCRS(c *gin.Context) {
 	}
 
 	result, err := h.crsSyncService.SyncFromCRS(c.Request.Context(), service.SyncFromCRSInput{
+		Tags:               req.Tags,
 		BaseURL:            req.BaseURL,
 		Username:           req.Username,
 		Password:           req.Password,
