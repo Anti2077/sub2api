@@ -1652,7 +1652,9 @@ func appendCRSAccountTags(extra map[string]any, account *Account, tags []string)
 			if err := NormalizeAccountTagsExtra(localExtra); err != nil {
 				return err
 			}
-			existing = append(append([]string{}, localExtra[AccountTagsExtraKey].([]string)...), existing...)
+			// NormalizeAccountTagsExtra guarantees []string after successful validation.
+			localTags, _ := localExtra[AccountTagsExtraKey].([]string)
+			existing = append(append([]string{}, localTags...), existing...)
 		}
 	}
 	if len(tags) == 0 && len(existing) == 0 {

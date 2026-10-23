@@ -130,7 +130,7 @@ func (r *accountFolderRepository) Tags(ctx context.Context) ([]service.AccountTa
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	result := []service.AccountTag{}
 	for rows.Next() {
 		var tag service.AccountTag
@@ -149,7 +149,7 @@ func (r *accountFolderRepository) UpdateTags(ctx context.Context, ids []int64, t
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	rows, err := tx.QueryContext(ctx, `UPDATE accounts a SET extra=COALESCE(extra,'{}'::jsonb) || jsonb_build_object('account_tags',
    (SELECT COALESCE(jsonb_agg(tag ORDER BY tag),'[]'::jsonb) FROM (
       SELECT DISTINCT tag FROM (
@@ -174,7 +174,9 @@ func (r *accountFolderRepository) UpdateTags(ctx context.Context, ids []int64, t
 	if err == nil {
 		err = rows.Err()
 	}
-	rows.Close()
+	if closeErr := rows.Close(); err == nil {
+		err = closeErr
+	}
 	if err != nil {
 		return 0, err
 	}

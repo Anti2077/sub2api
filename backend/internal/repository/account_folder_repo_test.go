@@ -30,7 +30,7 @@ func TestAccountFolderRejectsThirdLevel(t *testing.T) {
 func TestAccountTagsUpdateRollsBackWhenAccountDeleted(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	repo := &accountFolderRepository{db: db}
 	mock.ExpectBegin()
 	mock.ExpectQuery("UPDATE accounts").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
@@ -43,7 +43,7 @@ func TestAccountTagsUpdateRollsBackWhenAccountDeleted(t *testing.T) {
 func TestAccountTagsUpdateRollsBackWhenLimitExceeded(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	repo := &accountFolderRepository{db: db}
 	mock.ExpectBegin()
 	mock.ExpectQuery("UPDATE accounts").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2).AddRow(33))

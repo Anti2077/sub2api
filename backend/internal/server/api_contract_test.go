@@ -53,6 +53,7 @@ func TestAPIContracts(t *testing.T) {
 					"email_bound": true,
 					"username": "alice",
 					"username_confirmed": false,
+					"avatar_version": "v1-5e9da77a672cb094963e10219ad5ff900cba90a6d2b65491350e4f501e524179",
 					"leaderboard_anonymous": false,
 						"role": "user",
 						"balance": 12.5,
