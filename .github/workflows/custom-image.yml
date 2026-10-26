@@ -16,7 +16,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  smoke:
+    name: Verify single-image startup before publishing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+      - name: Build native smoke image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: sub2api-identity-smoke:local
+          cache-from: type=gha,scope=identity-smoke
+          cache-to: type=gha,scope=identity-smoke,mode=max
+      - name: Verify worker, backend and database startup together
+        run: /bin/sh deploy/tests/single-image-smoke-test.sh sub2api-identity-smoke:local
+
   publish:
+    needs: smoke
     name: Publish multi-platform image
     runs-on: ubuntu-latest
 

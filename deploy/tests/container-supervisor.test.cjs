@@ -4,13 +4,14 @@ const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 const path = require('node:path');
+const { COMMIT } = require('../../identity-engine/verify.cjs');
 
 const supervisor = path.resolve(__dirname, '../container-supervisor.cjs');
 const workerScript = `
   const http = require('node:http');
   const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({engine_commit:'654c8334bb53951aaf04cbd61252d163649e1369', models:[]}));
+    res.end(JSON.stringify({engine_commit:${JSON.stringify(COMMIT)}, models:[]}));
   });
   server.listen(Number(process.env.PORT), process.env.MODEL_IDENTITY_HOST, () => console.log('worker-ready ' + JSON.stringify({ secret: process.env.JWT_SECRET || null, host: process.env.MODEL_IDENTITY_HOST })));
   process.on('SIGTERM', () => { console.log('worker-stopped'); server.close(); });
@@ -28,6 +29,7 @@ function launch(t, { worker = workerScript, backend = backendScript, startupTime
     backend: [process.execPath, '-e', backend],
     env: { ...process.env, JWT_SECRET: 'test-only-secret', SERVER_PORT: '8180', MODEL_IDENTITY_ENGINE_URL: '', MODEL_IDENTITY_CALLBACK_URL: '' },
     startupTimeout, shutdownTimeout: 1000,
+    expectedEngineCommit: COMMIT,
   };
   const child = spawn(process.execPath, ['-e', `require(${JSON.stringify(supervisor)}).supervise(${JSON.stringify(options)}).then(code => process.exitCode = code)`]);
   let output = '';
@@ -83,6 +85,34 @@ test('startup timeout stops the worker without starting the backend', async t =>
   assert.equal((await run.closed)[0], 1);
   assert.match(run.output(), /startup timed out/);
   assert.doesNotMatch(run.output(), /backend-ready/);
+});
+
+test('a mismatched worker fails immediately without starting the backend', async t => {
+  const run = launch(t, { worker: workerScript.replace(COMMIT, '0'.repeat(40)) });
+  assert.equal((await run.closed)[0], 1);
+  assert.match(run.output(), /identity worker version mismatch/);
+  assert.doesNotMatch(run.output(), /startup timed out|backend-ready/);
+});
+
+test('the packaged worker starts the backend using its own verified version pin', async t => {
+  const options = {
+    worker: [process.execPath, path.resolve(__dirname, '../../identity-engine/server.cjs')],
+    backend: [process.execPath, '-e', backendScript],
+    env: { ...process.env, SERVER_PORT: '8180' },
+    startupTimeout: 3000, shutdownTimeout: 1000,
+  };
+  // This exercises the production default; no mock version is injected.
+  const child = spawn(process.execPath, ['-e', `require(${JSON.stringify(supervisor)}).supervise(${JSON.stringify(options)}).then(code => process.exitCode = code)`]);
+  let output = '';
+  child.stdout.on('data', chunk => { output += chunk; });
+  child.stderr.on('data', chunk => { output += chunk; });
+  const closed = once(child, 'close');
+  t.after(async () => { if (child.exitCode === null && !child.signalCode) child.kill('SIGTERM'); await closed; });
+  const deadline = Date.now() + 5000;
+  while (!output.includes('backend-ready') && child.exitCode === null && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
+  assert.ok(output.includes('backend-ready'), output);
+  child.kill('SIGTERM');
+  assert.equal((await closed)[0], 0);
 });
 
 test('forces an unresponsive backend to exit after the shutdown grace period', async t => {

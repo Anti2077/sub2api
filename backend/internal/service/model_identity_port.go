@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const IdentityEngineCommit = "654c8334bb53951aaf04cbd61252d163649e1369"
+const IdentityEngineCommit = "4dcb4216151cbd5066d515297720130a9fd3b198"
 
 const (
 	DefaultIdentityConcurrentAccounts = 1

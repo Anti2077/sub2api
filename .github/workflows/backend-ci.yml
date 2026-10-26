@@ -64,8 +64,13 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: pnpm install --frozen-lockfile
-      - name: Container process lifecycle tests
-        run: node --test deploy/tests/container-supervisor.test.cjs
+      - name: Build packaged identity worker
+        run: |
+          pnpm --dir identity-engine install --frozen-lockfile
+          pnpm --dir identity-engine build
+          pnpm --dir identity-engine test
+      - name: Container process lifecycle and version contract tests
+        run: node --test --test-concurrency=1 deploy/tests/container-supervisor.test.cjs deploy/tests/identity-engine-version.test.cjs
       - name: Frontend typecheck and critical vitest
         run: make test-frontend
 
