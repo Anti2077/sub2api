@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-const COMMIT = '654c8334bb53951aaf04cbd61252d163649e1369';
+const COMMIT = '4dcb4216151cbd5066d515297720130a9fd3b198';
 function verify(root = path.join(__dirname, 'vendor/lm-detector')) {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json')));
   if (manifest.commit !== COMMIT || manifest.repository !== 'https://github.com/Ikaleio/lm-detector') throw new Error('Fingerpoint source version mismatch');

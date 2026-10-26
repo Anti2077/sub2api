@@ -10,7 +10,7 @@ const { supportsSharedDetector } = require('./dist/shared/shared-detector.js');
 const { probeTokenizer, tokenizerReport } = require('./dist/shared/tokenizer-probe.js');
 const { assertTokenizerBank } = require('./dist/shared/tokenizer-bank.js');
 const manifest = require('./verify.cjs').verify();
-const COMMIT = '654c8334bb53951aaf04cbd61252d163649e1369';
+const COMMIT = '4dcb4216151cbd5066d515297720130a9fd3b198';
 const SOURCE = 'https://github.com/Ikaleio/lm-detector';
 const data = name => fs.readFileSync(path.join(__dirname, 'vendor/lm-detector/data', name));
 const bank = JSON.parse(data('unified_bank.json'));
