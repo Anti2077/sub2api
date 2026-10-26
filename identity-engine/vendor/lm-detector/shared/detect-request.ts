@@ -1,0 +1,272 @@
+import { stripVTControlCharacters } from 'node:util'
+import { completionBody, sendsSpeed, SPEED_BETA } from './completion-request'
+import { parseNumbers } from './fingerprint-core.js'
+import type { ApiConfig, Challenge } from './types'
+import { readBefore, throughputMeter, USAGE_GRACE_MS, type Throughput, type ThroughputMeter } from './throughput'
+
+/** Settings of a live detection, shared by the CLI and the SDK. The CLI adds its own flags on top. */
+export interface DetectionOptions {
+  config: ApiConfig
+  count: number
+  parallel: number
+  repeat: number
+  strict: boolean
+  timeoutMs: number
+  /** Run the tokenizer probe beside the first round. Off by default; it never changes the ranking. */
+  tokenizer: boolean
+  maxProbes: number
+}
+
+export function requestEndpoint(config: ApiConfig): string {
+  let url: URL
+  try { url = new URL(config.baseUrl) } catch { throw new Error('Base URL must be a valid HTTP or HTTPS URL.') }
+  if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+    throw new Error('Base URL must use HTTP or HTTPS without credentials, a query, or a fragment.')
+  }
+  const suffix = config.format === 'responses' ? '/responses' : config.format === 'anthropic' ? '/messages' : '/chat/completions'
+  const path = url.pathname.replace(/\/+$/, '')
+  if (/\/(responses|messages|chat\/completions)$/.test(path) && !path.endsWith(suffix)) {
+    throw new Error('The endpoint in --baseurl does not match --api.')
+  }
+  url.pathname = path.endsWith(suffix) ? path : (path || '/v1') + suffix
+  return url.href
+}
+
+// Provider payloads have different shapes. Validate the fields used at this boundary.
+type Payload = Record<string, any>
+export interface Sample {
+  state: 'queued' | 'waiting' | 'streaming' | 'complete' | 'truncated' | 'failed' | 'cancelled'
+  text: string
+  rawText: string
+  count: number
+  expectedCount: number
+  startedAt?: number
+  finishedAt?: number
+  firstByteMs?: number
+  throughput?: Throughput
+  responseModel?: string
+  responseId?: string
+  error?: string
+}
+
+export const minimumNumbers = (expected: number) => Math.max(80, Math.ceil(expected * 0.55))
+export const acceptedSample = (sample: Sample) => sample.state === 'complete' || sample.state === 'truncated'
+export const cleanText = (value: string) => stripVTControlCharacters(value).replace(/[\x00-\x1f\x7f-\x9f]/g, ' ')
+export function errorMessage(error: unknown, key = '') {
+  const message = error instanceof Error ? error.message : String(error)
+  return cleanText(key ? message.replaceAll(key, '[REDACTED]') : message).slice(0, 500)
+}
+const record = (value: unknown): Payload => value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {}
+const items = (value: unknown): Payload[] => Array.isArray(value) ? value.map(record) : []
+const string = (value: unknown) => typeof value === 'string' ? value : ''
+const responseText = (data: Payload) => items(data.output).filter(item => item.type === 'message')
+  .flatMap(item => items(item.content)).filter(part => part.type === 'output_text').map(part => string(part.text)).join('')
+
+/** The URL, headers, and body of one detection request. Throws when the base URL is invalid for the API. */
+export function buildDetectRequest(config: ApiConfig, prompt: string) {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json', Accept: config.stream ? 'text/event-stream' : 'application/json',
+  }
+  if (config.format === 'anthropic') {
+    headers['x-api-key'] = config.apiKey
+    headers['anthropic-version'] = '2023-06-01'
+    if (sendsSpeed(config)) headers['anthropic-beta'] = SPEED_BETA
+  } else headers.Authorization = `Bearer ${config.apiKey}`
+  const body = completionBody(config, prompt)
+  if (config.format === 'responses') delete body.max_output_tokens
+  else if (config.format === 'openai') {
+    delete body.max_tokens
+    // Chat Completions streams report usage only on request; usage gives exact output speed.
+    if (body.stream) body.stream_options = { include_usage: true }
+  }
+  return { url: requestEndpoint(config), headers, body }
+}
+
+export async function requestSample(
+  options: Pick<DetectionOptions, 'config' | 'strict' | 'timeoutMs'>, challenge: Challenge, signal: AbortSignal,
+  update: (sample: Sample) => void,
+): Promise<Sample> {
+  const { config } = options
+  const controller = new AbortController()
+  const combined = AbortSignal.any([signal, controller.signal])
+  const sample: Sample = {
+    state: 'waiting', text: '', rawText: '', count: 0, expectedCount: challenge.expected_count, startedAt: Date.now(),
+  }
+  let timedOut = false
+  const timer = setTimeout(() => { timedOut = true; controller.abort() }, options.timeoutMs)
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  let finish = '', terminal = false, truncated = false, raw = '', usage: Payload | undefined
+  let meter: ThroughputMeter | undefined
+  const report = () => update({ ...sample })
+  const metadata = (data: Payload) => {
+    if (typeof data.model === 'string') sample.responseModel = data.model
+    if (typeof data.id === 'string') sample.responseId = data.id
+    // Messages streams split usage between message_start and message_delta.
+    if (data.usage) usage = { ...usage, ...record(data.usage) }
+  }
+  const acceptText = (text: string, final = false) => {
+    sample.rawText = text
+    // A trailing digit can belong to an unfinished SSE token (for example, 3 -> 355).
+    const numbers = parseNumbers(final ? text : text.replace(/\d+$/, '')) as number[]
+    sample.count = numbers.length
+    sample.text = text
+    if (!options.strict && numbers.length >= challenge.expected_count) {
+      sample.text = numbers.slice(0, challenge.expected_count).join(', ')
+      sample.count = challenge.expected_count
+      truncated = !final || numbers.length > challenge.expected_count
+    }
+    report()
+  }
+  // Text after the cap only feeds the meter while waiting for the usage report.
+  const appendText = (part: string) => {
+    raw += part
+    meter?.update(raw)
+    if (!truncated) acceptText(raw)
+  }
+  const upstreamError = (data: Payload) => {
+    if (data.error || data.type === 'error') {
+      throw new Error(`Upstream error: ${string(data.error?.message) || string(data.message) || string(data.error) || 'Request failed.'}`)
+    }
+  }
+  const event = (frame: string) => {
+    const payload = frame.split(/\r\n|\r|\n/).filter(line => line.startsWith('data:'))
+      .map(line => line.slice(5).replace(/^ /, '')).join('\n')
+    if (!payload) return
+    if (payload.trim() === '[DONE]') { terminal = true; return }
+    let data: Payload
+    try { data = record(JSON.parse(payload)) } catch { throw new Error('The SSE response contains invalid JSON.') }
+    upstreamError(data)
+    metadata(data)
+    if (config.format === 'openai') {
+      const choice = items(data.choices).find(choice => choice.index === 0) ?? items(data.choices)[0]
+      if (choice?.delta?.refusal) throw new Error('The model refused the request.')
+      if (choice?.delta?.reasoning_content || choice?.delta?.reasoning) meter?.reasoning()
+      if (choice?.finish_reason) finish = string(choice.finish_reason)
+      if (typeof choice?.delta?.content === 'string') appendText(choice.delta.content)
+    } else if (config.format === 'anthropic') {
+      if (data.type === 'message_start') metadata(record(data.message))
+      if (['thinking', 'redacted_thinking'].includes(data.content_block?.type) || data.delta?.type === 'thinking_delta') meter?.reasoning()
+      if (data.type === 'content_block_start' && data.content_block?.type === 'text') appendText(string(data.content_block.text))
+      if (data.type === 'content_block_delta' && data.delta?.type === 'text_delta') appendText(string(data.delta.text))
+      if (data.type === 'message_delta') finish = string(data.delta?.stop_reason) || finish
+      if (data.type === 'message_stop') terminal = true
+    } else {
+      if (data.type === 'response.created' || data.type === 'response.in_progress') metadata(record(data.response))
+      if (string(data.type).startsWith('response.reasoning')) meter?.reasoning()
+      if (data.type === 'response.output_text.delta') appendText(string(data.delta))
+      if (data.type === 'response.output_text.done' && !sample.rawText) acceptText(string(data.text), true)
+      if (data.type === 'response.output_item.done' && !sample.rawText) {
+        acceptText(responseText({ output: [data.item] }), true)
+      }
+      if (data.type === 'response.refusal.delta') throw new Error('The model refused the request.')
+      if (data.type === 'response.completed') {
+        const response = record(data.response)
+        metadata(response)
+        terminal = true
+        finish = string(response.status) || 'completed'
+        const full = responseText(response)
+        if (full && !truncated) acceptText(full, true)
+      }
+      if (data.type === 'response.failed' || data.type === 'response.incomplete') {
+        throw new Error(`Responses request did not complete: ${string(data.response?.error?.message) || string(data.response?.incomplete_details?.reason) || data.type}.`)
+      }
+    }
+    if (['refusal', 'content_filter'].includes(finish)) throw new Error('The model refused the request.')
+  }
+  report()
+  try {
+    combined.throwIfAborted()
+    const { url, headers, body } = buildDetectRequest(config, challenge.prompt)
+    const init = {
+      method: 'POST', headers, body: JSON.stringify(body),
+      signal: combined, redirect: 'error' as const,
+      timeout: false, // Disable Bun's socket idle timeout; only the first-byte timer applies.
+    }
+    const requestStartedAt = performance.now()
+    const response = await fetch(url, init)
+    if (!response.ok) {
+      const body = await response.text()
+      let detail = body
+      try { const data = record(JSON.parse(body)); detail = string(data.error?.message) || string(data.message) || body } catch { /* Plain-text HTTP error. */ }
+      throw new Error(`HTTP ${response.status}: ${detail || response.statusText}`)
+    }
+    if (response.headers.get('content-type')?.toLowerCase().includes('text/event-stream')) {
+      if (!response.body) throw new Error('The server returned an empty SSE body.')
+      reader = response.body.getReader()
+      meter = throughputMeter(requestStartedAt)
+      const decoder = new TextDecoder()
+      let buffer = '', deadline = Infinity, draining = true
+      const reading = () => !terminal && (!truncated || draining)
+      // After the cap, read briefly for the usage report. Later errors cannot affect the accepted text.
+      const handle = (frame: string) => { if (!truncated) return event(frame); try { event(frame) } catch { draining = false } }
+      while (reading()) {
+        if (truncated && deadline === Infinity) deadline = performance.now() + USAGE_GRACE_MS
+        const chunk = await readBefore(reader, deadline)
+        if (!chunk) break
+        const { done, value } = chunk
+        if (value?.length && sample.firstByteMs === undefined) {
+          clearTimeout(timer)
+          sample.firstByteMs = Date.now() - sample.startedAt!
+          sample.state = 'streaming'
+          report()
+        }
+        buffer += done ? decoder.decode() : decoder.decode(value, { stream: true })
+        // Keep split CRLF delimiters buffered until the next chunk arrives.
+        let boundary: RegExpExecArray | null
+        while (reading() && (boundary = /\r\n\r\n|\n\n|\r\r/.exec(buffer))) {
+          handle(buffer.slice(0, boundary.index))
+          buffer = buffer.slice(boundary.index + boundary[0].length)
+        }
+        if (done) { if (reading() && buffer.trim()) handle(buffer); break }
+      }
+    } else {
+      let data: Payload
+      try { data = record(await response.json()) } catch (error) {
+        if (combined.aborted) throw error
+        throw new Error('The server did not return valid JSON or SSE.')
+      }
+      clearTimeout(timer)
+      sample.firstByteMs = Date.now() - sample.startedAt!
+      upstreamError(data)
+      metadata(data)
+      let text: string
+      if (config.format === 'responses') {
+        text = responseText(data); finish = string(data.status); terminal = finish === 'completed'
+      } else if (config.format === 'anthropic') {
+        text = items(data.content).filter(part => part.type === 'text').map(part => string(part.text)).join('')
+        finish = string(data.stop_reason); terminal = true
+      } else {
+        const choice = items(data.choices)[0]
+        if (choice?.message?.refusal) throw new Error('The model refused the request.')
+        text = string(choice?.message?.content); finish = string(choice?.finish_reason); terminal = true
+      }
+      if (['refusal', 'content_filter'].includes(finish)) throw new Error('The model refused the request.')
+      if (!terminal || !['stop', 'end_turn', 'completed'].includes(finish)) {
+        throw new Error(`The response did not complete (${finish || 'missing finish status'}).`)
+      }
+      acceptText(text, true)
+    }
+    combined.throwIfAborted()
+    if (!truncated && (!terminal || !['stop', 'end_turn', 'completed'].includes(finish))) {
+      throw new Error(`The response did not complete (${finish || 'missing finish status'}).`)
+    }
+    if (!truncated) acceptText(sample.rawText, true)
+    if (sample.count < minimumNumbers(challenge.expected_count)) {
+      throw new Error(`Too few valid numbers: ${sample.count}; need at least ${minimumNumbers(challenge.expected_count)}.`)
+    }
+    sample.state = truncated ? 'truncated' : 'complete'
+  } catch (error) {
+    sample.state = signal.aborted ? 'cancelled' : 'failed'
+    sample.error = signal.aborted ? 'Cancelled.' : timedOut
+      ? `Timed out after ${options.timeoutMs / 1000}s waiting for ${config.stream ? 'the first SSE byte' : 'the JSON response'}.`
+      : errorMessage(error, config.apiKey)
+  } finally {
+    clearTimeout(timer)
+    controller.abort()
+    if (reader) { await reader.cancel().catch(() => {}); reader.releaseLock() }
+    sample.finishedAt = Date.now()
+    sample.throughput = meter?.result(usage)
+    report()
+  }
+  return { ...sample }
+}

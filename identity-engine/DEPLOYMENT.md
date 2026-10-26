@@ -6,7 +6,7 @@ and calls the Go internal capability route for each sample. Permanent API keys
 stay in Go; the worker receives only a per-run 64-byte token.
 
 The build pins `https://github.com/Ikaleio/lm-detector` at
-`654c8334bb53951aaf04cbd61252d163649e1369` and verifies the packaged data
+`4dcb4216151cbd5066d515297720130a9fd3b198` and verifies the packaged data
 hashes. `shared_detector.bin`, `unified_bank.json`, and `tokenizer_bank.json`
 are bundled; the full reference browser is retained as source provenance but
 is not served to users.
