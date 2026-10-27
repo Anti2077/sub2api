@@ -1,6 +1,7 @@
 'use strict';
 const { spawn } = require('node:child_process');
 const { setTimeout: delay } = require('node:timers/promises');
+const path = require('node:path');
 
 async function supervise({
   backend = ['/app/sub2api'],
@@ -8,7 +9,11 @@ async function supervise({
   env = process.env,
   startupTimeout = 30000,
   shutdownTimeout = 10000,
+  expectedEngineCommit,
 } = {}) {
+  // Read the pin from the same verified bundle that the worker loads. A new
+  // detector must not leave an independent readiness pin behind here.
+  const expectedCommit = expectedEngineCommit ?? require(path.join(path.dirname(worker[1]), 'verify.cjs')).verify().commit;
   const callback = `http://127.0.0.1:${env.SERVER_PORT || 8080}`;
   const engine = 'http://127.0.0.1:8081';
   const children = new Set();
@@ -53,7 +58,11 @@ async function supervise({
       try {
         const response = await fetch(`${engine}/models`, { signal: AbortSignal.timeout(1000) });
         const catalog = await response.json();
-        ready = response.ok && catalog.engine_commit === '654c8334bb53951aaf04cbd61252d163649e1369' && Array.isArray(catalog.models);
+        if (response.ok && catalog.engine_commit !== expectedCommit) {
+          stop(1, `identity worker version mismatch (expected ${expectedCommit}, got ${catalog.engine_commit})`);
+          break;
+        }
+        ready = response.ok && catalog.engine_commit === expectedCommit && Array.isArray(catalog.models);
         if (ready) break;
       } catch { /* The worker may still be loading its baselines. */ }
       await delay(100);

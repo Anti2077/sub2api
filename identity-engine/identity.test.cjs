@@ -3,15 +3,20 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { bank, detector, models, COMMIT, runFingerprint, analyzeSharedOutputs } = require('./engine.cjs');
 const fixtures = require('./fixtures/reference.json');
+const addedModelFixtures = require('./fixtures/added-models.json');
 const { verify } = require('./verify.cjs');
 const { calibrateRanking } = require('./dist/shared/shared-detector.js');
 
 test('pinned source and every packaged artifact verify; official merged class remains intact', () => {
   assert.equal(verify().commit, COMMIT);
-  assert.equal(models.length, 60);
+  assert.equal(models.length, 63);
   assert.equal(models.find(m => m.id === 'gpt-6-astra').name, 'gpt-6-astra/6.1-sol');
+  for (const id of ['kimi-k3.1-pro', 'gemini-3.5-flash-lite', 'minimax-m3.1-flash']) {
+    assert.ok(models.some(model => model.id === id), `${id} is present in the calibrated reference bank`);
+  }
 });
-for (const fixture of fixtures) test(`official reference replay: ${fixture.model.id}`, async () => {
+for (const fixture of [...fixtures, ...addedModelFixtures]) test(`official reference replay: ${fixture.model.id}`, async () => {
+  assert.equal(fixture.detector_reference_sha256, bank.reference_sha256);
   const actual = analyzeSharedOutputs(fixture.outputs, bank, detector, { allowPartial: true });
   assert.equal(actual.prediction, fixture.expected.prediction);
   assert.ok(Math.abs(actual.probability - fixture.expected.probability) < 1e-10);
@@ -32,7 +37,7 @@ test('partial samples rank without a fabricated probability; bad calibration ret
   const outputs = fixtures[0].outputs;
   for (const count of [1,2]) {
     const a = analyzeSharedOutputs(outputs.slice(0,count), bank, detector, { allowPartial:true });
-    assert.equal(a.decision,'partial'); assert.equal(a.used_outputs,count); assert.equal(a.results.length,60); assert.equal(a.probability,null);
+    assert.equal(a.decision,'partial'); assert.equal(a.used_outputs,count); assert.equal(a.results.length,63); assert.equal(a.probability,null);
     assert.ok(a.results.every(r => r.probability === null));
   }
   const mismatched = { ...detector, calibration: { ...detector.calibration, binding:{ ...detector.calibration.binding, base_sha256:'wrong' } } };

@@ -40,7 +40,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 (async () => {
   const worker = await fetch('http://127.0.0.1:8081/models').then(r => r.json());
-  assert.equal(worker.engine_commit, '654c8334bb53951aaf04cbd61252d163649e1369');
+  const expectedCommit = require('/app/identity-engine/verify.cjs').verify().commit;
+  assert.equal(worker.engine_commit, expectedCommit);
   assert.ok(worker.models.length > 0);
   // Embedded frontend middleware must not turn protected callbacks into HTML.
   for (const path of ['/internal/model-identity/0/remote/v1/chat/completions', '/internal/model-identity/0/probe', '/internal/model-identity/0/v1/chat/completions', '/internal/model-identity/0/v1/responses', '/internal/model-identity/0/v1/messages']) {
@@ -65,6 +66,7 @@ const fs = require('node:fs');
   });
   if (response.status !== 200) throw new Error(`admin model catalog returned ${response.status}: ${await response.text()}`);
   const catalog = await response.json();
+  assert.equal(catalog.engine_commit, expectedCommit, 'Go backend and worker must accept the same engine version');
   assert.ok(Array.isArray(catalog.models) && catalog.models.length > 0);
   const overviewResponse = await fetch('http://127.0.0.1:8080/api/v1/admin/model-identity/plans', {
     headers: {Authorization: `Bearer ${login.data.access_token}`},

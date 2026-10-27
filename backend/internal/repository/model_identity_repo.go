@@ -256,7 +256,7 @@ func (r *identityRepository) DeletePlan(ctx context.Context, id int64) error {
 	return nil
 }
 
-const enqueueIdentitySQL = `INSERT INTO account_identity_runs(plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,options,engine_commit) SELECT p.id,p.account_id,c.user_id,c.group_id,c.api_key_id,p.request_model,p.expected_model,p.options,'654c8334bb53951aaf04cbd61252d163649e1369' FROM account_identity_plans p JOIN account_identity_configs c ON c.account_id=p.account_id WHERE p.id=$1 AND c.user_id=COALESCE((SELECT NULLIF((value::jsonb->>'test_user_id')::bigint,0) FROM settings WHERE key='model_identity_settings'),c.user_id) ON CONFLICT DO NOTHING RETURNING id`
+const enqueueIdentitySQL = `INSERT INTO account_identity_runs(plan_id,account_id,user_id,group_id,api_key_id,request_model,expected_model,options,engine_commit) SELECT p.id,p.account_id,c.user_id,c.group_id,c.api_key_id,p.request_model,p.expected_model,p.options,$2 FROM account_identity_plans p JOIN account_identity_configs c ON c.account_id=p.account_id WHERE p.id=$1 AND c.user_id=COALESCE((SELECT NULLIF((value::jsonb->>'test_user_id')::bigint,0) FROM settings WHERE key='model_identity_settings'),c.user_id) ON CONFLICT DO NOTHING RETURNING id`
 
 func (r *identityRepository) Enqueue(ctx context.Context, id int64) (*service.IdentityRun, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -268,7 +268,7 @@ func (r *identityRepository) Enqueue(ctx context.Context, id int64) (*service.Id
 		return nil, err
 	}
 	var runID int64
-	err = tx.QueryRowContext(ctx, enqueueIdentitySQL, id).Scan(&runID)
+	err = tx.QueryRowContext(ctx, enqueueIdentitySQL, id, service.IdentityEngineCommit).Scan(&runID)
 	if err != nil {
 		return nil, errors.New("account already has an active detection, fixed test user is not configured, or plan does not exist")
 	}
@@ -321,7 +321,7 @@ func (r *identityRepository) ScanDue(ctx context.Context, now time.Time) error {
 	}
 	for _, d := range ds {
 		var id int64
-		err = tx.QueryRowContext(ctx, enqueueIdentitySQL, d.id).Scan(&id)
+		err = tx.QueryRowContext(ctx, enqueueIdentitySQL, d.id, service.IdentityEngineCommit).Scan(&id)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}

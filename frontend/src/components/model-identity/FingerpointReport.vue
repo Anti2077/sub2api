@@ -28,7 +28,7 @@
       <button v-if="ranking.length > 8" class="btn btn-ghost min-h-11 w-full rounded-none" type="button" :aria-expanded="showAll" @click="showAll = !showAll">{{ t(showAll ? 'common.collapse' : 'admin.modelIdentity.showAllCandidates') }}</button>
     </section>
     <details v-if="report.tokenizer" class="card p-4"><summary class="min-h-11 cursor-pointer text-sm">{{ t('admin.modelIdentity.tokenizerAuxiliary') }}</summary><pre class="max-h-72 overflow-auto whitespace-pre-wrap break-words text-xs">{{ JSON.stringify(report.tokenizer, null, 2) }}</pre></details>
-    <details class="card p-4"><summary class="min-h-11 cursor-pointer text-sm">{{ t('admin.modelIdentity.evidence') }}</summary><dl class="mb-4 grid gap-2 text-xs sm:grid-cols-2"><div>{{ t('admin.modelIdentity.engineVersion') }}: {{ report.engine_commit }}</div><div>{{ t('admin.modelIdentity.baselineVersion') }}: {{ report.benchmark_version }}</div></dl><pre class="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">{{ JSON.stringify({ report, requests: run.probes, options: run.options }, null, 2) }}</pre><a class="mt-3 inline-block min-h-11 text-sm text-primary-600 underline dark:text-primary-400" href="https://github.com/Ikaleio/lm-detector/tree/654c8334bb53951aaf04cbd61252d163649e1369" target="_blank" rel="noopener noreferrer">Ikaleio/lm-detector · MIT</a></details>
+    <details class="card p-4"><summary class="min-h-11 cursor-pointer text-sm">{{ t('admin.modelIdentity.evidence') }}</summary><dl class="mb-4 grid gap-2 text-xs sm:grid-cols-2"><div>{{ t('admin.modelIdentity.engineVersion') }}: {{ report.engine_commit }}</div><div>{{ t('admin.modelIdentity.baselineVersion') }}: {{ report.benchmark_version }}</div></dl><pre class="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">{{ JSON.stringify({ report, requests: run.probes, options: run.options }, null, 2) }}</pre><a class="mt-3 inline-block min-h-11 text-sm text-primary-600 underline dark:text-primary-400" :href="sourceUrl" target="_blank" rel="noopener noreferrer">Ikaleio/lm-detector · MIT</a></details>
   </div>
 </template>
 <script setup lang="ts">
@@ -42,6 +42,12 @@ type Analysis = { prediction: string; prediction_name: string; probability: numb
 const props = defineProps<{ run: IdentityRun }>()
 const { t } = useI18n()
 const report = computed(() => props.run.report || {})
+const sourceUrl = computed(() => {
+  const commit = report.value.source_commit || report.value.engine_commit
+  return typeof commit === 'string' && /^[a-f0-9]{40}$/.test(commit)
+    ? `https://github.com/Ikaleio/lm-detector/tree/${commit}`
+    : 'https://github.com/Ikaleio/lm-detector'
+})
 const analysis = computed(() => report.value.analysis as Analysis | undefined)
 const samples = computed(() => Array.isArray(report.value.samples) ? report.value.samples as Sample[] : [])
 const ranking = computed(() => analysis.value?.results || [])

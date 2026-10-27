@@ -18,6 +18,19 @@ function fixture(probability: number | null, decision = 'ranked'): IdentityRun {
 }
 
 describe('Fingerpoint evidence report', () => {
+  it('links each stored report to its actual engine source revision', async () => {
+    const run = fixture(0.99)
+    run.report!.engine_commit = '4dcb4216151cbd5066d515297720130a9fd3b198'
+    const wrapper = mount(FingerpointReport, { props: { run } })
+    expect(wrapper.get('a').attributes('href')).toBe(`https://github.com/Ikaleio/lm-detector/tree/${run.report!.engine_commit}`)
+    const historical = fixture(0.99)
+    historical.report!.engine_commit = '654c8334bb53951aaf04cbd61252d163649e1369'
+    await wrapper.setProps({ run: historical })
+    expect(wrapper.get('a').attributes('href')).toBe(`https://github.com/Ikaleio/lm-detector/tree/${historical.report!.engine_commit}`)
+    await wrapper.setProps({ run: fixture(0.99) })
+    expect(wrapper.get('a').attributes('href')).toBe('https://github.com/Ikaleio/lm-detector')
+  })
+
   it('shows partial evidence without manufacturing confidence percentages', () => {
     const wrapper = mount(FingerpointReport, { props: { run: fixture(null, 'partial') } })
     expect(wrapper.findAll('[data-sample]')).toHaveLength(3)
