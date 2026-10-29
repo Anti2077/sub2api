@@ -12,7 +12,7 @@
         <template v-else>{{ t('rewards.receiptFree') }}</template>
       </p>
       <dl>
-        <div v-if="card.template.kind !== 'group_rate'"><dt>{{ t('rewards.model') }}</dt><dd class="receipt-model">{{ card.template.model }}</dd></div>
+        <div v-if="card.template.kind !== 'group_rate'"><dt>{{ t('rewards.model') }}</dt><dd class="receipt-model">{{ templateModels(card.template).join(', ') }}</dd></div>
         <div><dt>{{ t('rewards.groups') }}</dt><dd>{{ card.template.group_ids.map(id => `#${id}`).join(' · ') }}</dd></div>
         <div><dt>{{ t('rewards.receiptDuration') }}</dt><dd>{{ t('rewards.receiptHours', { hours: card.template.hours }) }}</dd></div>
         <div><dt>{{ t('rewards.claim') }}</dt><dd>{{ formatDateTime(card.claim_expires_at) }}</dd></div>
@@ -29,6 +29,7 @@
 </template>
 
 <script setup lang="ts">
+import { templateModels } from '@/components/rewards/templateValidation'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import type { RewardCard } from '@/api/rewards'

@@ -6,7 +6,7 @@
     <div v-if="generated.length" class="card space-y-3 p-4"><h3 class="font-semibold">{{ t('rewards.manageGenerated',{count:generated.length}) }}</h3><textarea class="input min-h-32 font-mono" readonly :aria-label="t('rewards.manageGeneratedCodes')" :value="generated.join('\n')" /><button class="btn btn-secondary min-h-11" @click="copy(generated)">{{ t('rewards.manageCopy') }}</button></div>
     <BatchResults :results="results" :refresh-error="refreshError" />
     <p v-if="notice" role="status" class="text-sm">{{ notice }}</p>
-    <ManagementList v-model="selected" :items="rows" :title="t('rewards.manageCodeList')" :busy="locked" :note="t('rewards.manageRecentCodes')" :search-text="v=>`${v.id} ${v.code} ${v.template.name} ${v.template.model} ${v.used_by||''}`" :row-label="v=>`#${v.id}`" :filters="filters" :filter-value="(v,k)=>k==='kind'?v.template.kind:status(v)" :selectable="()=>true">
+    <ManagementList v-model="selected" :items="rows" :title="t('rewards.manageCodeList')" :busy="locked" :note="t('rewards.manageRecentCodes')" :search-text="v=>`${v.id} ${v.code} ${v.template.name} ${templateModels(v.template).join(', ')} ${v.used_by||''}`" :row-label="v=>`#${v.id}`" :filters="filters" :filter-value="(v,k)=>k==='kind'?v.template.kind:status(v)" :selectable="()=>true">
       <template #header><button class="btn btn-secondary min-h-11" :disabled="locked" @click="refresh">{{ t('rewards.refresh') }}</button></template>
       <template #actions="{selected:chosen}"><button class="btn btn-secondary min-h-11" :disabled="locked || !chosen.length" @click="copy(chosen.map(v=>v.code))">{{ t('rewards.manageCopySelected') }}</button><button class="btn btn-secondary min-h-11" :disabled="locked || !chosen.some(v=>status(v)==='unused')" @click="pending='disable'">{{ t('rewards.manageDisableCodes') }}</button><button class="btn btn-secondary min-h-11" :disabled="locked || !chosen.some(v=>status(v)==='disabled')" @click="pending='enable'">{{ t('rewards.manageEnableCodes') }}</button></template>
       <template #default="{row}"><div class="space-y-1 text-sm"><h3 class="break-words font-semibold">#{{ row.id }} · {{ row.template.name }}</h3><p class="break-all font-mono">{{ row.code }}</p><p>{{ t(`rewards.${row.template.kind}`) }} · {{ statusLabel(status(row)) }}</p><p>{{ t('rewards.ends') }}: {{ row.expires_at ? new Date(row.expires_at).toLocaleString() : '—' }} · {{ t('rewards.userID') }} #{{ row.used_by||'—' }}</p></div></template>
@@ -15,6 +15,7 @@
   </section>
 </template>
 <script setup lang="ts">
+import { templateModels } from '@/components/rewards/templateValidation'
 import {computed,onMounted,ref} from 'vue'
 import {useI18n} from 'vue-i18n'
 import {rewardsAPI,rewardError,type CardTemplate,type RewardCode} from '@/api/rewards'

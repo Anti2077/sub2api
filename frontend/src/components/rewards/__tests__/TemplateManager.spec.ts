@@ -19,6 +19,21 @@ const rows = (w: ReturnType<typeof render>) => w.findAll('article')
 beforeEach(() => { vi.clearAllMocks(); api.saveTemplate.mockResolvedValue({}) })
 
 describe('TemplateManager', () => {
+  it('shows and searches every model with the configured multi-day duration', async()=>{
+    const w=render()
+    const multi={...templates[1],models:['gpt-a','gpt-b'],hours:72}
+    await w.setProps({templates:[multi]})
+    await w.get('input[type="search"]').setValue('gpt-b')
+    expect(rows(w)).toHaveLength(1)
+    expect(rows(w)[0].text()).toContain('gpt-a, gpt-b')
+    expect(rows(w)[0].text()).toContain('72h')
+    await button(w,'duplicateTemplate').trigger('click')
+    const copy=w.emitted('edit')![0][0] as CardTemplate
+    copy.models!.push('new')
+    expect(multi.models).toEqual(['gpt-a','gpt-b'])
+    w.unmount()
+  })
+
   it('selects all matching pages and resizes without losing selection, while disabling no-op actions', async()=>{
     const w=render();await w.findAll('button').find(b=>b.text().startsWith('rewards.manageSelectMatching'))!.trigger('click');expect(w.text()).toContain('"count":15');await w.get('select[aria-label="rewards.managePageSize"]').setValue('24');expect(rows(w)).toHaveLength(15);await button(w,'manageInvertPage').trigger('click');expect(button(w,'bulkPublish').attributes('disabled')).toBeDefined()
     await w.get('article input').setValue(true);expect(button(w,'bulkPublish').attributes('disabled')).toBeDefined();expect(button(w,'bulkUnpublish').attributes('disabled')).toBeUndefined();w.unmount()

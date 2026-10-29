@@ -57,13 +57,17 @@ func TestAdjustTextIndependentOracle(t *testing.T) {
 		}
 	}
 }
-func TestCardTemplateDaysFixed(t *testing.T) {
+func TestCardTemplateWholeDays(t *testing.T) {
 	base := Template{Name: "test", Kind: "model_day", Model: "test", GroupIDs: []int64{1}, Hours: 24, ClaimDays: 30}
+	if e := base.Validate(); e != nil {
+		t.Fatal(e)
+	}
+	base.Hours = 7 * 24
 	if e := base.Validate(); e != nil {
 		t.Fatal(e)
 	}
 	base.Hours = 1
 	if base.Validate() == nil {
-		t.Fatal("day duration must be 24h")
+		t.Fatal("day duration must be a whole day")
 	}
 }

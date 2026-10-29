@@ -4,16 +4,7 @@
 <p v-if="error" role="alert" class="text-red-700 dark:text-red-300">{{ error }}</p><p v-if="notice" role="status" class="text-emerald-700 dark:text-emerald-300">{{ notice }}</p>
 <section v-if="tab==='templates'" class="space-y-4">
 <form v-if="editor" class="card space-y-4 p-6" @submit.prevent="saveTemplate">
-<fieldset :disabled="busy" class="space-y-4"><div class="grid gap-4 sm:grid-cols-2">
-<label>{{ t('rewards.name') }}<input v-model="editor.name" class="input mt-1" required maxlength="120"></label>
-<label>{{ t('rewards.kind') }}<select v-model="editor.kind" class="input mt-1"><option v-for="k in kinds" :key="k" :value="k">{{ t(`rewards.${k}`) }}</option></select></label>
-<label v-if="editor.kind!=='group_rate'">{{ t('rewards.model') }}<input v-model="editor.model" class="input mt-1" required></label>
-<SearchMultiSelect :model-value="editor.group_ids" :options="groups.map(g=>({value:g.id,label:g.name+' (#'+g.id+')'}))" :label="t('rewards.groups')" :placeholder="t('incentives.selectGroups')" :search-placeholder="t('incentives.searchGroups')" :empty-text="t('incentives.noGroups')" :remove-label="t('incentives.removeOption')" :disabled="busy" @update:model-value="editor.group_ids=$event.map(Number)" />
-<label v-if="editor.kind==='group_rate'">{{ t('rewards.rate') }}<input v-model.number="editor.rate" class="input mt-1" type="number" min="0" step="any" required></label>
-<label v-if="editor.kind==='model_tokens'">{{ t('rewards.tokens') }}<input v-model.number="editor.tokens" class="input mt-1" type="number" min="1" max="1000000000000" required></label>
-<label v-if="editor.kind==='model_tokens'">{{ t('rewards.hoursLabel') }}<input v-model.number="editor.hours" class="input mt-1" type="number" min="1" max="8760" required></label>
-<label>{{ t('rewards.claimDays') }}<input v-model.number="editor.claim_days" class="input mt-1" type="number" min="1" max="365" required></label>
-</div><label class="flex min-h-11 items-center gap-2"><input v-model="editor.published" type="checkbox">{{ t('rewards.published') }}</label>
+<fieldset :disabled="busy" class="space-y-4"><TemplateFields ref="templateFields" :key="editor.id" v-model="editor" :groups="groups" :disabled="busy" />
 <div class="flex gap-2"><button class="btn btn-primary">{{ t('rewards.save') }}</button><button type="button" class="btn btn-secondary" @click="editor=undefined">{{ t('rewards.cancel') }}</button></div></fieldset></form>
 <TemplateManager :templates="templates" :groups="groups" :busy="busy || !!editor" :reload="reloadData" @edit="editTemplate" @busy="busy=$event" />
 </section>
@@ -30,7 +21,8 @@ import {computed,onMounted,onBeforeUnmount,ref,watch} from 'vue'
 import {onBeforeRouteLeave,onBeforeRouteUpdate,useRoute} from 'vue-router'
 import {useI18n} from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
-import SearchMultiSelect from '@/components/common/SearchMultiSelect.vue'
+import TemplateFields from '@/components/rewards/TemplateFields.vue'
+import {validModelIDs,templateModels} from '@/components/rewards/templateValidation'
 import RecipientPicker from '@/components/rewards/RecipientPicker.vue'
 import TemplateManager from '@/components/rewards/TemplateManager.vue'
 import {invalidCrops} from '@/components/rewards/managementValidation'
@@ -46,6 +38,7 @@ import {rewardsAPI,rewardError,type RewardConfig,type CardTemplate,type RewardCa
 const {t}=useI18n(),route=useRoute(),farmMode=computed(()=>route.path==='/admin/farm')
 const tabs=computed(()=>farmMode.value?['config','shop','ledger','audit']:['templates','grants','codes','config','audit'])
 const tab=ref(farmMode.value?'config':'templates'),busy=ref(false),error=ref(''),notice=ref(''),templates=ref<CardTemplate[]>([]),cards=ref<RewardCard[]>([]),config=ref<RewardConfig>(),shop=ref<Shop[]>([]),audit=ref<Audit[]>([]),ledger=ref<Ledger[]>([]),groups=ref<AdminGroup[]>([]),editor=ref<CardTemplate>(),shopEditor=ref<Shop>(),chosen=ref(0),start=ref(''),end=ref(''),allowed=ref(''),shopStart=ref(''),shopEnd=ref('')
+const templateFields=ref<InstanceType<typeof TemplateFields>>()
 const configBaseline=ref('')
 const allowedIDs=computed(()=>[...new Set(allowed.value.split(',').map(v=>Number(v.trim())).filter(v=>Number.isSafeInteger(v)&&v>0))])
 const configState=()=>JSON.stringify([config.value,start.value,end.value,allowed.value])
@@ -57,15 +50,14 @@ onBeforeRouteLeave(()=>!busy.value&&allowDiscard())
 onBeforeRouteUpdate(()=>{if(busy.value||!allowDiscard())return false;editor.value=undefined;shopEditor.value=undefined;if(configBaseline.value){[config.value,start.value,end.value,allowed.value]=JSON.parse(configBaseline.value)}return true})
 window.addEventListener('beforeunload',beforeUnload)
 onBeforeUnmount(()=>window.removeEventListener('beforeunload',beforeUnload))
-const kinds=['model_day','group_rate','model_tokens'] as const
 const boolKeys=['enabled','activation_enabled','farm_enabled','planting_enabled','exchange_enabled','stealing_enabled','maintenance'] as const
 const numKeys=['plots','protection_minutes','steal_percent','max_stolen_percent','daily_steals','daily_per_owner'] as const
 watch(farmMode,()=>{tab.value=farmMode.value?'config':'templates'})
 async function reloadData(){[templates.value,cards.value,config.value,shop.value,audit.value,ledger.value,groups.value]=await Promise.all([rewardsAPI.templates(),rewardsAPI.cards(true),rewardsAPI.config(),rewardsAPI.shop(true),rewardsAPI.audit(),rewardsAPI.ledger(true),adminAPI.groups.getAll()]);start.value=config.value.starts_at||'';end.value=config.value.ends_at||'';allowed.value=(config.value.allowed_user_ids||[]).join(',');configBaseline.value=configState();if(!templates.value.some(v=>v.id===chosen.value&&v.published))chosen.value=templates.value.find(v=>v.published)?.id||0}
 async function load(){if(busy.value||!allowDiscard())return;editor.value=undefined;shopEditor.value=undefined;busy.value=true;error.value='';try{await reloadData()}catch(e){error.value=rewardError(e)}finally{busy.value=false}}
 async function run(fn:()=>Promise<unknown>){if(busy.value)return;busy.value=true;error.value='';notice.value='';try{await fn();notice.value=t('rewards.success');await reloadData()}catch(e){error.value=rewardError(e)}finally{busy.value=false}}
-function editTemplate(v?:CardTemplate){editor.value=v?JSON.parse(JSON.stringify(v)):{id:0,version:0,name:'',kind:'model_day',model:'',group_ids:[],rate:0.35,tokens:100000,hours:24,claim_days:30,published:false}}
-function saveTemplate(){if(editor.value&&!editor.value.group_ids.length){error.value=t('rewards.manageTemplateGroupRequired');return}void run(async()=>{if(!editor.value)return;if(editor.value.kind!=='model_tokens')editor.value.hours=24;await rewardsAPI.saveTemplate(editor.value);editor.value=undefined})}
+function editTemplate(v?:CardTemplate){editor.value=v?JSON.parse(JSON.stringify(v)):{id:0,version:0,name:'',kind:'model_day',model:'',models:[],group_ids:[],rate:0.35,tokens:100000,hours:24,claim_days:30,published:false}}
+function saveTemplate(){if(!templateFields.value?.prepare())return;if(editor.value&&editor.value.kind!=='group_rate'&&!validModelIDs(templateModels(editor.value))){error.value=t('rewards.invalidModels');return}if(editor.value&&editor.value.kind==='group_rate'&&editor.value.group_ids.length!==1){error.value=t('rewards.rateGroupRequired');return}if(editor.value&&!editor.value.group_ids.length){error.value=t('rewards.manageTemplateGroupRequired');return}void run(async()=>{if(!editor.value)return;await rewardsAPI.saveTemplate(editor.value);editor.value=undefined})}
 function iso(v:string){if(!v.trim())return null;const d=new Date(v);if(!Number.isFinite(d.getTime()))throw new Error(t('rewards.invalidTime'));return d.toISOString()}
 function saveConfig(){if(config.value&&invalidCrops(config.value.crops).length){error.value=t('rewards.manageInvalidCrops',{count:invalidCrops(config.value.crops).length});return}void run(async()=>{if(!config.value)return;config.value.starts_at=iso(start.value);config.value.ends_at=iso(end.value);config.value.allowed_user_ids=allowed.value.trim()?allowed.value.split(',').map(x=>Number(x.trim())):[];await rewardsAPI.saveConfig(config.value)})}
 function localTime(v?:string|null){if(!v)return '';const d=new Date(v);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)}
