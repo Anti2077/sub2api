@@ -4,8 +4,10 @@ package service
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 )
@@ -143,4 +145,55 @@ func TestAdminService_UpdateUser_PromoteDoesNotCountAdmins(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, RoleAdmin, updated.Role)
 	require.Equal(t, 0, repo.listCalls, "升级路径不应触发管理员计数")
+}
+
+func TestAdminService_UpdateUser_AdminGuardsAreClientErrors(t *testing.T) {
+	base := &userRepoStub{user: &User{ID: 42, Email: "a@example.com", Role: RoleAdmin}}
+	repo := &roleGuardUserRepoStub{rpmUserRepoStub: &rpmUserRepoStub{userRepoStub: base}, adminTotal: 1}
+	svc := &adminServiceImpl{userRepo: repo, redeemCodeRepo: &redeemRepoStub{}}
+
+	_, err := svc.UpdateUser(context.Background(), 42, &UpdateUserInput{Status: StatusDisabled})
+	require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
+	require.Equal(t, "ADMIN_DISABLE_FORBIDDEN", infraerrors.Reason(err))
+
+	_, err = svc.UpdateUser(context.Background(), 42, &UpdateUserInput{Role: RoleUser})
+	require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
+	require.Equal(t, "LAST_ADMIN_DEMOTE_FORBIDDEN", infraerrors.Reason(err))
+	require.Nil(t, repo.lastUpdated)
+}
+
+// The real repository returns a detached user; mutating the service snapshot
+// must not change stored identity unless Update is called.
+type detachedRoleGuardUserRepo struct {
+	*roleGuardUserRepoStub
+}
+
+func (s *detachedRoleGuardUserRepo) GetByID(ctx context.Context, id int64) (*User, error) {
+	user, err := s.roleGuardUserRepoStub.GetByID(ctx, id)
+	if err != nil || user == nil {
+		return user, err
+	}
+	snapshot := *user
+	return &snapshot, nil
+}
+
+func TestAdminService_UpdateUser_AdminGuardsPreserveConfirmedUsername(t *testing.T) {
+	for _, input := range []UpdateUserInput{
+		{Status: StatusDisabled},
+		{Role: RoleUser},
+	} {
+		base := &userRepoStub{user: &User{ID: 42, Role: RoleAdmin, Username: "custom-admin", UsernameConfirmed: true}}
+		repo := &roleGuardUserRepoStub{rpmUserRepoStub: &rpmUserRepoStub{userRepoStub: base}, adminTotal: 1}
+		svc := &adminServiceImpl{userRepo: &detachedRoleGuardUserRepo{repo}, redeemCodeRepo: &redeemRepoStub{}}
+
+		newName := "renamed-admin"
+		input.Username = &newName
+		_, err := svc.UpdateUser(context.Background(), 42, &input)
+
+		require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
+		require.Nil(t, repo.lastUpdated, "rejected admin updates must not persist custom identity changes")
+		require.Equal(t, "custom-admin", base.user.Username)
+		require.True(t, base.user.UsernameConfirmed)
+		require.Equal(t, RoleAdmin, base.user.Role)
+	}
 }
