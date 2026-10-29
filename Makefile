@@ -7,6 +7,7 @@ FRONTEND_CRITICAL_VITEST := \
 	src/views/admin/ops/utils/__tests__/routingGraph.spec.ts \
 	src/views/admin/ops/components/__tests__/OpsRoutingMonitor.spec.ts \
 	src/i18n/__tests__/localeKeyCompleteness.spec.ts \
+	src/i18n/__tests__/htmlSanitization.spec.ts \
 	src/api/__tests__/client.spec.ts \
 	src/api/__tests__/tokenRefresh.spec.ts \
 	src/api/__tests__/keys.bulkUpdate.spec.ts \
