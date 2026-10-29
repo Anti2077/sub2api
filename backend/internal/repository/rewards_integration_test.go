@@ -249,3 +249,84 @@ func TestFarmHarvestStealCompetitionAndShopIdempotency(t *testing.T) {
 	_, e = s.Action(ctx, u.ID, rewards.FarmAction{Key: uuid.NewString(), Kind: "buy", ShopID: shop.ID})
 	require.Error(t, e)
 }
+
+func TestRewardsMultiModelDurationAndSharedAllowance(t *testing.T) {
+	ctx := context.Background()
+	s, u, g, k, tmpl := rewardFixture(t)
+	now := time.Date(2026, 10, 29, 10, 0, 0, 0, time.UTC)
+	s.Now = func() time.Time { return now }
+	tmpl.Models = []string{"luna", "gpt-b", "gpt-b"}
+	tmpl.Hours = 72
+	var err error
+	tmpl, err = s.SaveTemplate(ctx, tmpl, u.ID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"luna", "gpt-b"}, tmpl.Models)
+	loaded, err := rewards.LoadTemplate(ctx, integrationDB, tmpl.ID, true)
+	require.NoError(t, err)
+	require.Equal(t, tmpl.Models, loaded.Models)
+	id, err := s.Grant(ctx, u.ID, tmpl.ID, u.ID, uuid.NewString(), "multi model")
+	require.NoError(t, err)
+	require.NoError(t, s.Activate(ctx, u.ID, id))
+	var expires time.Time
+	require.NoError(t, integrationDB.QueryRow(`SELECT expires_at FROM reward_cards WHERE id=$1`, id).Scan(&expires))
+	require.True(t, expires.Equal(now.Add(72*time.Hour)))
+	repo := NewUsageBillingRepository(testEntClient(t), integrationDB)
+	for _, model := range []string{"luna", "gpt-b"} {
+		capture, e := s.Capture(ctx, u.ID, g.ID, model, true)
+		require.NoError(t, e)
+		require.NotNil(t, capture)
+		require.Equal(t, id, capture.TokenCard)
+		cmd := rewardCmd(u, k, capture, uuid.NewString(), 400)
+		cmd.Model = model
+		_, e = repo.Apply(ctx, cmd)
+		require.NoError(t, e)
+	}
+	var remaining int64
+	require.NoError(t, integrationDB.QueryRow(`SELECT remaining_tokens FROM reward_cards WHERE id=$1`, id).Scan(&remaining))
+	require.Equal(t, int64(200), remaining)
+	miss, err := s.Capture(ctx, u.ID, g.ID, "unlisted", true)
+	require.NoError(t, err)
+	require.Nil(t, miss)
+	// A legacy single-model card overlapping the second model must be blocked.
+	other := tmpl
+	other.ID = 0
+	other.Models = nil
+	other.Model = "gpt-b"
+	other, err = s.SaveTemplate(ctx, other, u.ID)
+	require.NoError(t, err)
+	otherID, err := s.Grant(ctx, u.ID, other.ID, u.ID, uuid.NewString(), "overlap")
+	require.NoError(t, err)
+	require.Error(t, s.Activate(ctx, u.ID, otherID))
+	// Issued snapshots retain their model list and duration after template edits.
+	tmpl.Models = []string{"new-model"}
+	tmpl.Hours = 24
+	_, err = s.SaveTemplate(ctx, tmpl, u.ID)
+	require.NoError(t, err)
+	now = now.Add(48 * time.Hour)
+	capture, err := s.Capture(ctx, u.ID, g.ID, "gpt-b", true)
+	require.NoError(t, err)
+	require.NotNil(t, capture)
+	now = now.Add(24 * time.Hour)
+	capture, err = s.Capture(ctx, u.ID, g.ID, "gpt-b", true)
+	require.NoError(t, err)
+	require.Nil(t, capture)
+	require.NoError(t, s.Activate(ctx, u.ID, otherID))
+	// Free cards apply to every listed model throughout their configured duration.
+	free := other
+	free.ID = 0
+	free.Kind = "model_day"
+	free.Models = []string{"luna", "gpt-b"}
+	free.Hours = 168
+	free, err = s.SaveTemplate(ctx, free, u.ID)
+	require.NoError(t, err)
+	freeID, err := s.Grant(ctx, u.ID, free.ID, u.ID, uuid.NewString(), "free multi")
+	require.NoError(t, err)
+	require.NoError(t, s.Activate(ctx, u.ID, freeID))
+	now = now.Add(48 * time.Hour)
+	for _, model := range free.Models {
+		capture, err = s.Capture(ctx, u.ID, g.ID, model, true)
+		require.NoError(t, err)
+		require.NotNil(t, capture)
+		require.True(t, capture.Free)
+	}
+}

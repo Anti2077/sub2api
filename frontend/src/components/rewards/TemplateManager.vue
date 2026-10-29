@@ -31,7 +31,7 @@
         <label class="flex min-h-11 min-w-6 items-center"><input v-model="selected" type="checkbox" :value="v.id" :disabled="locked" :aria-label="t('rewards.selectTemplate', { name: v.name, id: v.id })"></label>
         <div class="grid min-w-0 flex-1 gap-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] md:items-center">
           <div class="min-w-0"><h3 class="break-words font-semibold">{{ v.name }}</h3><p class="mt-1 text-xs text-gray-500 dark:text-gray-400">#{{ v.id }} · v{{ v.version }} · {{ t(`rewards.${v.kind}`) }}</p><span class="mt-2 inline-flex rounded-full px-2 py-1 text-xs" :class="v.published ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200' : 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-300'">{{ t(v.published?'rewards.published':'rewards.draft') }}</span></div>
-          <div class="min-w-0 text-sm"><p class="break-all">{{ v.kind==='group_rate' ? `${v.rate}× · 24h` : v.model }}</p><p class="mt-1 text-gray-500 dark:text-gray-400">{{ v.kind==='model_tokens' ? `${v.tokens.toLocaleString()} Token · ${v.hours}h` : v.kind==='model_day' ? t('rewards.freeText')+' · 24h' : '' }}</p><p class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">{{ groupNames(v) }}</p></div>
+          <div class="min-w-0 text-sm"><p class="break-all">{{ v.kind==='group_rate' ? `${v.rate}× · ${v.hours}h` : templateModels(v).join(', ') }}</p><p class="mt-1 text-gray-500 dark:text-gray-400">{{ v.kind==='model_tokens' ? `${v.tokens.toLocaleString()} Token · ${v.hours}h` : v.kind==='model_day' ? t('rewards.freeText')+` · ${v.hours}h` : '' }}</p><p class="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">{{ groupNames(v) }}</p></div>
           <div class="flex flex-wrap gap-2"><button class="btn btn-secondary min-h-11" :disabled="locked" @click="emit('edit', v)">{{ t('rewards.edit') }}</button><button class="btn btn-secondary min-h-11" :disabled="locked" @click="duplicate(v)">{{ t('rewards.duplicateTemplate') }}</button></div>
         </div>
       </article>
@@ -43,6 +43,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { templateModels } from '@/components/rewards/templateValidation'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -59,7 +60,7 @@ const locked = computed(() => props.busy || processing.value)
 const groupNames = (v: CardTemplate) => v.group_ids.map(id => props.groups.find(g => g.id===id)?.name || `#${id}`).join(', ')
 const filtered = computed(() => props.templates.filter(v => {
   const q = search.value.trim().toLowerCase()
-  return (kind.value==='all' || v.kind===kind.value) && (status.value==='all' || v.published===(status.value==='published')) && (!q || `${v.id} ${v.name} ${v.model} ${groupNames(v)}`.toLowerCase().includes(q))
+  return (kind.value==='all' || v.kind===kind.value) && (status.value==='all' || v.published===(status.value==='published')) && (!q || `${v.id} ${v.name} ${templateModels(v).join(', ')} ${groupNames(v)}`.toLowerCase().includes(q))
 }))
 const pages = computed(() => Math.max(1, Math.ceil(filtered.value.length/pageSize.value)))
 const pageItems = computed(() => filtered.value.slice((page.value-1)*pageSize.value, page.value*pageSize.value))
@@ -76,7 +77,7 @@ function togglePage() {
 }
 function invertPage(){if(locked.value)return;const ids=pageItems.value.map(v=>v.id);selected.value=[...selected.value.filter(id=>!ids.includes(id)),...ids.filter(id=>!selected.value.includes(id))]}
 function duplicate(v: CardTemplate) {
-  emit('edit', { ...v, id: 0, version: 0, name: t('rewards.templateCopy', { name: v.name }).slice(0,120), group_ids: [...v.group_ids], published: false })
+  emit('edit', { ...v, id: 0, version: 0, name: t('rewards.templateCopy', { name: v.name }).slice(0,120), group_ids: [...v.group_ids], models: [...templateModels(v)], published: false })
 }
 async function applyBatch() {
   if (locked.value || pending.value===undefined) return

@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-export interface CardTemplate { id: number; version: number; name: string; kind: 'model_day'|'model_tokens'|'group_rate'; model: string; group_ids: number[]; rate: number; tokens: number; hours: number; claim_days: number; published: boolean }
+export interface CardTemplate { id: number; version: number; name: string; kind: 'model_day'|'model_tokens'|'group_rate'; model: string; models?: string[]; group_ids: number[]; rate: number; tokens: number; hours: number; claim_days: number; published: boolean }
 export interface RewardCard { id: number; user_id: number; template: CardTemplate; status: string; source: string; remaining_tokens: number; claim_expires_at: string; activated_at?: string; expires_at?: string }
 export interface RewardUsage { id: number; request_id: string; model: string; original_cost: number; discount: number; paid_cost: number; tokens: number; covered_tokens: number; created_at: string }
 export interface Crop { id: string; name: string; hours: number; yield: number; enabled: boolean; protection_minutes: number; steal_percent: number; max_stolen_percent: number }

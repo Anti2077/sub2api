@@ -313,7 +313,7 @@
           </p><h2>
             {{ s.template.name }}
           </h2><p class="rw-caption break-all">
-            {{ s.template.kind !== 'group_rate' ? s.template.model : `${t('rewards.groups')} ${s.template.group_ids.join(', ')}` }}
+            {{ s.template.kind !== 'group_rate' ? templateModels(s.template).join(', ') : `${t('rewards.groups')} ${s.template.group_ids.join(', ')}` }}
           </p><div class="shop-price">
             <RewardIcon name="crystal" /><strong>
               {{ s.price.toLocaleString() }}
@@ -373,6 +373,7 @@
   </AppLayout>
 </template>
 <script setup lang="ts">
+import { templateModels } from '@/components/rewards/templateValidation'
 import {computed,onMounted,onBeforeUnmount,ref} from 'vue'
 import {useI18n} from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'

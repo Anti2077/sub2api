@@ -11,6 +11,7 @@ import (
 	"math"
 	"strings"
 	"time"
+	"unicode"
 
 	apierrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/shopspring/decimal"
@@ -67,17 +68,56 @@ func Audit(ctx context.Context, q Executor, user, actor, card int64, kind string
 }
 
 type Template struct {
-	ID        int64   `json:"id"`
-	Version   int64   `json:"version"`
-	Name      string  `json:"name"`
-	Kind      string  `json:"kind"`
-	Model     string  `json:"model"`
-	GroupIDs  []int64 `json:"group_ids"`
-	Rate      float64 `json:"rate"`
-	Tokens    int64   `json:"tokens"`
-	Hours     int     `json:"hours"`
-	ClaimDays int     `json:"claim_days"`
-	Published bool    `json:"published"`
+	ID        int64    `json:"id"`
+	Version   int64    `json:"version"`
+	Name      string   `json:"name"`
+	Kind      string   `json:"kind"`
+	Model     string   `json:"model"`
+	Models    []string `json:"models,omitempty"`
+	GroupIDs  []int64  `json:"group_ids"`
+	Rate      float64  `json:"rate"`
+	Tokens    int64    `json:"tokens"`
+	Hours     int      `json:"hours"`
+	ClaimDays int      `json:"claim_days"`
+	Published bool     `json:"published"`
+}
+
+// ModelIDs also supports previously issued single-model snapshots.
+func (t Template) ModelIDs() []string {
+	if len(t.Models) > 0 {
+		return t.Models
+	}
+	if t.Model != "" {
+		return []string{t.Model}
+	}
+	return nil
+}
+func (t Template) matchesModel(model string) bool {
+	for _, id := range t.ModelIDs() {
+		if id == model {
+			return true
+		}
+	}
+	return false
+}
+func (t Template) overlaps(other Template) bool {
+	if t.Kind != other.Kind {
+		return false
+	}
+	for _, g := range t.GroupIDs {
+		if !contains(other.GroupIDs, g) {
+			continue
+		}
+		if t.Kind == "group_rate" {
+			return true
+		}
+		for _, model := range t.ModelIDs() {
+			if other.matchesModel(model) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (t Template) Validate() error {
@@ -89,13 +129,19 @@ func (t Template) Validate() error {
 			return Bad("请选择有效分组")
 		}
 	}
-	if t.Kind != "model_tokens" && t.Hours != 24 {
-		return Bad("日卡时长固定为24小时")
+	if t.Kind != "model_tokens" && t.Hours%24 != 0 {
+		return Bad("有效天数必须为1至365的整数")
 	}
 	switch t.Kind {
 	case "model_day", "model_tokens":
-		if strings.TrimSpace(t.Model) == "" || len(t.Model) > 200 || strings.ContainsAny(t.Model, "*? ") {
-			return Bad("请选择精确模型 ID")
+		models := t.ModelIDs()
+		if len(models) == 0 || len(models) > 100 {
+			return Bad("请选择1至100个精确模型 ID")
+		}
+		for _, model := range models {
+			if model == "" || len(model) > 200 || strings.ContainsAny(model, "*?") || strings.ContainsFunc(model, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) {
+				return Bad("请选择精确模型 ID，不支持通配符或空白字符")
+			}
 		}
 		if t.Kind == "model_tokens" && (t.Tokens <= 0 || t.Tokens > 1000000000000) {
 			return Bad("Token额度无效")
@@ -112,6 +158,20 @@ func (t Template) Validate() error {
 func (s *Store) SaveTemplate(ctx context.Context, t Template, actor int64) (Template, error) {
 	if e := t.Validate(); e != nil {
 		return t, e
+	}
+	if t.Kind == "group_rate" {
+		t.Model, t.Models = "", nil
+	} else {
+		ids := t.ModelIDs()
+		t.Models = nil
+		seen := map[string]bool{}
+		for _, id := range ids {
+			if !seen[id] {
+				t.Models = append(t.Models, id)
+				seen[id] = true
+			}
+		}
+		t.Model = t.Models[0]
 	}
 	e := s.tx(ctx, func(tx *sql.Tx) error {
 		for _, g := range t.GroupIDs {
@@ -321,12 +381,8 @@ func (s *Store) Activate(ctx context.Context, user, id int64) error {
 			if e = json.Unmarshal(b, &other); e != nil {
 				break
 			}
-			if other.Kind == t.Kind && (t.Kind == "group_rate" || other.Model == t.Model) {
-				for _, g := range t.GroupIDs {
-					if contains(other.GroupIDs, g) {
-						overlap = true
-					}
-				}
+			if t.overlaps(other) {
+				overlap = true
 			}
 		}
 		rowErr := rows.Err()
@@ -428,7 +484,7 @@ func (s *Store) Capture(ctx context.Context, user, group int64, model string, te
 		}
 		switch t.Kind {
 		case "model_day":
-			if t.Model == model {
+			if t.matchesModel(model) {
 				c.Free = true
 				c.Cards = append(c.Cards, id)
 			}
@@ -439,7 +495,7 @@ func (s *Store) Capture(ctx context.Context, user, group int64, model string, te
 				c.Cards = append(c.Cards, id)
 			}
 		case "model_tokens":
-			if t.Model == model && left > 0 {
+			if t.matchesModel(model) && left > 0 {
 				c.TokenCard = id
 				c.Cards = append(c.Cards, id)
 			}

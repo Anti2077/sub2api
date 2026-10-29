@@ -119,7 +119,7 @@
             </p><h2>
               {{ card.template.name }}
             </h2><p class="ticket-scope">
-              {{ card.template.kind !== 'group_rate' ? card.template.model : `${t('rewards.groups')} #${card.template.group_ids.join(', #')}` }}
+              {{ card.template.kind !== 'group_rate' ? templateModels(card.template).join(', ') : `${t('rewards.groups')} #${card.template.group_ids.join(', #')}` }}
             </p><div class="ticket-value">
               <template v-if="card.template.kind==='model_tokens'">
                 <strong>
@@ -253,6 +253,7 @@
   </AppLayout>
 </template>
 <script setup lang="ts">
+import { templateModels } from '@/components/rewards/templateValidation'
 import { computed,onMounted,ref,watch } from 'vue'
 import { useRoute,useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
