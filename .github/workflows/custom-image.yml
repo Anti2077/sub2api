@@ -30,10 +30,21 @@ jobs:
           platforms: linux/amd64
           load: true
           tags: sub2api-identity-smoke:local
+          # Always apply available OS security updates in the runtime stage.
+          no-cache-filters: runtime
           cache-from: type=gha,scope=identity-smoke
           cache-to: type=gha,scope=identity-smoke,mode=max
       - name: Verify worker, backend and database startup together
         run: /bin/sh deploy/tests/single-image-smoke-test.sh sub2api-identity-smoke:local
+      - name: Scan runtime image before publishing
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.76.1
+          image-ref: sub2api-identity-smoke:local
+          scanners: vuln
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          exit-code: '1'
 
   publish:
     needs: smoke
@@ -117,6 +128,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
+          no-cache-filters: runtime
           context: .
           file: deploy/Dockerfile
           platforms: linux/amd64,linux/arm64

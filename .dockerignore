@@ -38,6 +38,8 @@ build/
 frontend/node_modules/
 node_modules/
 **/node_modules/
+**/.pnpm-store/
+.pnpm-store/
 identity-engine/vendor/bazaarlink/node_modules/
 identity-engine/vendor/bazaarlink/dist/
 

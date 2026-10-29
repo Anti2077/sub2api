@@ -140,6 +140,7 @@ deploy/docker-compose.override.yml
 .gocache/
 vite.config.js
 docs/*
+!docs/security-review-2026-10-29.md
 !docs/vendor/
 !docs/vendor/grow-your-garden/
 !docs/vendor/grow-your-garden/**

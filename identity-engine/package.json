@@ -14,9 +14,9 @@
     "test:engine": "node --test identity.test.cjs"
   },
   "devDependencies": {
-    "commander": "12.1.0",
     "@types/node": "24.0.0",
+    "commander": "12.1.0",
     "typescript": "5.8.3",
-    "vitest": "4.1.2"
+    "vitest": "4.1.12"
   }
 }

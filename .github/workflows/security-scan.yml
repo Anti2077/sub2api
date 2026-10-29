@@ -35,6 +35,10 @@ jobs:
 
   frontend-security:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: [frontend, identity-engine]
     steps:
       - uses: actions/checkout@v6
       - name: Set up pnpm
@@ -46,16 +50,17 @@ jobs:
         with:
           node-version: '24.22.1'
           cache: 'pnpm'
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache-dependency-path: ${{ matrix.directory }}/pnpm-lock.yaml
       - name: Install dependencies
-        working-directory: frontend
+        working-directory: ${{ matrix.directory }}
         run: pnpm install --frozen-lockfile
       - name: Run pnpm audit
-        working-directory: frontend
+        working-directory: ${{ matrix.directory }}
         run: |
-          pnpm audit --prod --audit-level=high --json > audit.json || true
+          pnpm audit --audit-level=high --json > audit.json || true
       - name: Check audit exceptions
         run: |
+          python -m unittest discover -s tools -p 'test_check_pnpm_audit_exceptions.py'
           python tools/check_pnpm_audit_exceptions.py \
-            --audit frontend/audit.json \
+            --audit ${{ matrix.directory }}/audit.json \
             --exceptions .github/audit-exceptions.yml

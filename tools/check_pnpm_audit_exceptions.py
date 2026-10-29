@@ -148,6 +148,17 @@ def main() -> int:
     with open(args.audit, "r", encoding="utf-8") as handle:
         audit = json.load(handle)
 
+    # pnpm audit may emit an error object on registry/network failure. Since
+    # its exit status also signals vulnerabilities, CI validates the report
+    # here before applying exceptions instead of treating that error as clean.
+    if (
+        not isinstance(audit, dict)
+        or audit.get("error")
+        or not any(isinstance(audit.get(key), dict) for key in ("advisories", "vulnerabilities"))
+    ):
+        sys.stderr.write("Audit failed or report has no vulnerability results.\n")
+        return 1
+
     # 读取异常清单并建立索引，便于快速匹配包名 + advisory。
     exceptions = parse_exceptions(args.exceptions)
     exception_index = {}

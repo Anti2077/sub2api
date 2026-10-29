@@ -100,21 +100,23 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 # -----------------------------------------------------------------------------
 # Stage 3: Final Runtime Image
 # -----------------------------------------------------------------------------
-FROM ${NODE_IMAGE}
+FROM ${NODE_IMAGE} AS runtime
 
 # Labels
 LABEL maintainer="Wei-Shaw <github.com/Wei-Shaw>"
 LABEL description="Sub2API - AI API Gateway Platform"
 LABEL org.opencontainers.image.source="https://github.com/Wei-Shaw/sub2api"
 
-# Install runtime dependencies
-RUN apk add --no-cache \
+# Refresh inherited packages and keep build-only package managers out of runtime.
+RUN apk upgrade --no-cache && apk add --no-cache \
     'ca-certificates>=20261020-r0' \
     tzdata \
     curl \
     su-exec \
     tini \
-    && rm -rf /var/cache/apk/*
+    && rm -rf /var/cache/apk/* /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+       /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
 # Create non-root user
 RUN deluser node && (delgroup node 2>/dev/null || true) && \
