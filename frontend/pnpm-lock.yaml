@@ -12,6 +12,7 @@ overrides:
   source-map-js@<1.2.2: '>=1.2.2'
   follow-redirects@<1.16.1: '>=1.16.1'
   editorconfig@1>minimatch: ^9.0.9
+  decode-uri-component@<0.5.1: '>=0.5.1'
 
 importers:
 
@@ -2333,6 +2334,8 @@ packages:
   decode-uri-component@0.5.1:
     resolution: {integrity: sha512-vWHQkXgg2cE3BB4rR0c+PYw9BCQzLoNIRMI7AunIkZst74tw/vpPp7VLoYtsR/cy1f55g3XDWUslfeCZjiZJyA==}
     engines: {node: '>=14.16'}
+
+  deep-eql@5.0.2: {}
 
   deep-is@0.1.4:
     resolution: {integrity: sha512-oIPzksmTg4/MriiaYGO+okXDT7ztn/w3Eptv/+gSIdMdKsJo0u4CfYNFJPy+4SKMuCqGw2wxnA+URMg3t8a/bQ==}
@@ -6987,6 +6990,8 @@ snapshots:
       character-entities: 2.0.2
 
   decode-uri-component@0.5.1: {}
+
+  deep-eql@5.0.2: {}
 
   deep-is@0.1.4: {}
 
