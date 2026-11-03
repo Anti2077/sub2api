@@ -915,3 +915,63 @@ func sqlExecutorFromEntClient(client *dbent.Client) sqlQueryExecutor {
 	}
 	return exec
 }
+
+// GetLeaderboardAvatarReferences deliberately excludes Base64 data from the result.
+// MD5 is only a content cache validator, never an authorization credential.
+func (r *userRepository) GetLeaderboardAvatarReferences(ctx context.Context, userIDs []int64) (map[int64]service.LeaderboardAvatarReference, error) {
+	result := make(map[int64]service.LeaderboardAvatarReference)
+	userIDs = normalizePositiveInt64IDs(userIDs)
+	if len(userIDs) == 0 {
+		return result, nil
+	}
+	exec, err := r.userProfileIdentitySQL(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := exec.QueryContext(ctx, `
+SELECT a.user_id,
+ CASE WHEN a.url LIKE 'data:%' THEN '' ELSE trim(a.url) END,
+ CASE WHEN a.url LIKE 'data:%' THEN md5(a.url) ELSE '' END
+FROM user_avatars a
+JOIN users u ON u.id = a.user_id
+WHERE a.user_id = ANY($1) AND u.deleted_at IS NULL
+ AND u.username_confirmed AND NOT u.leaderboard_anonymous AND trim(u.username) <> ''`, pq.Array(userIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id int64
+		var ref service.LeaderboardAvatarReference
+		if err := rows.Scan(&id, &ref.URL, &ref.Version); err != nil {
+			return nil, err
+		}
+		result[id] = ref
+	}
+	return result, rows.Err()
+}
+
+func (r *userRepository) GetLeaderboardAvatar(ctx context.Context, username, version string) (*service.UserAvatar, error) {
+	exec, err := r.userProfileIdentitySQL(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := exec.QueryContext(ctx, `
+SELECT a.url
+FROM user_avatars a
+JOIN users u ON u.id = a.user_id
+WHERE u.username = $1 AND md5(a.url) = $2 AND a.url LIKE 'data:%'
+ AND u.deleted_at IS NULL AND u.username_confirmed AND NOT u.leaderboard_anonymous`, username, version)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		return nil, rows.Err()
+	}
+	var avatar service.UserAvatar
+	if err := rows.Scan(&avatar.URL); err != nil {
+		return nil, err
+	}
+	return &avatar, rows.Err()
+}

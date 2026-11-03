@@ -125,6 +125,7 @@ export interface PublicTokenRankingItem {
   rank: number
   username: string
   avatar_url?: string
+  avatar_version?: string
   is_anonymous: boolean
   requests: number
   input_tokens: number
@@ -391,6 +392,14 @@ export async function getPublicTokenLeaderboard(
   const { data } = await apiClient.get<PublicTokenLeaderboardResponse>('/usage/leaderboard', {
     params: { period, mode, timezone }
   })
+  return data
+}
+
+export async function getLeaderboardAvatar(username: string, version: string, signal?: AbortSignal): Promise<Blob> {
+  const { data } = await apiClient.get<Blob>(
+    `/usage/leaderboard/avatar/${encodeURIComponent(username)}/${encodeURIComponent(version)}`,
+    { responseType: 'blob', signal }
+  )
   return data
 }
 

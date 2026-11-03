@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"net/http"
 	"strconv"
 	"strings"
@@ -784,4 +786,59 @@ func (h *UsageHandler) GetMyAPIKeyDailyUsage(c *gin.Context) {
 		"start_date": startTime.Format("2006-01-02"),
 		"end_date":   endTime.AddDate(0, 0, -1).Format("2006-01-02"),
 	})
+}
+
+// LeaderboardAvatar serves one version only after authentication and a fresh
+// privacy check. Browsers may store bytes but must revalidate before reuse.
+func (h *UsageHandler) LeaderboardAvatar(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	version := c.Param("version")
+	if len(version) != 32 {
+		response.ErrorFrom(c, service.ErrLeaderboardAvatarNotFound)
+		return
+	}
+	if _, err := hex.DecodeString(version); err != nil {
+		response.ErrorFrom(c, service.ErrLeaderboardAvatarNotFound)
+		return
+	}
+	avatar, err := h.usageService.GetLeaderboardAvatar(c.Request.Context(), subject.UserID, c.Param("username"), version)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	header, encoded, ok := strings.Cut(avatar.URL, ",")
+	contentType := strings.TrimSuffix(strings.TrimPrefix(header, "data:"), ";base64")
+	switch contentType {
+	case "image/png", "image/jpeg", "image/gif", "image/webp":
+	default:
+		response.ErrorFrom(c, service.ErrLeaderboardAvatarNotFound)
+		return
+	}
+	if !ok || header != "data:"+contentType+";base64" || len(encoded) > base64.StdEncoding.EncodedLen(10*1024*1024) {
+		response.ErrorFrom(c, service.ErrLeaderboardAvatarNotFound)
+		return
+	}
+	etag := `"` + version + `"`
+	c.Header("Cache-Control", "private, no-cache")
+	c.Header("ETag", etag)
+	c.Header("X-Content-Type-Options", "nosniff")
+	for _, validator := range strings.Split(c.GetHeader("If-None-Match"), ",") {
+		validator = strings.TrimSpace(validator)
+		if validator == "*" || strings.TrimPrefix(validator, "W/") == etag {
+			c.Status(http.StatusNotModified)
+			return
+		}
+	}
+	image, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		c.Header("Cache-Control", "private, no-store")
+		c.Header("ETag", "")
+		response.ErrorFrom(c, service.ErrLeaderboardAvatarNotFound)
+		return
+	}
+	c.Data(http.StatusOK, contentType, image)
 }

@@ -23,7 +23,7 @@ func TestAuthAndProfileRoutesRejectUnauthenticatedAvatarValidatorsWithoutCaching
 	t.Cleanup(func() { _ = rdb.Close() })
 	RegisterAuthRoutes(router.Group("/api/v1"), handlers, jwtAuth, audit, rdb, nil, nil)
 	RegisterUserRoutes(router.Group("/api/v1"), handlers, jwtAuth, audit, nil, nil)
-	for _, path := range []string{"/api/v1/auth/me", "/api/v1/user/profile"} {
+	for _, path := range []string{"/api/v1/auth/me", "/api/v1/user/profile", "/api/v1/usage/leaderboard/avatar/alice/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"} {
 		for _, auth := range []string{"", "Basic invalid", "Bearer "} {
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, path+"?avatar_version=v1-any-owner", nil)
