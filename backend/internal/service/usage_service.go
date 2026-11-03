@@ -323,7 +323,7 @@ func (s *UsageService) GetPublicUserLeaderboard(
 			publicUserIDs = append(publicUserIDs, row.UserID)
 		}
 	}
-	avatarURLs, err := s.getPublicLeaderboardAvatarURLs(ctx, publicUserIDs)
+	avatarURLs, err := s.getLeaderboardAvatarReferences(ctx, publicUserIDs)
 	if err != nil {
 		return nil, fmt.Errorf("get public leaderboard avatars: %w", err)
 	}
@@ -333,14 +333,17 @@ func (s *UsageService) GetPublicUserLeaderboard(
 		anonymous := !row.UsernameConfirmed || row.LeaderboardAnonymous || strings.TrimSpace(row.Username) == ""
 		username := ""
 		avatarURL := ""
+		avatarVersion := ""
 		if !anonymous {
 			username = row.Username
-			avatarURL = avatarURLs[row.UserID]
+			avatarURL = avatarURLs[row.UserID].URL
+			avatarVersion = avatarURLs[row.UserID].Version
 		}
 		ranking = append(ranking, usagestats.PublicUserTokenRankingItem{
 			Rank:          i + 1,
 			Username:      username,
 			AvatarURL:     avatarURL,
+			AvatarVersion: avatarVersion,
 			IsAnonymous:   anonymous,
 			Requests:      row.Requests,
 			InputTokens:   row.InputTokens,
@@ -354,27 +357,42 @@ func (s *UsageService) GetPublicUserLeaderboard(
 	return ranking, nil
 }
 
-func (s *UsageService) getPublicLeaderboardAvatarURLs(ctx context.Context, userIDs []int64) (map[int64]string, error) {
-	avatarURLs := make(map[int64]string)
-	if len(userIDs) == 0 || s.userRepo == nil {
-		return avatarURLs, nil
-	}
-	if batchRepo, ok := s.userRepo.(UserAvatarBatchRepository); ok {
-		return batchRepo.GetUserAvatarURLs(ctx, userIDs)
-	}
+var ErrLeaderboardAvatarNotFound = infraerrors.NotFound("LEADERBOARD_AVATAR_NOT_FOUND", "avatar not found")
 
-	for _, userID := range userIDs {
-		avatar, err := s.userRepo.GetUserAvatar(ctx, userID)
-		if err != nil {
-			return nil, err
-		}
-		if avatar != nil {
-			if avatarURL := strings.TrimSpace(avatar.URL); avatarURL != "" {
-				avatarURLs[userID] = avatarURL
-			}
-		}
+func (s *UsageService) getLeaderboardAvatarReferences(ctx context.Context, userIDs []int64) (map[int64]LeaderboardAvatarReference, error) {
+	if len(userIDs) == 0 || s.userRepo == nil {
+		return nil, nil
 	}
-	return avatarURLs, nil
+	repo, ok := s.userRepo.(UserLeaderboardAvatarRepository)
+	if !ok {
+		return nil, nil
+	}
+	return repo.GetLeaderboardAvatarReferences(ctx, userIDs)
+}
+
+func (s *UsageService) GetLeaderboardAvatar(ctx context.Context, currentUserID int64, username, version string) (*UserAvatar, error) {
+	if s.userRepo == nil {
+		return nil, ErrLeaderboardAvatarNotFound
+	}
+	currentUser, err := s.userRepo.GetByID(ctx, currentUserID)
+	if err != nil {
+		return nil, err
+	}
+	if !currentUser.UsernameConfirmed {
+		return nil, ErrUsernameRequired
+	}
+	repo, ok := s.userRepo.(UserLeaderboardAvatarRepository)
+	if !ok {
+		return nil, ErrLeaderboardAvatarNotFound
+	}
+	avatar, err := repo.GetLeaderboardAvatar(ctx, username, version)
+	if err != nil {
+		return nil, err
+	}
+	if avatar == nil {
+		return nil, ErrLeaderboardAvatarNotFound
+	}
+	return avatar, nil
 }
 
 // GetPublicUserTokenRanking preserves the original token-only service API for

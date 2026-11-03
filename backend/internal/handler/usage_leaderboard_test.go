@@ -2,8 +2,12 @@ package handler
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,14 +20,18 @@ import (
 
 type leaderboardUsageRepoStub struct {
 	service.UsageLogRepository
-	rows          []usagestats.UserBreakdownItem
-	avatarURLs    map[int64]string
-	avatarUserIDs []int64
-	called        bool
-	startTime     time.Time
-	endTime       time.Time
-	dimension     usagestats.UserBreakdownDimension
-	limit         int
+	rows              []usagestats.UserBreakdownItem
+	avatarURLs        map[int64]string
+	avatar            *service.UserAvatar
+	avatarErr         error
+	avatarReads       int
+	usernameConfirmed *bool
+	avatarUserIDs     []int64
+	called            bool
+	startTime         time.Time
+	endTime           time.Time
+	dimension         usagestats.UserBreakdownDimension
+	limit             int
 }
 
 type leaderboardUserRepoStub struct {
@@ -32,12 +40,31 @@ type leaderboardUserRepoStub struct {
 }
 
 func (s *leaderboardUserRepoStub) GetByID(_ context.Context, userID int64) (*service.User, error) {
-	return &service.User{ID: userID, Username: "current", UsernameConfirmed: true}, nil
+	confirmed := true
+	if s.usageRepo.usernameConfirmed != nil {
+		confirmed = *s.usageRepo.usernameConfirmed
+	}
+	return &service.User{ID: userID, Username: "current", UsernameConfirmed: confirmed}, nil
 }
 
-func (s *leaderboardUserRepoStub) GetUserAvatarURLs(_ context.Context, userIDs []int64) (map[int64]string, error) {
+func (s *leaderboardUserRepoStub) GetLeaderboardAvatarReferences(_ context.Context, userIDs []int64) (map[int64]service.LeaderboardAvatarReference, error) {
 	s.usageRepo.avatarUserIDs = append([]int64(nil), userIDs...)
-	return s.usageRepo.avatarURLs, nil
+	refs := make(map[int64]service.LeaderboardAvatarReference)
+	for _, id := range userIDs {
+		url := s.usageRepo.avatarURLs[id]
+		if strings.HasPrefix(url, "data:") {
+			sum := md5.Sum([]byte(url))
+			refs[id] = service.LeaderboardAvatarReference{Version: hex.EncodeToString(sum[:])}
+		} else {
+			refs[id] = service.LeaderboardAvatarReference{URL: url}
+		}
+	}
+	return refs, nil
+}
+
+func (s *leaderboardUserRepoStub) GetLeaderboardAvatar(_ context.Context, username, version string) (*service.UserAvatar, error) {
+	s.usageRepo.avatarReads++
+	return s.usageRepo.avatar, s.usageRepo.avatarErr
 }
 
 func (s *leaderboardUsageRepoStub) GetUserBreakdownStats(
@@ -64,7 +91,9 @@ func newLeaderboardTestRouter(repo *leaderboardUsageRepoStub, userID int64) *gin
 		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: userID})
 		c.Next()
 	})
+	router.Use(middleware2.PrivateNoStore())
 	router.GET("/usage/leaderboard", usageHandler.PublicTokenLeaderboard)
+	router.GET("/usage/leaderboard/avatar/:username/:version", usageHandler.LeaderboardAvatar)
 	return router
 }
 
@@ -143,4 +172,80 @@ func TestPublicLeaderboardWeekStartsMondayAndEndsTomorrow(t *testing.T) {
 	require.Equal(t, 0, startTime.Hour())
 	require.Equal(t, 24*time.Hour, endTime.Sub(time.Date(endTime.Year(), endTime.Month(), endTime.Day()-1, 0, 0, 0, 0, endTime.Location())))
 	require.True(t, startTime.Before(endTime))
+}
+
+func TestPublicLeaderboardDoesNotInlineLargeAvatars(t *testing.T) {
+	image := "data:image/gif;base64," + strings.Repeat("AAAA", 200*1024)
+	repo := &leaderboardUsageRepoStub{rows: []usagestats.UserBreakdownItem{{UserID: 42, Username: "alice", UsernameConfirmed: true, TotalTokens: 150}}, avatarURLs: map[int64]string{42: image}}
+	recorder := httptest.NewRecorder()
+	newLeaderboardTestRouter(repo, 42).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/usage/leaderboard", nil))
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Less(t, recorder.Body.Len(), 1024)
+	require.Contains(t, recorder.Body.String(), `"avatar_version":`)
+	require.NotContains(t, recorder.Body.String(), "data:image")
+	require.Equal(t, "private, no-store", recorder.Header().Get("Cache-Control"))
+	t.Logf("ranking response with synthetic 800 KiB avatar: %d bytes", recorder.Body.Len())
+}
+
+func TestLeaderboardAvatarCacheAndVisibility(t *testing.T) {
+	version := strings.Repeat("a", 32)
+	for _, tc := range []struct {
+		name, validator string
+		missing         bool
+		status          int
+	}{
+		{name: "first fetch", status: 200},
+		{name: "unchanged", validator: `"` + version + `"`, status: 304},
+		{name: "weak validator list", validator: `"old", W/"` + version + `"`, status: 304},
+		{name: "changed", validator: `"old"`, status: 200},
+		{name: "hidden or deleted even with matching validator", validator: `"` + version + `"`, missing: true, status: 404},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &leaderboardUsageRepoStub{}
+			if !tc.missing {
+				repo.avatar = &service.UserAvatar{URL: "data:image/gif;base64,R0lGODlh"}
+			}
+			recorder := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/usage/leaderboard/avatar/alice/"+version, nil)
+			req.Header.Set("If-None-Match", tc.validator)
+			newLeaderboardTestRouter(repo, 42).ServeHTTP(recorder, req)
+			require.Equal(t, tc.status, recorder.Code)
+			require.Equal(t, 1, repo.avatarReads)
+			if tc.status == 200 {
+				require.Equal(t, "image/gif", recorder.Header().Get("Content-Type"))
+				require.Equal(t, "GIF89a", recorder.Body.String())
+			}
+			if tc.status == 304 {
+				require.Empty(t, recorder.Body.String())
+			}
+			if tc.missing {
+				require.Equal(t, "private, no-store", recorder.Header().Get("Cache-Control"))
+			} else {
+				require.Equal(t, "private, no-cache", recorder.Header().Get("Cache-Control"))
+				require.Equal(t, fmt.Sprintf("%q", version), recorder.Header().Get("ETag"))
+			}
+			require.Contains(t, recorder.Header().Values("Vary"), "Authorization")
+		})
+	}
+}
+
+func TestLeaderboardAvatarRejectsInvalidContentAndVersions(t *testing.T) {
+	for _, image := range []string{"data:image/svg+xml;base64,PHN2Zz4=", "data:image/gif;base64,%%%", "https://example.com/image.png"} {
+		repo := &leaderboardUsageRepoStub{avatar: &service.UserAvatar{URL: image}}
+		recorder := httptest.NewRecorder()
+		newLeaderboardTestRouter(repo, 42).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/usage/leaderboard/avatar/alice/"+strings.Repeat("a", 32), nil))
+		require.Equal(t, 404, recorder.Code)
+		require.Equal(t, "private, no-store", recorder.Header().Get("Cache-Control"))
+	}
+	repo := &leaderboardUsageRepoStub{}
+	recorder := httptest.NewRecorder()
+	newLeaderboardTestRouter(repo, 42).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/usage/leaderboard/avatar/alice/invalid", nil))
+	require.Equal(t, 404, recorder.Code)
+	require.Zero(t, repo.avatarReads)
+	confirmed := false
+	repo.usernameConfirmed = &confirmed
+	recorder = httptest.NewRecorder()
+	newLeaderboardTestRouter(repo, 42).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/usage/leaderboard/avatar/alice/"+strings.Repeat("a", 32), nil))
+	require.NotEqual(t, 200, recorder.Code)
+	require.Zero(t, repo.avatarReads)
 }

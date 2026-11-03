@@ -201,6 +201,19 @@ type UserAvatarBatchRepository interface {
 	GetUserAvatarURLs(ctx context.Context, userIDs []int64) (map[int64]string, error)
 }
 
+// LeaderboardAvatarReference contains only small metadata, never inline image bytes.
+type LeaderboardAvatarReference struct {
+	URL     string
+	Version string
+}
+
+// UserLeaderboardAvatarRepository separates the ranking's metadata query from
+// authenticated image retrieval. Implementations recheck visibility on every read.
+type UserLeaderboardAvatarRepository interface {
+	GetLeaderboardAvatarReferences(ctx context.Context, userIDs []int64) (map[int64]LeaderboardAvatarReference, error)
+	GetLeaderboardAvatar(ctx context.Context, username, version string) (*UserAvatar, error)
+}
+
 // RedeemUserAdjustmentRepository provides the atomic, floor-at-zero updates
 // used by negative-value redeem codes. It is intentionally narrower than
 // UserRepository because normal usage billing is allowed to overdraw.

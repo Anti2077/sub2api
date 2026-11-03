@@ -202,6 +202,7 @@ import { computed, defineComponent, h, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { useLeaderboardAvatars } from '@/composables/useLeaderboardAvatars'
 import {
   usageAPI,
   type LeaderboardPeriod,
@@ -217,7 +218,7 @@ const startDate = ref('')
 const endDate = ref('')
 const loading = ref(false)
 const error = ref(false)
-const failedAvatarURLs = ref(new Set<string>())
+const { avatarURL, markAvatarFailed } = useLeaderboardAvatars(ranking)
 let requestSequence = 0
 
 const periodOptions = computed(() => ([
@@ -258,21 +259,9 @@ const formatRankingValue = (item: PublicTokenRankingItem) => isSpendingRanking.v
   ? formatMoney(item.actual_cost)
   : formatCompact(item.total_tokens)
 
-function avatarURL(item: PublicTokenRankingItem): string {
-  if (item.is_anonymous) return ''
-  const url = item.avatar_url?.trim() || ''
-  return url && !failedAvatarURLs.value.has(url) ? url : ''
-}
-
 function avatarInitial(item: PublicTokenRankingItem): string {
   const label = item.is_anonymous ? t('leaderboard.anonymousUser') : item.username
   return Array.from(label.trim())[0]?.toLocaleUpperCase(locale.value) || 'U'
-}
-
-function markAvatarFailed(item: PublicTokenRankingItem) {
-  const url = item.avatar_url?.trim()
-  if (!url) return
-  failedAvatarURLs.value = new Set([...failedAvatarURLs.value, url])
 }
 
 const RankBadge = defineComponent({

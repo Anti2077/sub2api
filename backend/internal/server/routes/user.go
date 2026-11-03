@@ -114,6 +114,9 @@ func RegisterUserRoutes(
 			channels.GET("/available", h.AvailableChannel.List)
 		}
 
+		// Image requests use the global budget, not the heavy aggregation budget.
+		authenticated.GET("/usage/leaderboard/avatar/:username/:version", h.Usage.LeaderboardAvatar)
+
 		// 使用记录（聚合统计属重查询，叠加更严格的按用户限流）
 		usage := authenticated.Group("/usage")
 		usage.Use(panelRateLimiter.Heavy())
