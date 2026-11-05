@@ -105,6 +105,10 @@ func TestScopedAdminRegisteredRoutesEnforceDefaultDenyAndAccountScope(t *testing
 			RegisterAdminRoutes(r.Group("/api/v1"), &handler.Handlers{Admin: &handler.AdminHandlers{Account: accountHandler, Setting: adminhandler.NewSettingHandler(settings, nil, nil, nil, nil, nil, nil)}}, auth, middleware.AuditLogMiddleware(func(c *gin.Context) { c.Next() }), middleware.StepUpAuthMiddleware(func(c *gin.Context) { c.Next() }), nil, nil)
 			RegisterPaymentRoutes(r.Group("/api/v1"), &handler.PaymentHandler{}, &handler.PaymentWebhookHandler{}, &adminhandler.PaymentHandler{}, middleware.JWTAuthMiddleware(func(c *gin.Context) { c.Next() }), auth, middleware.AuditLogMiddleware(func(c *gin.Context) { c.Next() }), nil, nil, nil)
 			for _, tc := range []struct{ method, path string }{
+				{"POST", "/api/v1/admin/users/batch-disable"},
+				{"POST", "/api/v1/admin/users/blacklist-matches"},
+				{"GET", "/api/v1/admin/settings/registration-email-blacklist"},
+				{"PUT", "/api/v1/admin/settings/registration-email-blacklist"},
 				{"GET", "/api/v1/admin/accounts/1"},
 				{"GET", "/api/v1/admin/accounts/2"},
 				{"GET", "/api/v1/admin/accounts/3"},
