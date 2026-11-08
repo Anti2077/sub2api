@@ -15,7 +15,7 @@ function paramsFromDeeplink(deeplink: string): URLSearchParams {
 
 describe('ccswitchImport utils', () => {
   it('defaults OpenAI CC Switch imports to the current Codex model', () => {
-    expect(OPENAI_CC_SWITCH_CODEX_MODEL).toBe('gpt-5.5')
+    expect(OPENAI_CC_SWITCH_CODEX_MODEL).toBe('gpt-5.6-sol')
   })
 
   it('uses an explicitly selected model for OpenAI imports', () => {
@@ -23,10 +23,10 @@ describe('ccswitchImport utils', () => {
       ...baseInput,
       platform: 'openai',
       clientType: 'claude',
-      model: 'gpt-5.6-sol'
+      model: 'custom-codex-alias'
     }))
 
-    expect(params.get('model')).toBe('gpt-5.6-sol')
+    expect(params.get('model')).toBe('custom-codex-alias')
   })
 
   it('defaults Grok Build imports to the current Grok model', () => {
@@ -58,7 +58,7 @@ describe('ccswitchImport utils', () => {
     expect(params.get('resource')).toBe('provider')
     expect(params.get('app')).toBe('codex')
     expect(params.get('endpoint')).toBe(endpoint)
-    expect(params.get('model')).toBe(OPENAI_CC_SWITCH_CODEX_MODEL)
+    expect(params.get('model')).toBe('gpt-5.6-sol')
     expect(atob(params.get('usageScript') || '')).toBe(baseInput.usageScript)
   })
 
