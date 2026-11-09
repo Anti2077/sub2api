@@ -314,7 +314,12 @@ describe('user KeysView column settings', () => {
       expect(wrapper.get<HTMLSelectElement>('#ccs-default-model').element.value).toBe('custom-first')
       await wrapper.get('#ccs-default-model').setValue('custom-second')
       await getButtonByText(wrapper, 'common.confirm').trigger('click')
-      expect(new URL(open.mock.calls[0][0] as string).searchParams.get('model')).toBe('custom-second')
+      const params = new URL(open.mock.calls[0][0] as string).searchParams
+      expect(params.get('model')).toBe('custom-second')
+      if (platform === 'openai') {
+        const payload = JSON.parse(atob(params.get('config') || '')) as { config: string }
+        expect(payload.config).toContain('model = "custom-second"')
+      }
       wrapper.unmount()
       open.mockRestore()
     })
@@ -394,7 +399,10 @@ describe('user KeysView column settings', () => {
       const open = vi.spyOn(window, 'open').mockImplementation(() => null)
       const wrapper = await mountView()
       await importButton(wrapper).trigger('click')
-      expect(new URL(open.mock.calls[0][0] as string).searchParams.get('model')).toBe('gpt-5.5')
+      const params = new URL(open.mock.calls[0][0] as string).searchParams
+      expect(params.get('model')).toBe('gpt-6.1-sol')
+      const payload = JSON.parse(atob(params.get('config') || '')) as { config: string }
+      expect(payload.config).toContain('model = "gpt-6.1-sol"')
       expect(wrapper.find('#ccs-default-model').exists()).toBe(false)
       wrapper.unmount()
       open.mockRestore()

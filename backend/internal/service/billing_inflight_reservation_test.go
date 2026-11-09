@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	gocache "github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/require"
 )
 
@@ -74,11 +75,17 @@ func newInflightEstimateGateway(t *testing.T, channelService *ChannelService) *G
 	cfg := &config.Config{}
 	cfg.Billing.InflightReservation = config.InflightReservationConfig{Enabled: true, DefaultMaxTokens: 1000, MaxInputTokens: 200000, MaxOutputTokens: 128000}
 	billing := NewBillingService(cfg, nil)
+	// Match NewGatewayService: reuse one rate resolver across estimates. A nil
+	// resolver creates a new cache and cleanup goroutine on every request.
+	// Tests need expiry-on-read only, so disable the background janitor.
+	rateCache := gocache.New(defaultUserGroupRateCacheTTL, 0)
 	return &GatewayService{
-		cfg:            cfg,
-		billingService: billing,
-		resolver:       NewModelPricingResolver(channelService, billing),
-		channelService: channelService,
+		cfg:                   cfg,
+		billingService:        billing,
+		resolver:              NewModelPricingResolver(channelService, billing),
+		channelService:        channelService,
+		userGroupRateCache:    rateCache,
+		userGroupRateResolver: newUserGroupRateResolver(nil, rateCache, defaultUserGroupRateCacheTTL, nil, "service.gateway"),
 	}
 }
 
