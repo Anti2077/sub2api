@@ -1,9 +1,19 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import PaymentProviderDialog from '@/components/payment/PaymentProviderDialog.vue'
 import { STRIPE_SDK_API_VERSION } from '@/components/payment/providerConfig'
 import type { ProviderInstance } from '@/types/payment'
+
+const showError = vi.hoisted(() => vi.fn())
+
+vi.mock('@/stores', () => ({
+  useAppStore: () => ({ showError }),
+}))
+
+beforeEach(() => {
+  showError.mockReset()
+})
 
 const messages: Record<string, string> = {
   'admin.settings.payment.providerConfig': 'Credentials',
@@ -236,10 +246,10 @@ describe('PaymentProviderDialog payment guide', () => {
   })
 
   it.each([
-    ['alipay_hk', 'hkpay'],
-    ['usdt.trc20', 'usdt.trc20'],
-    ['usdt_trc20', 'usdt/trc20'],
-  ])('rejects invalid EasyPay mapping %s to %s', async (type, upstreamType) => {
+    ['alipay_hk', 'hkpay', 'admin.settings.payment.validationEasyPayCustomMethodPrefixReserved'],
+    ['usdt.trc20', 'usdt.trc20', 'admin.settings.payment.validationEasyPayCustomMethodTypeInvalid'],
+    ['usdt_trc20', 'usdt/trc20', 'admin.settings.payment.validationEasyPayCustomMethodUpstreamTypeInvalid'],
+  ])('rejects invalid EasyPay mapping %s to %s', async (type, upstreamType, expectedError) => {
     const provider = providerFactory({
       provider_key: 'easypay',
       name: 'EasyPay',
@@ -273,7 +283,10 @@ describe('PaymentProviderDialog payment guide', () => {
     await upstreamTypeInput.setValue(upstreamType)
     await displayNameInput.setValue('Custom payment')
     await wrapper.find('form').trigger('submit.prevent')
+    await vi.dynamicImportSettled()
 
     expect(wrapper.emitted('save')).toBeUndefined()
+    expect(showError).toHaveBeenCalledTimes(1)
+    expect(showError).toHaveBeenCalledWith(expectedError)
   })
 })
