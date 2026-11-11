@@ -43,3 +43,38 @@ func TestIdentitySelectionStaysOnTargetAndNeverFallsBack(t *testing.T) {
 	require.Error(t, e)
 	require.Nil(t, selected)
 }
+
+// Hydration owns releasing an acquired slot on failure, including pinned probes.
+func TestIdentitySelectionHydrationFailureReleasesSlotOnce(t *testing.T) {
+	group := int64(7)
+	account := &Account{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 4, AccountGroups: []AccountGroup{{GroupID: group}}, Credentials: map[string]any{}}
+	ctx, cancel := context.WithCancel(WithIdentityTarget(context.Background(), account.ID, group))
+	defer cancel()
+	cache := &identityHydrationConcurrencyCache{cancel: cancel}
+	svc := &GatewayService{
+		accountRepo: &mockAccountRepoForPlatform{accountsByID: map[int64]*Account{account.ID: account}},
+		groupRepo:   &mockGroupRepoForGateway{groups: map[int64]*Group{group: {ID: group, Platform: PlatformAnthropic, Status: StatusActive, Hydrated: true}}},
+		cfg:         testConfig(), concurrencyService: NewConcurrencyService(cache),
+		schedulerSnapshot: &SchedulerSnapshotService{},
+	}
+	selected, pinned, err := svc.selectIdentityTarget(ctx, &group, "claude-sonnet-4-6", nil)
+	require.Error(t, err)
+	require.True(t, pinned)
+	require.Nil(t, selected)
+	require.Equal(t, 1, cache.releases)
+}
+
+type identityHydrationConcurrencyCache struct {
+	mockConcurrencyCache
+	cancel   context.CancelFunc
+	releases int
+}
+
+func (c *identityHydrationConcurrencyCache) AcquireAccountSlot(context.Context, int64, int, string) (bool, error) {
+	c.cancel()
+	return true, nil
+}
+func (c *identityHydrationConcurrencyCache) ReleaseAccountSlot(context.Context, int64, string) error {
+	c.releases++
+	return nil
+}

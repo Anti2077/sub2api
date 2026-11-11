@@ -136,9 +136,6 @@ func (s *GatewayService) selectIdentityTarget(ctx context.Context, groupID *int6
 		return result, true, err
 	}
 	result, e := s.newSelectionResult(ctx, a, true, slot.ReleaseFunc, nil)
-	if e != nil {
-		slot.ReleaseFunc()
-	}
 	return result, true, e
 }
 func (s *OpenAIGatewayService) selectOpenAIIdentityTarget(ctx context.Context, groupID *int64, model string, excluded map[int64]struct{}, transport OpenAIUpstreamTransport, capability OpenAIEndpointCapability, imageCapability OpenAIImagesCapability, compact bool, platform string) (*AccountSelectionResult, bool, error) {
