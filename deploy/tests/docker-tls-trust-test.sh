@@ -18,9 +18,9 @@ assert_line() {
 # cached apk layer alone does not guarantee the security update is installed.
 for file in Dockerfile deploy/Dockerfile; do
   assert_line "$file" 'ARG NODE_IMAGE=node:24.22.1-alpine'
-  assert_line "$file" 'ARG GOLANG_IMAGE=golang:1.27.3-alpine'
+  assert_line "$file" 'ARG GOLANG_IMAGE=golang:1.27.4-alpine'
 done
-assert_line backend/Dockerfile 'FROM golang:1.27.3-alpine'
+assert_line backend/Dockerfile 'FROM golang:1.27.4-alpine'
 assert_line identity-engine/Dockerfile 'FROM node:24.22.1-alpine AS build'
 assert_line identity-engine/Dockerfile 'FROM node:24.22.1-alpine'
 for file in Dockerfile Dockerfile.goreleaser deploy/Dockerfile backend/Dockerfile identity-engine/Dockerfile; do
