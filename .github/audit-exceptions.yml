@@ -1,5 +1,13 @@
 version: 1
 exceptions:
+  - package: picomatch
+    advisory: "GHSA-fc5q-39xc-vjpf"
+    severity: high
+    scope: dev-only
+    reason: "No patched npm release as of 2026-11-18; only repository-controlled build/test globs reach picomatch via Vite, Vitest, Tailwind and ESLint"
+    mitigation: "Production audit must independently exclude this advisory; do not accept untrusted glob patterns in build tooling; upgrade and remove this exception when a fixed release becomes available"
+    expires_on: "2026-12-02"
+    owner: "Anti2077"
   - package: xlsx
     advisory: "GHSA-4r6h-8v6p-xvw6"
     severity: high

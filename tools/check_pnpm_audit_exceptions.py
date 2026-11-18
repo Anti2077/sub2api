@@ -139,10 +139,19 @@ def parse_date(value: str) -> date | None:
         return None
 
 
+def valid_audit(data) -> bool:
+    return (
+        isinstance(data, dict)
+        and not data.get("error")
+        and any(isinstance(data.get(key), dict) for key in ("advisories", "vulnerabilities"))
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--audit", required=True)
     parser.add_argument("--exceptions", required=True)
+    parser.add_argument("--production-audit")
     args = parser.parse_args()
 
     with open(args.audit, "r", encoding="utf-8") as handle:
@@ -151,13 +160,21 @@ def main() -> int:
     # pnpm audit may emit an error object on registry/network failure. Since
     # its exit status also signals vulnerabilities, CI validates the report
     # here before applying exceptions instead of treating that error as clean.
-    if (
-        not isinstance(audit, dict)
-        or audit.get("error")
-        or not any(isinstance(audit.get(key), dict) for key in ("advisories", "vulnerabilities"))
-    ):
+    if not valid_audit(audit):
         sys.stderr.write("Audit failed or report has no vulnerability results.\n")
         return 1
+
+    production_vulns = None
+    if args.production_audit:
+        with open(args.production_audit, "r", encoding="utf-8") as handle:
+            production = json.load(handle)
+        if not valid_audit(production):
+            sys.stderr.write("Production audit failed or report has no vulnerability results.\n")
+            return 1
+        production_vulns = {
+            (normalize_package(name), normalize_advisory(advisory_id))
+            for name, _, advisory_id, _ in iter_vulns(production)
+        }
 
     # 读取异常清单并建立索引，便于快速匹配包名 + advisory。
     exceptions = parse_exceptions(args.exceptions)
@@ -175,6 +192,10 @@ def main() -> int:
         exc_package = normalize_package(exc.get("package"))
         exc_advisory = normalize_advisory(exc.get("advisory"))
         exc_date = parse_date(exc.get("expires_on"))
+        scope = exc.get("scope", "all")
+        if scope not in {"all", "dev-only"}:
+            errors.append(f"Exception has invalid scope: {exc_package} ({scope})")
+            continue
         if exc_date is None:
             errors.append(
                 f"Exception has invalid expires_on date: {exc.get('package', '<unknown>')}"
@@ -193,6 +214,7 @@ def main() -> int:
             "raw": exc,
             "severity": exc_severity,
             "expires_on": exc_date,
+            "scope": scope,
         }
 
     today = date.today()
@@ -219,6 +241,11 @@ def main() -> int:
         if exc is None:
             missing_exceptions.append((name, sev, advisory_id, title))
             continue
+        if exc["scope"] == "dev-only":
+            if production_vulns is None:
+                errors.append(f"Dev-only exception requires --production-audit: {name} ({advisory_id})")
+            elif key in production_vulns:
+                errors.append(f"Dev-only exception cannot allow a production vulnerability: {name} ({advisory_id})")
         if exc["severity"] and exc["severity"] != sev:
             errors.append(
                 "Exception severity mismatch: "

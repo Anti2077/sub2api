@@ -58,9 +58,11 @@ jobs:
         working-directory: ${{ matrix.directory }}
         run: |
           pnpm audit --audit-level=high --json > audit.json || true
+          pnpm audit --prod --audit-level=high --json > audit-production.json || true
       - name: Check audit exceptions
         run: |
           python -m unittest discover -s tools -p 'test_check_pnpm_audit_exceptions.py'
           python tools/check_pnpm_audit_exceptions.py \
             --audit ${{ matrix.directory }}/audit.json \
+            --production-audit ${{ matrix.directory }}/audit-production.json \
             --exceptions .github/audit-exceptions.yml
