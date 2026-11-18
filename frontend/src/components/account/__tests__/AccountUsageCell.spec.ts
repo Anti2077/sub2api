@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import AccountUsageCell from '../AccountUsageCell.vue'
-import type { Account } from '@/types'
+import type { Account, AccountUsageInfo } from '@/types'
 
 const { getUsage } = vi.hoisted(() => ({
   getUsage: vi.fn()
@@ -166,6 +166,32 @@ describe('AccountUsageCell', () => {
 
     await wrapper.get('button').trigger('click')
     expect(getUsage).toHaveBeenLastCalledWith(1, 'active', true)
+  })
+
+  it('ignores a previous pool account active-query failure after switching accounts', async () => {
+    let rejectActive!: (error: Error) => void
+    getUsage.mockResolvedValue({ balance: 12.34, balance_source: 'sub2api' })
+    const account = makeAccount({
+      id: 98201,
+      platform: 'openai',
+      type: 'apikey',
+      credentials: { pool_mode: true, base_url: 'https://pool.example.test', api_key: 'pool-key' }
+    })
+    const wrapper = mount(AccountUsageCell, {
+      props: { account },
+      global: { stubs: { UsageProgressBar: true, AccountQuotaInfo: true } }
+    })
+    await flushPromises()
+    getUsage.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectActive = reject }))
+    await wrapper.get('button').trigger('click')
+    expect(getUsage).toHaveBeenLastCalledWith(98201, 'active', true)
+    await wrapper.setProps({ account: { ...account, id: 98202 } })
+    await flushPromises()
+    rejectActive(new Error('previous account failed'))
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('common.error')
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.upstreamBalance')
+    wrapper.unmount()
   })
 
   it('keeps cached Claude quota visible while a replacement batch is loading', async () => {
@@ -643,6 +669,108 @@ describe('AccountUsageCell', () => {
     expect(wrapper.text()).toContain('25')
   })
 
+
+  describe('OpenAI quota freshness', () => {
+    const observedAt = '2026-11-11T03:33:55Z'
+    const snapshot = (): AccountUsageInfo => ({
+      source: 'passive',
+      updated_at: observedAt,
+      five_hour: null,
+      seven_day: { utilization: 100, resets_at: null, remaining_seconds: 0 },
+      seven_day_sonnet: null
+    })
+    const stubs = {
+      UsageProgressBar: {
+        props: ['label', 'utilization'],
+        template: '<div class="usage-bar">{{ label }}|{{ utilization }}</div>'
+      },
+      OpenAIQuotaResetCell: { template: '<div><slot name="pre-actions" /></div>' }
+    }
+
+    it('marks a degraded HTTP 200 response as failed without hiding the last observation', async () => {
+      getUsage.mockResolvedValue({
+        ...snapshot(),
+        error_code: 'quota_refresh_failed',
+        error: 'Could not refresh quota'
+      })
+      const wrapper = mount(AccountUsageCell, {
+        props: { account: makeAccount({ id: 8101, platform: 'openai', type: 'oauth' }) },
+        global: { stubs }
+      })
+      await flushPromises()
+      expect(wrapper.get('[role="alert"]').text()).toContain('quotaRefreshFailedCached')
+      expect(wrapper.text()).toContain('7d|100')
+      expect(wrapper.get('time').attributes('datetime')).toBe(observedAt)
+      wrapper.unmount()
+    })
+
+    it('shows a failed manual refresh and clears the warning only after a successful retry', async () => {
+      getUsage.mockResolvedValueOnce(snapshot()).mockRejectedValueOnce(new Error('401'))
+      const wrapper = mount(AccountUsageCell, {
+        props: { account: makeAccount({ id: 8102, platform: 'openai', type: 'oauth' }) },
+        global: { stubs }
+      })
+      await flushPromises()
+      await wrapper.get('button').trigger('click')
+      await flushPromises()
+      expect(getUsage).toHaveBeenLastCalledWith(8102, 'active', true)
+      expect(wrapper.get('[role="alert"]').text()).toContain('quotaRefreshFailedCached')
+      expect(wrapper.text()).toContain('7d|100')
+      expect(wrapper.get('time').attributes('datetime')).toBe(observedAt)
+
+      const refreshedAt = '2026-11-12T15:08:56Z'
+      getUsage.mockResolvedValueOnce({
+        ...snapshot(), source: 'active', updated_at: refreshedAt,
+        seven_day: { utilization: 0, resets_at: null, remaining_seconds: 0 }
+      })
+      await wrapper.get('button').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+      expect(wrapper.text()).toContain('7d|0')
+      expect(wrapper.get('time').attributes('datetime')).toBe(refreshedAt)
+      wrapper.unmount()
+    })
+
+    it('shows batch refresh failure alongside the retained snapshot', async () => {
+      const wrapper = mount(AccountUsageCell, {
+        props: {
+          account: makeAccount({ id: 8103, platform: 'openai', type: 'oauth' }),
+          batchedUsage: snapshot(), batchedUsageError: 'Failed', requestBatchedUsage: vi.fn()
+        },
+        global: { stubs }
+      })
+      await flushPromises()
+      expect(wrapper.get('[role="alert"]').text()).toContain('quotaRefreshFailedCached')
+      expect(wrapper.get('time').attributes('datetime')).toBe(observedAt)
+      wrapper.unmount()
+    })
+
+    it('shows local usage with an unknown percentage when no quota has been fetched', async () => {
+      getUsage.mockResolvedValue({
+        ...snapshot(), updated_at: null,
+        seven_day: {
+          utilization: 0,
+          utilization_unknown: true,
+          resets_at: null,
+          remaining_seconds: 0,
+          window_stats: { requests: 2, tokens: 100, cost: 0, standard_cost: 0, user_cost: 0 }
+        },
+        error_code: 'quota_refresh_failed', error: 'Could not refresh quota'
+      })
+      const wrapper = mount(AccountUsageCell, {
+        props: { account: makeAccount({ id: 8104, platform: 'openai', type: 'oauth' }) },
+        global: { stubs: { OpenAIQuotaResetCell: stubs.OpenAIQuotaResetCell } }
+      })
+      await flushPromises()
+      expect(wrapper.get('[role="alert"]').text()).toContain('quotaRefreshFailedUnknown')
+      expect(wrapper.find('time').exists()).toBe(false)
+      expect(wrapper.text()).toContain('2 req')
+      expect(wrapper.text()).toContain('—')
+      expect(wrapper.text()).not.toContain('0%')
+      expect(wrapper.text()).not.toContain('usage.resetNow')
+      wrapper.unmount()
+    })
+  })
 
   it('OpenAI OAuth 快照已过期时首屏会重新请求 usage', async () => {
     getUsage.mockResolvedValue({

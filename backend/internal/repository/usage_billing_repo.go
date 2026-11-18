@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/Wei-Shaw/sub2api/internal/rewards"
 	"strings"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
@@ -16,7 +15,7 @@ type usageBillingRepository struct {
 	db *sql.DB
 }
 
-func NewUsageBillingRepository(_ *dbent.Client, sqlDB *sql.DB) service.UsageBillingRepository {
+func NewUsageBillingRepository(_ *dbent.Client, sqlDB *sql.DB) service.UsageBillingBatchRepository {
 	return &usageBillingRepository{db: sqlDB}
 }
 
@@ -54,47 +53,21 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBi
 		// even when the new request has no active capture. Never re-price it.
 		// Regression: TestRewardsLifecycleScopeAndRequestSnapshot verifies this
 		// exact path against PostgreSQL (the guarded lookup returned nil).
-		var paid float64
-		err := tx.QueryRowContext(ctx, `SELECT paid_cost FROM reward_usage WHERE request_id=$1 AND api_key_id=$2`, cmd.RequestID, cmd.APIKeyID).Scan(&paid)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err := readUsageBillingRewardReceipt(ctx, tx, cmd, result); err != nil {
 			return nil, err
-		}
-		if err == nil {
-			result.PaidCost = &paid
 		}
 		return result, nil
 	}
 
 	result := &service.UsageBillingApplyResult{Applied: true}
-	settled := *cmd // Preserve original command and fingerprint across retries.
-	if c := cmd.RewardCapture; c != nil {
-		var lockedUser int64
-		if e := tx.QueryRowContext(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, cmd.UserID).Scan(&lockedUser); e != nil {
-			return nil, e
-		}
-		if c.UserID != cmd.UserID {
-			return nil, rewards.Bad("权益快照归属不匹配")
-		}
-		original := cmd.BalanceCost + cmd.SubscriptionCost
-		paid, e := rewards.Spend(ctx, tx, c, cmd.APIKeyID, cmd.RequestID, int64(cmd.InputTokens)+int64(cmd.OutputTokens)+int64(cmd.CacheCreationTokens)+int64(cmd.CacheReadTokens), original, cmd.RewardTextCost, cmd.RewardBaseRate)
-		if e != nil {
-			return nil, e
-		}
-		if cmd.SubscriptionID != nil {
-			settled.SubscriptionCost = paid
-			settled.BalanceCost = 0
-		} else {
-			settled.BalanceCost = paid
-		}
-		if cmd.APIKeyQuotaCost > 0 {
-			settled.APIKeyQuotaCost = paid
-		}
-		if cmd.APIKeyRateLimitCost > 0 {
-			settled.APIKeyRateLimitCost = paid
-		}
-		result.PaidCost = &paid
+	if err := lockUsageBillingRewardRows(ctx, tx, []*service.UsageBillingCommand{cmd}, []bool{true}); err != nil {
+		return nil, err
 	}
-	if err := r.applyUsageBillingEffects(ctx, tx, &settled, result); err != nil {
+	settled, err := settleUsageBillingReward(ctx, tx, cmd, result)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.applyUsageBillingEffects(ctx, tx, settled, result); err != nil {
 		return nil, err
 	}
 
@@ -458,9 +431,9 @@ func userExistsForBilling(ctx context.Context, tx *sql.Tx, userID int64) (bool, 
 	return true, nil
 }
 
-func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID int64, amount float64) (bool, error) {
-	var exhausted bool
-	err := tx.QueryRowContext(ctx, `
+// usageBillingAPIKeyQuotaUpdate 累加 Key 已用额度（$1），本次累加从未达额度跨到达到额度时把 active 状态置为额度耗尽。
+// 参数：$1=金额 $2=api_key_id $3=active 状态 $4=额度耗尽状态。
+const usageBillingAPIKeyQuotaUpdate = `
 		UPDATE api_keys
 		SET quota_used = quota_used + $1,
 			status = CASE
@@ -472,7 +445,11 @@ func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID 
 				ELSE status
 			END,
 			updated_at = NOW()
-		WHERE id = $2 AND deleted_at IS NULL
+		WHERE id = $2 AND deleted_at IS NULL`
+
+func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID int64, amount float64) (bool, error) {
+	var exhausted bool
+	err := tx.QueryRowContext(ctx, usageBillingAPIKeyQuotaUpdate+`
 		RETURNING quota > 0 AND quota_used >= quota AND quota_used - $1 < quota
 	`, amount, apiKeyID, service.StatusAPIKeyActive, service.StatusAPIKeyQuotaExhausted).Scan(&exhausted)
 	if errors.Is(err, sql.ErrNoRows) {
