@@ -60,7 +60,8 @@ func (s *Sub2APIBalanceFetcherService) FetchBalance(ctx context.Context, account
 		return 0, fmt.Errorf("invalid pool mode base_url: %w", err)
 	}
 	endpoint := buildOpenAIEndpointURL(normalizedBaseURL, "/v1/usage")
-	requestCtx, cancel := context.WithTimeout(ctx, sub2apiBalanceRequestTimeout)
+	// Pool balance is shared account state, rather than one user's inference request.
+	requestCtx, cancel := context.WithTimeout(withoutHeaderOverrideRequestScope(ctx), sub2apiBalanceRequestTimeout)
 	defer cancel()
 	requestCtx = WithHTTPUpstreamRedirectsDisabled(requestCtx)
 	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpoint, nil)
@@ -69,7 +70,7 @@ func (s *Sub2APIBalanceFetcherService) FetchBalance(ctx context.Context, account
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	account.ApplyHeaderOverrides(req.Header)
+	account.ApplyHeaderOverrides(req.Context(), req.Header)
 	proxyURL := ""
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
