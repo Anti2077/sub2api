@@ -89,7 +89,7 @@ func newUsageEquivalenceTestRouterWithSettings(repo *usageEquivalenceRepoStub, u
 	gin.SetMode(gin.TestMode)
 	usageService := service.NewUsageService(repo, userRepo, nil, nil)
 	settingService := service.NewSettingService(&usageEquivalenceSettingRepoStub{values: values}, &config.Config{})
-	handler := NewUsageHandler(usageService, nil, nil, settingService)
+	handler := NewUsageHandler(usageService, nil, nil, settingService, nil)
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
 		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: userID})

@@ -244,6 +244,7 @@ func ProvideAccountUsageService(
 	openAIGatewayService *OpenAIGatewayService,
 	httpUpstream HTTPUpstream,
 	cfg *config.Config,
+	opsService *OpsService,
 ) *AccountUsageService {
 	service := NewAccountUsageService(
 		accountRepo,
@@ -260,6 +261,9 @@ func ProvideAccountUsageService(
 	)
 	service.SetSub2APIBalanceFetcher(NewSub2APIBalanceFetcherService(httpUpstream, cfg))
 	service.agentIdentityWS = openAIGatewayService
+	if opsService != nil {
+		service.opsMonitoring = opsService
+	}
 	return service
 }
 

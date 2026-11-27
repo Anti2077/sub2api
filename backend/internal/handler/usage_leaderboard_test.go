@@ -85,7 +85,7 @@ func newLeaderboardTestRouter(repo *leaderboardUsageRepoStub, userID int64) *gin
 	gin.SetMode(gin.TestMode)
 	userRepo := &leaderboardUserRepoStub{usageRepo: repo}
 	usageService := service.NewUsageService(repo, userRepo, nil, nil)
-	usageHandler := NewUsageHandler(usageService, nil, nil, nil)
+	usageHandler := NewUsageHandler(usageService, nil, nil, nil, nil)
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
 		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: userID})
